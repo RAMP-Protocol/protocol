@@ -34,8 +34,13 @@ _FORBIDDEN = (
     re.compile(r"\bimport\s+httpx\b"),
     re.compile(r"\bfrom\s+httpx\b"),
     re.compile(r"\bimport\s+httpcore\b"),
-    re.compile(r"\bimport\s+urllib\b"),
-    re.compile(r"\bfrom\s+urllib\b"),
+    # urllib.parse is the ONE exception, and it is narrow on purpose: it is pure
+    # string work (splitting and joining URI references) with no socket in it,
+    # while urllib.request is a full HTTP client. Everything else under urllib
+    # stays banned, which is why these two patterns name the submodule rather
+    # than allowing "urllib" and hoping nobody reaches for .request.
+    re.compile(r"\bimport\s+urllib\b(?!\.parse\b)"),
+    re.compile(r"\bfrom\s+urllib\b(?!\.parse\b)"),
 )
 
 
@@ -69,6 +74,15 @@ class TestResolverIoLeaf:
 
     def test_meta_positive_catches_urllib_import(self) -> None:
         assert _imports_io("import urllib.request")
+        assert _imports_io("from urllib.request import urlopen")
+        assert _imports_io("import urllib")
+        assert _imports_io("import urllib.error")
+
+    def test_meta_negative_allows_the_pure_url_parser(self) -> None:
+        # urllib.parse resolves a URI reference against a base. No socket, and no
+        # way to reach urllib.request through it.
+        assert not _imports_io("from urllib.parse import urljoin, urlsplit")
+        assert not _imports_io("import urllib.parse")
 
     def test_meta_negative_passes_pure_import(self) -> None:
         assert not _imports_io("from ramp_sdk.thumbprint import thumbprint")

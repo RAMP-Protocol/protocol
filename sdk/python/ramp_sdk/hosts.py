@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 from typing import Literal
+from urllib.parse import urljoin, urlsplit
 
 # BARE_DOMAIN_PATTERN is the wire shape of a domain-valued field: a bare domain
 # with an optional ":port", never a URL. It carries the same bytes as the Go
@@ -153,3 +154,119 @@ def _normalize_domain(v: str) -> str:
     if port in ("", "443"):
         return host
     return f"{host}:{port}"
+
+
+# Identity-document resolution (Python side of sdk/go/helpers/identitydocs.go).
+#
+# Deliberately NOT built on the ``_host_anchored`` helper in
+# ``ramp_sdk.resolvers.wba``: that one implements the endpoint rule, host or
+# subdomain, and this field refuses a subdomain. Whoever takes over the host an
+# endpoint names misdirects calls they still cannot sign for; whoever takes over
+# the host an identity document names publishes their own keys and BECOMES the
+# participant.
+#
+# The authority is read off the RAW string rather than through
+# ``urlsplit(...).hostname``, which lowercases: ``str.lower()`` maps U+212A
+# KELVIN SIGN to a plain ASCII "k", so a host that is not the same name would
+# arrive already disguised as one. ``is_bare_domain`` runs on the untouched value
+# for exactly the reason it runs before ``_normalize_domain`` in check_audience.
+
+# A scheme, if the reference carries one at all (RFC 3986 §3.1).
+_URI_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
+
+# The authority of a reference that HAS one: an absolute URI with "//" or a
+# network-path reference beginning with "//". A reference matching neither is
+# relative and inherits the base's authority untouched.
+_URI_AUTHORITY_RE = re.compile(r"^(?:[A-Za-z][A-Za-z0-9+.\-]*:)?//([^/?#]*)")
+
+
+def _uri_scheme(ref: str) -> str:
+    m = _URI_SCHEME_RE.match(ref)
+    return m.group(0)[:-1].lower() if m else ""
+
+
+def _split_host_port(authority: str) -> tuple[str, str]:
+    """Split ``host[:port]``. Anything stranger is refused by is_bare_domain after."""
+    host, sep, port = authority.rpartition(":")
+    if not sep:
+        return authority, ""
+    return host, port
+
+
+def _fold_default_port(port: str) -> str:
+    """443 spelled out and 443 left implicit are the same port; nothing else folds."""
+    return "" if port == "443" else port
+
+
+def resolve_identity_document(manifest_url: str, ref: str) -> str:
+    """Resolve an ``identity_documents`` member against the URL ramp.json came from.
+
+    ``ref`` is an RFC 3986 URI reference, relative or absolute. ``manifest_url``
+    is the URL the manifest was actually FETCHED FROM, never its self-asserted
+    ``domain`` member — a hostile manifest that named its own anchor would
+    validate itself.
+
+    Refuses unless the base is https, names a plain host and carries no userinfo;
+    the reference is non-empty; and the resolved URL is https, carries no
+    userinfo and sits on the SAME ORIGIN as the base (equal host, equal effective
+    port). Vetting the base is not a courtesy: a base of
+    ``http://a.example/ramp.json`` resolving to ``https://a.example/doc`` passes
+    every later check, and accepting it means trusting a manifest that arrived
+    unauthenticated.
+
+    Returns the resolved URL in canonical form — host lowercased, a default port
+    folded away — so every SDK returns the same string for the same input.
+
+    Raises:
+        ValueError: the reference may not be fetched.
+    """
+    if _uri_scheme(manifest_url) != "https":
+        raise ValueError("identity document: manifest URL is not https")
+    base_auth_m = _URI_AUTHORITY_RE.match(manifest_url)
+    if base_auth_m is None:
+        raise ValueError("identity document: manifest URL names no authority")
+    base_authority = base_auth_m.group(1)
+    if "@" in base_authority:
+        # Deliberately does not echo the URL: it carries the credential.
+        raise ValueError("identity document: manifest URL carries userinfo")
+    base_host, base_port = _split_host_port(base_authority)
+    if not is_bare_domain(base_host):
+        raise ValueError("identity document: manifest URL does not name a plain host")
+    base_port = _fold_default_port(base_port)
+
+    if not ref.strip():
+        raise ValueError("identity document: empty reference")
+    ref_scheme = _uri_scheme(ref)
+    ref_auth_m = _URI_AUTHORITY_RE.match(ref)
+    if ref_scheme and ref_scheme != "https":
+        raise ValueError("identity document: reference does not resolve to an https URL")
+    if ref_scheme and ref_auth_m is None:
+        # "https:/dir" — a scheme with no "//" names no authority, so it resolves
+        # to a URL with no host rather than borrowing the base's.
+        raise ValueError("identity document: reference names no authority")
+    if ref_auth_m is not None:
+        ref_authority = ref_auth_m.group(1)
+        if "@" in ref_authority:
+            # Deliberately does not echo the reference: it carries the credential.
+            raise ValueError("identity document: reference carries userinfo")
+        ref_host, ref_port = _split_host_port(ref_authority)
+        if not is_bare_domain(ref_host):
+            raise ValueError("identity document: reference does not name a plain host")
+        if ref_host.lower() != base_host.lower():
+            raise ValueError("identity document: reference is not on the manifest's origin")
+        if _fold_default_port(ref_port) != base_port:
+            raise ValueError("identity document: reference is on a different port than the manifest")
+
+    # Only the path, query and fragment are taken from the join: the authority is
+    # rebuilt from the values already checked above, which is what makes the
+    # output canonical rather than an echo of however the manifest spelled it.
+    joined = urlsplit(urljoin(manifest_url, ref))
+    out = "https://" + base_host.lower()
+    if base_port:
+        out += ":" + base_port
+    out += joined.path
+    if joined.query:
+        out += "?" + joined.query
+    if joined.fragment:
+        out += "#" + joined.fragment
+    return out

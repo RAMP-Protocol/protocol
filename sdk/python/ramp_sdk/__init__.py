@@ -56,6 +56,7 @@ from .hosts import (
     AudienceVerdict,
     check_audience,
     is_bare_domain,
+    resolve_identity_document,
 )
 from .httpsig import (
     MultisigVerdict,
@@ -165,6 +166,7 @@ __all__ = [
     "parse_money",
     "reason",
     "registration_failure_detail",
+    "resolve_identity_document",
     "retrieval_auth_failure_detail",
     "scopes_subset",
     "sign_agent_binding",

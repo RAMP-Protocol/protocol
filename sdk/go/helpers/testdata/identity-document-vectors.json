@@ -1,0 +1,249 @@
+{
+  "identity_document": [
+    {
+      "name": "absolute_same_origin",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://a.example/.well-known/dir",
+      "accepted": true,
+      "resolved": "https://a.example/.well-known/dir"
+    },
+    {
+      "name": "root_relative",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/.well-known/http-message-signatures-directory",
+      "accepted": true,
+      "resolved": "https://a.example/.well-known/http-message-signatures-directory"
+    },
+    {
+      "name": "path_relative",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "sub/card.json",
+      "accepted": true,
+      "resolved": "https://a.example/.well-known/sub/card.json"
+    },
+    {
+      "name": "path_relative_parent",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "../card.json",
+      "accepted": true,
+      "resolved": "https://a.example/card.json"
+    },
+    {
+      "name": "network_path_same_host",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "//a.example/card.json",
+      "accepted": true,
+      "resolved": "https://a.example/card.json"
+    },
+    {
+      "name": "network_path_other_host",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "//evil.example/card.json",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "default_port_spelled_out",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://a.example:443/dir",
+      "accepted": true,
+      "resolved": "https://a.example/dir"
+    },
+    {
+      "name": "default_port_on_the_base",
+      "manifest_url": "https://a.example:443/.well-known/ramp.json",
+      "ref": "https://a.example/dir",
+      "accepted": true,
+      "resolved": "https://a.example/dir"
+    },
+    {
+      "name": "same_non_default_port",
+      "manifest_url": "https://a.example:8443/.well-known/ramp.json",
+      "ref": "https://a.example:8443/dir",
+      "accepted": true,
+      "resolved": "https://a.example:8443/dir"
+    },
+    {
+      "name": "uppercase_host",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://A.EXAMPLE/dir",
+      "accepted": true,
+      "resolved": "https://a.example/dir"
+    },
+    {
+      "name": "uppercase_scheme",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "HTTPS://a.example/dir",
+      "accepted": true,
+      "resolved": "https://a.example/dir"
+    },
+    {
+      "name": "subdomain_is_a_different_origin",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://keys.a.example/dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "label_boundary_not_a_prefix",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://evil-a.example/dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "unrelated_host",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://other.example/dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "different_non_default_port",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://a.example:8443/dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "port_mismatch_other_way",
+      "manifest_url": "https://a.example:8443/.well-known/ramp.json",
+      "ref": "https://a.example/dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "http_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "http://a.example/dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "userinfo_in_the_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://u:p@a.example/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "data_uri",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "data:application/json,%7B%7D",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "javascript_uri",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "javascript:alert(1)",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "empty_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "whitespace_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "   ",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "scheme_without_authority",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https:/dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "padded_default_port",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://a.example:0443/dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "kelvin_sign_host",
+      "manifest_url": "https://market.example/.well-known/ramp.json",
+      "ref": "https://marKet.example/dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "fullwidth_letter_host",
+      "manifest_url": "https://exchange.example/.well-known/ramp.json",
+      "ref": "https://Ｅxchange.example/dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "ipv6_literal_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://[::1]/dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "base_is_an_ipv6_literal",
+      "manifest_url": "https://[::1]/.well-known/ramp.json",
+      "ref": "/dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "trailing_root_dot_host",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://a.example./dir",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "base_is_http",
+      "manifest_url": "http://a.example/ramp.json",
+      "ref": "/doc",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "base_is_http_on_443",
+      "manifest_url": "http://a.example:443/ramp.json",
+      "ref": "https://a.example/doc",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "base_carries_userinfo",
+      "manifest_url": "https://u:p@a.example/ramp.json",
+      "ref": "https://a.example/doc",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "base_has_no_scheme",
+      "manifest_url": "a.example/ramp.json",
+      "ref": "/doc",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "base_has_no_host",
+      "manifest_url": "https:///ramp.json",
+      "ref": "/doc",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "base_is_empty",
+      "manifest_url": "",
+      "ref": "/doc",
+      "accepted": false,
+      "resolved": ""
+    }
+  ]
+}

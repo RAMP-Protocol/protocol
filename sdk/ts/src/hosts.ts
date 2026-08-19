@@ -153,3 +153,128 @@ function normalizeDomain(v: string): string {
 	}
 	return `${host}:${port}`;
 }
+
+// Identity-document resolution (TypeScript side of sdk/go/helpers/identitydocs.go).
+//
+// Deliberately NOT built on `hostAnchored` in ../resolvers/wba.ts: that one
+// implements the endpoint rule, host or subdomain, and this field refuses a
+// subdomain. Whoever takes over the host an endpoint names misdirects calls they
+// still cannot sign for; whoever takes over the host an identity document names
+// publishes their own keys and BECOMES the participant.
+//
+// The authority is read off the RAW string rather than through `new URL(...)`,
+// and that is the load-bearing part of this port. WHATWG URL parsing runs IDNA
+// on the host, which maps U+212A KELVIN SIGN to a plain ASCII "k" — so a
+// homograph host would arrive already disguised as the name it is imitating.
+// The same parse also lowercases the host and drops a spelled-out :443, which
+// would quietly turn a padded port such as :0443 into a match. `isBareDomain`
+// runs on the untouched value, and the port is compared as written, exactly as
+// the Go oracle does.
+
+// A scheme, if the reference carries one at all (RFC 3986 §3.1).
+const uriSchemeRe = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+
+// The authority of a reference that HAS one: an absolute URI with "//" or a
+// network-path reference beginning with "//". A reference matching neither is
+// relative and inherits the base's authority untouched.
+const uriAuthorityRe = /^(?:[A-Za-z][A-Za-z0-9+.-]*:)?\/\/([^/?#]*)/;
+
+function uriScheme(ref: string): string {
+	const m = uriSchemeRe.exec(ref);
+	return m ? m[0].slice(0, -1).toLowerCase() : "";
+}
+
+// splitHostPort splits `host[:port]`. Anything stranger is refused by
+// isBareDomain right after.
+function splitHostPort(authority: string): [string, string] {
+	const i = authority.lastIndexOf(":");
+	if (i < 0) {
+		return [authority, ""];
+	}
+	return [authority.slice(0, i), authority.slice(i + 1)];
+}
+
+// 443 spelled out and 443 left implicit are the same port; nothing else folds.
+function foldDefaultPort(port: string): string {
+	return port === "443" ? "" : port;
+}
+
+/**
+ * Resolve an `identity_documents` member against the URL ramp.json came from.
+ *
+ * `ref` is an RFC 3986 URI reference, relative or absolute. `manifestUrl` is the
+ * URL the manifest was actually FETCHED FROM, never its self-asserted `domain`
+ * member — a hostile manifest that named its own anchor would validate itself.
+ *
+ * Refuses unless the base is https, names a plain host and carries no userinfo;
+ * the reference is non-empty; and the resolved URL is https, carries no userinfo
+ * and sits on the SAME ORIGIN as the base (equal host, equal effective port).
+ * Vetting the base is not a courtesy: a base of `http://a.example/ramp.json`
+ * resolving to `https://a.example/doc` passes every later check, and accepting
+ * it means trusting a manifest that arrived unauthenticated.
+ *
+ * Returns the resolved URL in canonical form — host lowercased, a default port
+ * folded away — so every SDK returns the same string for the same input.
+ *
+ * @throws Error when the reference may not be fetched.
+ */
+export function resolveIdentityDocument(manifestUrl: string, ref: string): string {
+	if (uriScheme(manifestUrl) !== "https") {
+		throw new Error("identity document: manifest URL is not https");
+	}
+	const baseAuthorityMatch = uriAuthorityRe.exec(manifestUrl);
+	if (baseAuthorityMatch === null) {
+		throw new Error("identity document: manifest URL names no authority");
+	}
+	// Always present when the pattern matched; the ?? keeps the strict index
+	// check happy, and an empty authority is refused by isBareDomain below anyway.
+	const baseAuthority = baseAuthorityMatch[1] ?? "";
+	if (baseAuthority.includes("@")) {
+		// Deliberately does not echo the URL: it carries the credential.
+		throw new Error("identity document: manifest URL carries userinfo");
+	}
+	const [baseHost, rawBasePort] = splitHostPort(baseAuthority);
+	if (!isBareDomain(baseHost)) {
+		throw new Error("identity document: manifest URL does not name a plain host");
+	}
+	const basePort = foldDefaultPort(rawBasePort);
+
+	if (ref.trim() === "") {
+		throw new Error("identity document: empty reference");
+	}
+	const refScheme = uriScheme(ref);
+	const refAuthorityMatch = uriAuthorityRe.exec(ref);
+	if (refScheme !== "" && refScheme !== "https") {
+		throw new Error("identity document: reference does not resolve to an https URL");
+	}
+	if (refScheme !== "" && refAuthorityMatch === null) {
+		// "https:/dir" — a scheme with no "//" names no authority, so it resolves
+		// to a URL with no host rather than borrowing the base's.
+		throw new Error("identity document: reference names no authority");
+	}
+	if (refAuthorityMatch !== null) {
+		const refAuthority = refAuthorityMatch[1] ?? "";
+		if (refAuthority.includes("@")) {
+			// Deliberately does not echo the reference: it carries the credential.
+			throw new Error("identity document: reference carries userinfo");
+		}
+		const [refHost, refPort] = splitHostPort(refAuthority);
+		if (!isBareDomain(refHost)) {
+			throw new Error("identity document: reference does not name a plain host");
+		}
+		if (refHost.toLowerCase() !== baseHost.toLowerCase()) {
+			throw new Error("identity document: reference is not on the manifest's origin");
+		}
+		if (foldDefaultPort(refPort) !== basePort) {
+			throw new Error("identity document: reference is on a different port than the manifest");
+		}
+	}
+
+	// Only the path, query and fragment are taken from the join: the authority is
+	// rebuilt from the values already checked above, which is what makes the
+	// output canonical rather than an echo of however the manifest spelled it —
+	// and what keeps WHATWG's own normalizations out of the answer.
+	const joined = new URL(ref, manifestUrl);
+	const authority = basePort === "" ? baseHost.toLowerCase() : `${baseHost.toLowerCase()}:${basePort}`;
+	return `https://${authority}${joined.pathname}${joined.search}${joined.hash}`;
+}
