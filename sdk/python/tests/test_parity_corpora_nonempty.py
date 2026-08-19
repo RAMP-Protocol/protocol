@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from conftest import CONFORMANCE_CORPUS, GO_TESTDATA, load_json
+from conftest import CONFORMANCE_CORPUS, GO_RESOLVERS_TESTDATA, GO_TESTDATA, load_json
 
 if TYPE_CHECKING:
     import pathlib
@@ -78,6 +78,14 @@ _CORPUS_SPECS: list[tuple[pathlib.Path, Callable[[Any], Any], str]] = [
         GO_TESTDATA / "registration-schema-vectors.json",
         lambda d: d["registration_data"],
         "regschema-registration-data",
+    ),
+    (GO_TESTDATA / "host-rule-vectors.json", lambda d: d["host_of"], "host-of"),
+    (GO_TESTDATA / "host-rule-vectors.json", lambda d: d["is_bare_host"], "is-bare-host"),
+    (GO_TESTDATA / "host-rule-vectors.json", lambda d: d["host_anchored"], "host-anchored"),
+    (
+        GO_RESOLVERS_TESTDATA / "endpoint-vet-vectors.json",
+        lambda d: d["endpoint_vet"],
+        "endpoint-vet",
     ),
     (CONFORMANCE_CORPUS / "crossfield.json", _whole, "crossfield"),
 ]

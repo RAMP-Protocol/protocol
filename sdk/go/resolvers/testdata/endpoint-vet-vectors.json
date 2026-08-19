@@ -1,0 +1,124 @@
+{
+  "endpoint_vet": [
+    {
+      "name": "self",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1",
+      "refused": false
+    },
+    {
+      "name": "subdomain",
+      "host": "exchange.example",
+      "endpoint": "https://api.exchange.example/v1",
+      "refused": false
+    },
+    {
+      "name": "default_port_written_out",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example:443/v1",
+      "refused": false
+    },
+    {
+      "name": "non_default_port_on_both_sides",
+      "host": "exchange.example:8443",
+      "endpoint": "https://exchange.example:8443/v1",
+      "refused": false
+    },
+    {
+      "name": "schemeless_endpoint",
+      "host": "exchange.example",
+      "endpoint": "exchange.example/v1",
+      "refused": false
+    },
+    {
+      "name": "plaintext_on_a_plaintext_anchor",
+      "host": "exchange.example:80",
+      "endpoint": "http://exchange.example:80/v1",
+      "refused": false
+    },
+    {
+      "name": "unrelated_host",
+      "host": "exchange.example",
+      "endpoint": "https://cdn.other.example/v1",
+      "refused": true
+    },
+    {
+      "name": "label_boundary_trick",
+      "host": "exchange.example",
+      "endpoint": "https://evil-exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "parent_of_the_serving_host",
+      "host": "api.exchange.example",
+      "endpoint": "https://exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "another_port",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example:8443/v1",
+      "refused": true
+    },
+    {
+      "name": "subdomain_on_another_port",
+      "host": "exchange.example",
+      "endpoint": "https://api.exchange.example:8443/v1",
+      "refused": true
+    },
+    {
+      "name": "userinfo",
+      "host": "exchange.example",
+      "endpoint": "https://user:pass@exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "userinfo_without_a_password",
+      "host": "exchange.example",
+      "endpoint": "https://user@exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "schemeless_userinfo",
+      "host": "exchange.example",
+      "endpoint": "user:pass@exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "schemeless_userinfo_no_path",
+      "host": "exchange.example",
+      "endpoint": "user:pass@exchange.example",
+      "refused": true
+    },
+    {
+      "name": "userinfo_on_a_subdomain",
+      "host": "exchange.example",
+      "endpoint": "https://user:pass@api.exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "empty_endpoint",
+      "host": "exchange.example",
+      "endpoint": "",
+      "refused": true
+    },
+    {
+      "name": "no_authority",
+      "host": "exchange.example",
+      "endpoint": "/v1",
+      "refused": true
+    },
+    {
+      "name": "control_character",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example\n/v1",
+      "refused": true
+    },
+    {
+      "name": "unusable_serving_host",
+      "host": "",
+      "endpoint": "https://exchange.example/v1",
+      "refused": true
+    }
+  ]
+}
