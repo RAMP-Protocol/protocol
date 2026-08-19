@@ -35,12 +35,19 @@ _FORBIDDEN = (
     re.compile(r"\bfrom\s+httpx\b"),
     re.compile(r"\bimport\s+httpcore\b"),
     # urllib.parse is the ONE exception, and it is narrow on purpose: it is pure
-    # string work (splitting and joining URI references) with no socket in it,
-    # while urllib.request is a full HTTP client. Everything else under urllib
-    # stays banned, which is why these two patterns name the submodule rather
-    # than allowing "urllib" and hoping nobody reaches for .request.
-    re.compile(r"\bimport\s+urllib\b(?!\.parse\b)"),
-    re.compile(r"\bfrom\s+urllib\b(?!\.parse\b)"),
+    # string work (splitting URI references) with no socket in it, while
+    # urllib.request is a full HTTP client. Everything else under urllib stays
+    # banned, which is why this names the submodule rather than allowing
+    # "urllib" and hoping nobody reaches for .request.
+    #
+    # The carve-out is checked at every urllib on the import LINE, not only at
+    # the one straight after the keyword. Anchoring it to the keyword let
+    # "import urllib.parse, urllib.request" through: the lookahead saw .parse,
+    # was satisfied, and never looked at the second module. ruff E401 rejects a
+    # multi-module import line today so nothing could reach the hole, but this
+    # guard is defence in depth and has to hold on its own — that was the whole
+    # reason for narrowing it instead of deleting it.
+    re.compile(r"^[ \t]*(?:import|from)\s+.*\burllib\b(?!\.parse\b)", re.MULTILINE),
 )
 
 
@@ -77,12 +84,18 @@ class TestResolverIoLeaf:
         assert _imports_io("from urllib.request import urlopen")
         assert _imports_io("import urllib")
         assert _imports_io("import urllib.error")
+        # The carve-out must be checked at EVERY urllib on the line. This form
+        # slipped past a lookahead anchored to the import keyword.
+        assert _imports_io("import urllib.parse, urllib.request")
 
     def test_meta_negative_allows_the_pure_url_parser(self) -> None:
         # urllib.parse resolves a URI reference against a base. No socket, and no
         # way to reach urllib.request through it.
         assert not _imports_io("from urllib.parse import urljoin, urlsplit")
         assert not _imports_io("import urllib.parse")
+        # ...and a line whose every urllib IS .parse stays allowed, so the fix
+        # above bans the second module rather than the comma.
+        assert not _imports_io("import urllib.parse, json")
 
     def test_meta_negative_passes_pure_import(self) -> None:
         assert not _imports_io("from ramp_sdk.thumbprint import thumbprint")
