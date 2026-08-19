@@ -6834,9 +6834,21 @@ func (x *AccountRegistration) GetDataSchema() *structpb.Struct {
 // because the two fields fail differently: whoever takes over an `endpoint` host
 // misdirects calls they still cannot sign for, while whoever takes over an
 // identity-document host publishes their own keys and BECOMES this participant.
-// An empty block means the same as no block. Key material and Signature Agent
-// Card contents are never copied in here, and the emergency revocation list
-// stays where it is, linked from the WBA directory (WBAFile.revocation_url).
+// Both the reference AND the URL it resolves against MUST be written in the
+// RFC 3986 character set — the unreserved characters, the gen-delims, the
+// sub-delims and `%` — with every percent-escape valid, no percent-encoded dot
+// segment (`%2e`, `%2E`), and no fragment on the manifest URL; any port written
+// out MUST be a number in 1-65535, and a reference that names an authority MUST
+// name a non-empty one. Those are refusals, not repairs: this rule has to give
+// the same verdict and the same resolved string in every implementation, and
+// the URL parsers implementations reach for disagree about almost everything
+// outside that character set — one percent-encodes a literal `|` where another
+// keeps it, one silently strips a tab and reads an absolute reference as a
+// relative path, one decodes `%2e` and then removes the segment, which names a
+// different document. An empty block means the same as no block. Key material
+// and Signature Agent Card contents are never copied in here, and the emergency
+// revocation list stays where it is, linked from the WBA directory
+// (WBAFile.revocation_url).
 type IdentityDocuments struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// URI reference to this participant's Web Bot Auth directory — the RFC 7517

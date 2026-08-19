@@ -12,6 +12,22 @@ the EXACT SAME ORIGIN as the manifest (`https`, equal hostname, equal effective 
 an omitted port and `:443` are the same port) and MUST NOT carry userinfo. The manifest URL
 itself is vetted first, on the same three conditions.
 
+Both the reference AND the manifest URL must also be written in the RFC 3986 character set
+— the unreserved characters, the gen-delims, the sub-delims and `%` — with every
+percent-escape valid, no percent-encoded dot segment (`%2e`, `%2E`), any written-out port a
+number in 1-65535, a non-empty authority whenever one is named, and no colon in the first
+segment of a schemeless reference. The manifest URL additionally MUST NOT carry a fragment,
+which a URL a document was fetched from cannot meaningfully have. A control character, a
+space, a backslash and every non-ASCII byte fall outside the character set, so one rule
+covers them all. These are refusals rather than repairs: the rule has to produce the same
+verdict and the same resolved string in every implementation, and the URL parsers
+implementations reach for disagree about almost everything outside that set — one
+percent-encodes a literal `|` where another keeps it, one silently strips a tab and so
+reads an absolute reference to another host as a relative path, skipping every origin
+check, and one decodes `%2e` before removing dot segments and therefore fetches a different
+document. Every value the field is meant to carry — a plain absolute path, a relative path,
+a full https URL — is unaffected.
+
 This is stricter than the `endpoint` rule, which allows a subdomain, and deliberately so:
 whoever takes over the host named by `endpoint` misdirects signed calls they still cannot
 sign for, while whoever takes over the host named by `wba_directory` publishes their own
@@ -30,7 +46,9 @@ The SDK face is `ResolveIdentityDocument` / `resolve_identity_document` /
 `resolveIdentityDocument`, one shared golden corpus replayed in all three languages. It
 returns a canonical URL (host lowercased, default port folded away) so the three answer
 identically, and it reuses the existing bare-domain shape check, which runs BEFORE case
-folding so a U+212A KELVIN SIGN host cannot fold into the ASCII name it imitates.
+folding so a U+212A KELVIN SIGN host cannot fold into the ASCII name it imitates. The
+corpus carries one case for every input class the three URL engines answer differently, so
+the refusals above are pinned rather than described.
 
 Two proto comments that still described the pre-WBA-split world — an agent's keys being
 inline in `ramp.json`, and `Requester.domain` being "used for public key lookup" — are

@@ -1036,3 +1036,71 @@ folding can match a name it is only imitating. The shape check runs first. The
 returned URL is canonical — host lowercased, a default port folded away — so all
 three SDKs answer with the same string rather than echoing however the manifest
 spelled the authority.
+
+## Three URL parsers cannot be made to agree, so untame references are refused
+
+The first version of `ResolveIdentityDocument` guarded the raw reference with
+regexes and then handed the actual resolution to whatever URL parser the language
+provided: Go's `net/url`, Python's `urljoin`, the WHATWG `URL` in TypeScript. The
+docstring promised that every SDK returns the same string for the same input. It
+was not true, and the golden corpus said nothing about it, because every one of
+its 35 cases used a reference written in plain, ordinary characters — and plain
+ordinary characters are exactly where the three parsers already agreed.
+
+The disagreements start immediately outside that set. Go percent-encodes a
+literal `|`, a `^` and a space; the other two keep them. Go refuses an invalid
+escape such as `%zz`; the other two accept it. Python and TypeScript silently
+strip a tab, which is worse than a formatting difference: a leading tab made the
+authority regex read an ABSOLUTE reference to another host as a relative path, so
+the https check, the userinfo check, the origin check and the port check were all
+skipped in one go. The WHATWG parser decodes `%2e` and then removes the dot
+segment, so `/%2e%2e/x` resolves to a DIFFERENT DOCUMENT than the other two
+fetch. None of these is a bug in any of the three parsers; they are three
+defensible readings of text RFC 3986 does not require anybody to accept.
+
+So the rule became: refuse the input rather than reproduce three parsers byte for
+byte. A reference — and the manifest URL it resolves against, which is checked
+just as strictly — must be written in the coarse RFC 3986 character set, with
+every percent-escape valid and no percent-encoded dot segment. A refusal ports
+cleanly to any language; a divergent acceptance does not, and chasing byte-exact
+agreement across three URL engines is an open-ended maintenance cost that grows
+with every runtime upgrade.
+
+The character set is deliberately COARSE — unreserved, gen-delims, sub-delims and
+`%` — and not the per-component `pchar` grammar, which would be the more obvious
+choice. `pchar` refuses `[` and `]`, and all three SDKs already agree on those:
+`/a[b]c` stays literal everywhere. Tightening to `pchar` would have refused a
+case that was never broken. The coarse set is the one that lands on the right
+side of every measured case, refusing exactly the characters that diverge.
+
+Two divergences were fixed instead of refused, because refusing would have cost
+more than it bought. Python alone failed to remove dot segments from an ABSOLUTE
+reference, because `urljoin` returns one untouched — but refusing dot segments
+outright would have broken `../card.json`, a form the field is specified to
+support, so Python now runs RFC 3986 §5.2.4 itself. And on the empty path, §6.2.3
+names `/` as the normalized form under a hierarchical scheme, so the WHATWG port
+returning `https://a.example/` was right and the Go oracle was the deviant; the
+oracle changed.
+
+Python stopped using `urljoin` altogether. It routes through `urlparse`, which
+splits `;params` off the last path segment and then drops an empty one, silently
+turning `/x;` into `/x`. RFC 3986 §5.2.2, §5.2.3 and §5.2.4 are written out in
+that port instead.
+
+The durable lesson is not about URLs. A parity corpus proves parity only over the
+inputs it contains, and a corpus assembled from realistic values will contain
+only realistic values — which is precisely the region where independent
+implementations already agree. What caught this was a differential sweep: 21141
+base/reference pairs, most of them nonsense, run through all three
+implementations and compared. It found three divergence classes that no reviewer
+had named, including one the first round of fixes had not closed. Each of those
+classes is now a generated vector, so the corpus covers the disagreements rather
+than the happy path.
+
+One thing the fix did not change is the authority rebuild at the end of each
+port, which reassembles the output from the already-checked base host and port
+instead of taking it from the join. It reads like a formatting convenience and it
+is not: on the bypassed-check path above it was the only thing that kept the
+result on the manifest's origin. Both ports now say so in a comment, because a
+later reader tidying it away would remove a defence without noticing there was
+one.
