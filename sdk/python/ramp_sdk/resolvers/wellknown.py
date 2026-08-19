@@ -68,14 +68,18 @@ def _endpoint_refusal(host: str, endpoint: str) -> str | None:
     try:
         advertised = _parse_ref(endpoint)
     except ValueError as exc:
-        return f"host={host!r} endpoint={endpoint!r}: {exc}"
+        # The error already names the reference, with any credential redacted.
+        # Echoing the raw endpoint alongside it would put the credential straight
+        # back — which is what happened when this branch moved ahead of the userinfo
+        # refusal below.
+        return f"host={host!r}: {exc}"
     if advertised.has_userinfo:
         # Deliberately does not echo the endpoint: it carries the credential.
         return f"host={host!r} advertises an endpoint carrying userinfo"
     try:
         served = _parse_ref(host)
     except ValueError as exc:
-        return f"host={host!r}: {exc}"
+        return f"the serving host is unusable: {exc}"
     if not anchored_parsed(served, advertised):
         return f"host={host!r} advertises endpoint {endpoint!r} on a different host"
     return None

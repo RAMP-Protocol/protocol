@@ -42,7 +42,10 @@ function endpointRefusal(host: string, endpoint: string): string | undefined {
   try {
     advertised = parseRef(endpoint);
   } catch (err) {
-    return `host=${JSON.stringify(host)} endpoint=${JSON.stringify(endpoint)}: ${String(err)}`;
+    // The error already names the reference, with any credential redacted. Echoing
+    // the raw endpoint alongside it would put the credential straight back — which
+    // is what happened when this branch moved ahead of the userinfo refusal below.
+    return `host=${JSON.stringify(host)}: ${String(err)}`;
   }
   if (advertised.hasUserinfo) {
     // Deliberately does not echo the endpoint: it carries the credential.
@@ -52,7 +55,7 @@ function endpointRefusal(host: string, endpoint: string): string | undefined {
   try {
     served = parseRef(host);
   } catch (err) {
-    return `host=${JSON.stringify(host)}: ${String(err)}`;
+    return `the serving host is unusable: ${String(err)}`;
   }
   if (!anchoredParsed(served, advertised)) {
     return `host=${JSON.stringify(host)} advertises endpoint ${JSON.stringify(endpoint)} on a different host`;

@@ -73,11 +73,50 @@ _DEL = 0x7F
 _CONTROL_MAX = 0x20
 
 
+def _redact_userinfo(ref: str) -> str:
+    """Replace any userinfo in a reference with a marker, so a message built from it
+    cannot carry a credential.
+
+    Deliberately conservative, and deliberately NOT the rule: it runs on strings the
+    parse has already refused, so it cannot assume they are well formed, and
+    over-redacting a message costs nothing while under-redacting is the bug. It looks
+    only for an ``@`` in what could be the authority, which is why an ``@`` in a path
+    is left alone.
+
+    The whole userinfo goes, not just the password. Go's own ``url.URL.Redacted()``
+    keeps the username, which is right for a URL the caller owns — but this value
+    arrives in a third-party manifest, where the username is as much the operator's
+    secret as the password is.
+
+    The oracle does echo the raw reference here, and that is not a parity break: the
+    shared corpus records a verdict and never a message, precisely so each language
+    can phrase its errors its own way. Do not "restore" this to match Go.
+    """
+    sep = ref.find("://")
+    start = 0 if sep < 0 else sep + 3
+    rest = ref[start:]
+    authority, beyond = rest, ""
+    for i, c in enumerate(rest):
+        if c in "/?#":
+            authority, beyond = rest[:i], rest[i:]
+            break
+    at = authority.rfind("@")
+    if at < 0:
+        return ref
+    return f"{ref[:start]}[redacted]{authority[at:]}{beyond}"
+
+
 def _invalid_host(ref: str, why: str) -> ValueError:
     """The Go oracle exposes an ``errors.Is`` sentinel for this; the port raises,
     as :func:`check_audience` does, because a sentinel is not how a caller in this
-    language distinguishes causes."""
-    return ValueError(f"hosts: reference is not a usable host: {why}: {ref!r}")
+    language distinguishes causes.
+
+    The reference is redacted before it is named. Every refusal the parse raises
+    passes through here, including the ones a credential-bearing value reaches — a
+    control character, a backslash in the userinfo, a malformed escape — so this is
+    the one place that has to do it.
+    """
+    return ValueError(f"hosts: reference is not a usable host: {why}: {_redact_userinfo(ref)!r}")
 
 
 def _split_components(rest: str) -> tuple[str, str, str]:

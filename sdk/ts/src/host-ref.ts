@@ -13,9 +13,46 @@
 
 /** A reference that cannot be read as a host at all. The Go oracle exposes an
  * errors.Is sentinel here; this port throws, as the audience check above does,
- * because a sentinel is not how a caller in this language distinguishes causes. */
+ * because a sentinel is not how a caller in this language distinguishes causes.
+ *
+ * The reference is redacted before it is named. Every refusal the parse raises passes
+ * through here, including the ones a credential-bearing value reaches — a control
+ * character, a backslash in the userinfo, a malformed escape — so this is the one
+ * place that has to do it. */
 export function invalidHost(ref: string, why: string): Error {
-	return new Error(`hosts: reference is not a usable host: ${why}: ${JSON.stringify(ref)}`);
+	return new Error(
+		`hosts: reference is not a usable host: ${why}: ${JSON.stringify(redactUserinfo(ref))}`,
+	);
+}
+
+/** Replace any userinfo in a reference with a marker, so a message built from it
+ * cannot carry a credential.
+ *
+ * Deliberately conservative, and deliberately NOT the rule: it runs on strings the
+ * parse has already refused, so it cannot assume they are well formed, and
+ * over-redacting a message costs nothing while under-redacting is the bug. It looks
+ * only for an "@" in what could be the authority, which is why an "@" in a path is
+ * left alone.
+ *
+ * The whole userinfo goes, not just the password. Go's own url.URL.Redacted() keeps
+ * the username, which is right for a URL the caller owns — but this value arrives in
+ * a third-party manifest, where the username is as much the operator's secret as the
+ * password is.
+ *
+ * The oracle does echo the raw reference here, and that is not a parity break: the
+ * shared corpus records a verdict and never a message, precisely so each language can
+ * phrase its errors its own way. Do not "restore" this to match Go. */
+export function redactUserinfo(ref: string): string {
+	const sep = ref.indexOf("://");
+	const start = sep < 0 ? 0 : sep + 3;
+	const rest = ref.slice(start);
+	const end = rest.search(/[/?#]/);
+	const authority = end < 0 ? rest : rest.slice(0, end);
+	const at = authority.lastIndexOf("@");
+	if (at < 0) {
+		return ref;
+	}
+	return `${ref.slice(0, start)}[redacted]${authority.slice(at)}${end < 0 ? "" : rest.slice(end)}`;
 }
 
 // An authority admits a CLOSED set of ASCII characters; everything outside it is
