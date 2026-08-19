@@ -176,6 +176,221 @@ terms": an Exchange with pass-through registration publishes no block at all, an
 it still needs to pin which terms it is serving. The two decisions are
 independent, so the fields are too.
 
+## The registration schema is a narrowed dialect, and the caps are on the wire
+
+A published `data_schema` is the only part of the manifest a consumer both reads
+out of a third party's document and then EXECUTES. A JSON Schema is a small
+program: it resolves references, it compiles regexes, and it recurses. Reading one
+from a party you have not authenticated — which is exactly what a client doing a
+registration pre-check does, since the fetch precedes any signature — puts an
+attacker-authored program on the critical path of a service. The rules that
+followed all come from that one observation.
+
+The reference rule and the size cap were there from the start. Two things were
+not, and both were discovered the same way: by asking what a SECOND implementation
+would do with the same document.
+
+The first is that "a consumer SHOULD bound validation time and recursion depth"
+does not bound anything. It reads like a rule and behaves like a suggestion,
+because the number is left to whoever implements it — and this schema is validated
+at BOTH ends of one registration. The Exchange enforces it; the client pre-checks
+against it before signing. Two privately chosen depth limits mean a schema one
+side compiles and the other refuses, so a payload passes the pre-check and is
+rejected at the Exchange, or worse passes the Exchange having never been checked.
+The limit had to become a number in the contract for the same reason the domain
+pattern did: one value space with two contracts is the state that produces the
+bugs.
+
+What the first attempt got wrong is WHICH quantity to bound. It capped the document
+— 16KB and 32 nested containers — and those bound nothing about the work of checking
+a payload against it. `anyOf` branches multiply along a reference chain, so a
+1,675-byte schema five containers deep, a tenth of the size cap and a sixth of the
+depth cap, measured 16.7 million evaluations and took twenty-seven seconds against a
+two-member payload. The bound that matters is a static count of evaluations, and it
+is now 10000 — about fifteen milliseconds, several hundred times what a schema
+describing a business entity needs. Counting it requires following every reference to
+its target, which is how the same walk also decides two questions the three libraries
+had been answering three different ways: whether a reference cycle is present, and
+whether a same-document reference resolves at all. `{"$ref":"#"}` is twelve bytes and
+used to crash two of the three ports out of an API documented as returning a verdict
+rather than throwing.
+
+A related correction, because it generalises: a bound belongs on the phase whose cost
+it models. The agreed design called for a *compile* timeout. Compilation turned out to
+be one to seventy milliseconds in every shape anyone could construct, while validation
+was the expensive phase — so the timeout as specified would have caught nothing. It is
+kept anyway, on the language whose runtime can actually preempt, because a phase left
+unbounded on the grounds that a different phase's bound is tighter today is not
+bounded; but the control that does the work is the static count.
+
+The second is `pattern`, and it is the more interesting failure. Draft 2020-12
+says patterns are ECMA-262. The engines real implementations run are not ECMA-262:
+Go's RE2, JavaScript's RegExp and Python's `re` intersect on considerably less than
+any one of them accepts, and the gap runs in both directions. The direction
+everyone thinks of is RE2 refusing lookaround, atomic groups and backreferences —
+loud, visible, and merely annoying, since one implementation errors while the
+others work. The direction that matters is the quiet one: inline flags, Unicode
+property classes, text anchors and POSIX bracket names are accepted by one engine
+and either refused or read DIFFERENTLY by another. `[[:alpha:]]` is a character
+class to RE2 and the literal characters `:alph` to JavaScript. Both compile. Both
+report success. They then disagree about which registrations are valid, with
+nothing logged and no error to catch — a conformance divergence that no test suite
+finds because neither side ever fails.
+
+So the admitted alphabet is the intersection, stated as syntactic rules a lexical
+scan can apply identically in three languages.
+
+The first version of that rule made a mistake worth recording, because it is the
+mistake the whole section is about. It treated one rule as the answer to two
+different problems. Constructs one engine cannot PARSE and constructs every engine
+parses and then READS differently are both divergences, but they need opposite
+remedies: the first can only be refused, while refusing the second would have gutted
+the feature, because the second is `$`, `\d` and `\w`. Those appear in nearly every
+real pattern, and the shipped rule left them in — so `^[A-Z]{2}[0-9]+$`, the example
+the contract itself gives, accepted `"DE12345\n"` under one implementation and refused
+it under two, silently. The rule now refuses only what cannot be reconciled, and the
+implementation whose engine differs corrects it: ASCII character classes, and `$`
+anchored at the end of the text and nowhere else. `\s` is the exception that proves
+the split — there is no single set to correct TO, since RE2, Python and ECMA-262 each
+read it as a different collection of characters, so it joins the refused list and an
+author writes the class out.
+
+The second mistake was the claim that excluding lookaround and backreferences means
+catastrophic backtracking "falls out of the same rule". It does not. `(a+)+` needs
+neither construct, and every classic form was admitted by the shipped alphabet. That
+is now its own rule — a quantified group's body may not itself repeat or branch — and
+it has to be a PUBLISHING rule rather than a runtime timeout, which is the part worth
+remembering: a regex spin holds CPython's interpreter and blocks Node's event loop, so
+a consumer cannot interrupt one it has already started. A timer would have been a
+control that cannot preempt the work it names.
+
+And the deepest lesson is about the corpus rather than the rules. Three dimensions and
+141 cases all passed while the three implementations disagreed about which payloads a
+published schema accepts, because every dimension recorded which schemas were
+ADMITTED and none recorded what an admitted schema then MATCHED. A rule that is only
+asserted is a rule nobody checks; the fourth dimension exists so the alphabet can be
+maintained empirically rather than by argument.
+
+`format`, `contentEncoding` and `contentMediaType` are pinned as annotations by
+the same argument at a smaller scale. Every library defaults differently on
+whether to assert them, so a schema whose verdict depends on which library read it
+has no single answer — and "depends on the library" is not a semantics a contract
+can publish.
+
+One consequence worth stating because it is easy to get backwards. A client that
+finds a schema breaking any of these rules SKIPS its pre-check and sends anyway;
+it does not refuse locally. The Exchange's enforcement is the deciding check, and
+a client that vetoed here would block payloads the Exchange would have accepted —
+turning a safety rule about reading a hostile document into a denial of service
+against its own user. An Exchange applying the same rules to its OWN configured
+schema reads a failure the opposite way: nothing third-party is involved, so it is
+a misconfigured deployment, and the one outcome it must not reach is advertising a
+schema it is not itself enforcing. Same rules, same code, opposite response — which
+is why the SDK face returns a verdict naming WHICH rule broke rather than a bare
+error.
+
+A second review then found the same lesson twice more, in places the fourth dimension
+did not reach.
+
+The alphabet had been written as a list of the escapes the engines disagree about, and
+that list can never be finished. Two rounds of review found new members by trying them
+— `\B`, `\cA`, `\a`, `\012`, `\x{41}`, `\uHHHH`, the identity escapes — and `\B` was the
+dangerous kind, since all three engines compile it and then disagree about the empty
+string. Enumerating the bad set is the wrong side of the rule when the bad set is
+open-ended, which is a judgement this repo had already made twice elsewhere: the SSRF
+guard allowlists URL schemes because "a scheme denylist is unwinnable", and the bare-host
+check compares against a parsed host rather than "a blocklist of the separators anyone
+thought to name". The pattern alphabet is now an allowlist for the same reason, and it
+was derived by running every ASCII escape through all three engines in three positions
+rather than by reasoning about which ones ought to be portable. JSON Schema's own
+interoperability section recommends a subset in the same spirit, and a narrower one.
+
+The correction for a divergence has to reach every place a regex is compiled, not the
+one that is obvious. Overriding the `pattern` KEYWORD left `patternProperties` — whose
+regexes are KEYS — and the matched-key scans behind `additionalProperties` and
+`unevaluatedProperties` all using the library's defaults, so a property name that was a
+non-ASCII digit matched `^\d+$` in one implementation and not the other two. The fix
+moves the correction into the schema SOURCE, once, where every call site reads it,
+including any a future release of the library adds.
+
+And the rules sit on top of a byte decode that nobody had specified. Three
+implementations gave three different answers to a byte order mark, to invalid UTF-8 and
+to `NaN`, not because they disagreed about JSON Schema but because their JSON decoders
+differ: two strip a leading mark and one does not, one repairs ill-formed bytes to
+U+FFFD and enforces a document nobody published, and one accepts JavaScript's numeric
+literals. RFC 8259 permits either mark policy, which is exactly why the contract has to
+pick one — the size cap is defined over the bytes as served, and a parser that silently
+drops three of them is measuring something else.
+
+The same decode also decided a question nobody had noticed was a question: what "this
+Exchange publishes no schema" looks like in bytes. That gate runs before every rule and
+turns enforcement OFF, and each language had been asking its own runtime what "blank"
+means — three different sets, and the JavaScript one strips a byte order mark before
+answering, so a mark followed by a space read as "nothing published" and never reached
+the rule that refuses a mark. An empty configuration file saved by an editor that adds
+one would have left that Exchange enforcing nothing, quietly, while the other two called
+the same bytes malformed. Emptiness is now RFC 8259's four whitespace bytes, tested over
+the bytes rather than a decoded string. The general shape is the one this feature keeps
+running into: a rule is only as portable as the layer underneath it, and "ask the
+platform" is not a specification.
+
+The brace rules arrived last and are the clearest statement of the pattern. `a{,5}` and a
+lone `}` had been admitted the whole time, and each was found the same way the bracket
+rules were — by asking a second engine what it thought the pattern meant, rather than by
+reading the rule. What makes them worth recording is that the two failure modes sit side
+by side in one construct: the missing first bound is SILENT, with RE2 reading five literal
+characters and Python reading a repeat, while the unmatched brace is LOUD, refused by
+ECMA-262 under the `u` flag and accepted by the other two. A rule set that only closed the
+loud half would have looked complete and left the dangerous half open.
+
+Three enforcement lessons came with them, none of which changed a rule. Correcting a
+divergence has to happen where every consumer of the value reads it: the TypeScript port's
+dot correction is written into the schema source for the same reason Python's `$` rewrite
+is, because a matcher-level fix reaches one call site and a source-level fix reaches all of
+them. A port can diverge through a standard-library detail rather than a design decision —
+`String.split`'s second argument caps the result and discards the remainder where Go and
+Python keep it, which is why one scanner alone admitted `a{1,2,3}`. And a bound stated over
+one axis does not constrain another: the schema depth cap counts containers, so a flat
+reference chain of five hundred links is three containers deep and passed it, then
+exhausted the interpreter stack of the one port whose walk was recursive.
+
+That fix was one stage short. Making the cost walk iterative stopped the SDK's own walk
+from recursing, and the library it then hands an accepted schema to still resolved the
+chain recursively — so the same document compiled and crashed on the first payload. The
+lesson is about where a bound belongs: an implementation can only make its own walk
+iterative, and a rule the contract does not state has to be survived independently by
+every library any implementation chooses. Chain length is now a number beside the depth
+and work caps, and it is a THIRD axis rather than a refinement of either — a flat chain is
+shallow and cheap, which is exactly why the other two never saw it.
+
+The payload had the same gap on a different axis, and it surfaced in the most useful way
+possible: a test passed locally and failed in CI. Not flakiness — the two ran different
+releases of the same language, and the verdict for a deeply nested payload was a function
+of which one. Canonicalising walks the payload recursively; 3.11 spends C stack on
+Python-to-Python calls and 3.12 does not, so the same nominal recursion limit admitted
+roughly twice the nesting, while the other two SDKs accepted every depth tried. It had
+been recorded as "this port is deliberately stricter", which was the wrong reading of the
+evidence — it was not stricter, it was undetermined.
+
+Two lessons worth keeping. A bound that comes from a runtime's remaining stack is not a
+bound, because nothing states it and every environment answers differently; and the check
+that enforces a depth bound must not itself recurse, or it fails on exactly the inputs it
+exists to reject.
+
+The last gap was the other side of the same coin. Every cap protected the schema, and
+nothing protected the payload the schema is applied to — validation cost is the schema's
+cost multiplied by the elements in the payload, so the multiplier was the unbounded
+half. Bounding it turned out to be less about the number than about the unit. Every
+other cap in the contract is over bytes somebody served; `registration_data` arrives as
+a decoded `Struct` and is never served as bytes at all, so "16KB" is not a rule until an
+encoding is named. The reference Exchange had already picked one privately — a sum of
+key and rendered-value lengths, with numbers rendered in shortest-decimal form, under
+which `1e300` weighs three hundred bytes and seven as JSON — which is precisely the kind
+of quiet, defensible, incompatible choice this whole feature exists to remove. The
+contract names RFC 8785 instead, because all three SDKs already compute it for signing
+and because it fixes number formatting by specification rather than by whichever
+renderer a language reaches for.
+
 ## Recipient addressing: a body field, not the signed request URL
 
 Every addressed request carries `exchange`, the bare host of its intended
@@ -660,14 +875,17 @@ autolink pass could not see into. All of it is deleted. `protoc-gen-rampvocab` a
 `gen/go/vocab` stay — they are a real Go-SDK surface the conformance suite uses
 (`pricingunits.IsRegistered`).
 
-## SDK layering: a dependency-free trust core, a vetted-client I/O tier
+## SDK layering: a dial-free trust core, a vetted-client I/O tier
 
 The three SDKs (`sdk/go`, `sdk/ts`, `sdk/python`) are split into a **pure trust
 core** and a separate **I/O tier**, and the two obey opposite dependency rules. The
 core — the RFC 9421 / 7638 crypto, JCS canonicalization, offer/acceptance verify, and
-the transport-neutral `core` composition — imposes **nothing** beyond the platform
-standard library, a vetted crypto primitive, and a vetted JCS/canonicalization
-library. It takes no HTTP client and does not dial the network: `sdk/go/helpers`
+the transport-neutral `core` composition — imposes nothing beyond the platform
+standard library and a small set of VETTED libraries, currently a crypto primitive, a
+JCS/canonicalizer, and a JSON Schema engine (the registration-schema face, which is
+pure computation over bytes and dials nothing). The list is closed by review rather
+than by count: what the tier refuses is a DEPENDENCY THAT DIALS, not a dependency. It
+takes no HTTP client and does not dial the network: `sdk/go/helpers`
 never constructs an `http.Client`, `sdk/ts/core` imports neither `undici` nor a
 framework, and `ramp_sdk.core` imports no `httpx`. The I/O tier — `sdk/{go,ts,python}/resolvers`
 — is the *only* place a network fetch lives (well-known JWKS, WBA directory,

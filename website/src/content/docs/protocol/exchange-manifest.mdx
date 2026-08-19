@@ -123,7 +123,7 @@ The Exchange's offer-signing keys are **not** carried in `ramp.json`. They live 
 | `gnap_grant_endpoint` | string | No | GNAP grant endpoint when GNAP is supported |
 | `supported_profiles` | string[] | No | Domain extension profiles this Exchange conforms to (e.g., `["ramp-academic-v1", "ramp-news-v1"]`) |
 | `base_currency` | string | No | ISO 4217 currency code for all `unit_cost` values in offers (e.g., `"USD"`) |
-| `account_registration` | object | No | How to open an account here. Its `data_schema` is a JSON Schema (draft 2020-12, max 16KB) for the `registration_data` an agent sends to `Register`. Present means this Exchange enforces it **and accepts registration through the API**; absent means `registration_data` passes through uninspected. Must be self-contained — consumers do not resolve a remote `$ref` out of it |
+| `account_registration` | object | No | How to open an account here. Its `data_schema` is a JSON Schema (draft 2020-12) for the `registration_data` an agent sends to `Register`. Present means this Exchange enforces it **and accepts registration through the API**; absent means `registration_data` passes through uninspected. It must satisfy every rule in [Registration schema rules](#registration-schema-rules) below — self-contained and acyclic, 16KB, 32 containers deep, 10,000 evaluations of work, and a restricted `pattern` alphabet |
 | `contact` | string | No | Contact email for integration inquiries |
 | `terms_uri` | string | No | Terms of service URL |
 | `terms_digest` | string | No | Digest of the document at `terms_uri`, in `method:hexdigest` form, pinning **which** terms document you are currently offering. A registration echoes it, the request signature covers that echo, and you record the accepted value with the account — which is what answers "which terms did this operator accept" after a later revision. Only allowed alongside `terms_uri`. Publishing it for the first time refuses every client that does not yet echo it, so treat it as a coordinated change |
@@ -170,6 +170,123 @@ Two details matter in practice:
 
 An Exchange that serves its API from a separate domain should front it under its
 own subdomain rather than advertising the other domain directly.
+
+### Registration schema rules
+
+`account_registration.data_schema` is the one part of this manifest a client both
+**reads out of a third party's document** and then **executes**, before any
+signature has been checked. A JSON Schema is a small program, so an unbounded one
+is a denial-of-service vector and one that resolves references is an SSRF vector
+aimed wherever its author points. A publisher **MUST** satisfy every rule below,
+and a consumer **MUST** refuse a schema that does not.
+
+- **Self-contained.** Every `$ref`, `$dynamicRef` and `$recursiveRef` begins with
+  `#`. A consumer never resolves a reference that leaves the document — doing so
+  turns every reader into a fetch aimed at a URL the schema's author chose.
+- **100 reference hops**, counted as the longest path of `$ref` hops. A third axis,
+  because a flat chain of definitions is three containers deep however long it is and
+  costs one evaluation per link — so neither the depth cap nor the work cap sees it,
+  while the recursion a validator performs to resolve it grows with every link.
+- **No reference cycles.** A `$ref` chain never returns to a schema already on it.
+  The construct is legal JSON Schema and is how a recursive structure is written,
+  but its cost has no static bound and it is what makes a validator recurse until
+  it aborts. Registration data describes a business entity, which is not recursive.
+- **One dialect.** Every `$schema` in the document names
+  `https://json-schema.org/draft/2020-12/schema` (a trailing `#` is the same
+  value). A document declaring none is read as 2020-12.
+- **A JSON object.** 2020-12 also admits a bare `true`/`false` as a schema, but this
+  field is a `Struct` and cannot carry one.
+- **16KB**, measured as the UTF-8 bytes of the member **as served** in this file.
+- **32 nested JSON containers**, counting the schema object itself as the first.
+- **10,000 evaluations**, counted statically over the schema — the cost of applying
+  it at **one location** in a payload, so a subschema under `items` is counted once
+  here and evaluated once per element at runtime. This
+  is the bound that matters and the one people expect the other two to provide: each
+  `anyOf`/`oneOf`/`allOf` branch costs its own subschema and a `$ref` costs its
+  target, so branches multiply along a reference chain. A 1,675-byte schema five
+  containers deep — a tenth of the size cap — measured 16.7 million evaluations and
+  twenty-seven seconds against a two-member payload. A definition nobody references
+  costs nothing, so a document may carry a library of them.
+- **A restricted `pattern` alphabet**, stated as what a pattern **may** contain. A
+  group opens with `(` or `(?:` and nothing else; the only escapes are `\$`, `\(`,
+  `\)`, `\*`, `\+`, `\.`, `\/`, `\?`, `\D`, `\W`, `\[`, `\\`, `\]`, `\^`, `\d`,
+  `\f`, `\n`, `\r`, `\t`, `\v`, `\w`, `\{`, `\|`, `\}` and `\xHH` with exactly two
+  hex digits; a counted repeat does not exceed 1000 and states its first
+  bound (`a{2,}` yes, `a{,5}` no); a `}` outside a bracket expression closes a counted
+  repeat, so a literal brace is written `\}`; `[:` does not appear inside a bracket
+  expression; a bracket expression closes and does not open with `]`; and a range
+  endpoint is not a shorthand class (`[\w-x]`).
+- **Patterns live in two places.** `pattern` states its regex as a value and
+  `patternProperties` states its regexes as **keys**. Both are patterns and both are
+  held to the alphabet; they are the only two keywords in the dialect that carry one.
+- **Data is not schema.** `const`, `enum`, `default` and `examples` hold arbitrary
+  JSON values, so the reference, dialect and pattern rules stop at them — a `const`
+  carrying a `$ref` member is a value a payload may equal. Their nesting still counts
+  against the depth cap.
+- **One encoding.** The bytes are well-formed UTF-8 and do not begin with a byte
+  order mark, and a consumer neither strips a mark nor repairs ill-formed bytes.
+  `NaN` and `Infinity` are not JSON and are refused with them.
+- **Absent means empty, or only JSON whitespace** — space, tab, carriage return and
+  line feed, and no others. This is the enforcement switch, so bytes read as absent
+  are bytes that turn validation off: a consumer that asks its own language what
+  "blank" means gets three different answers, and a decoder that strips a byte order
+  mark makes a mark followed by a space look like nothing at all. A document that is
+  not empty and not JSON is **malformed**, which is a refusal, never silence.
+- **No nested quantifiers.** A quantified group's body cannot itself repeat or
+  branch: `(a+)+`, `(a|a)*` and `([a-z]+)*` are refused, `(?:ab)+` is fine.
+- **Annotations stay annotations.** `format`, `contentEncoding` and
+  `contentMediaType` are never asserted.
+
+The bounds are numbers in the contract rather than each implementation's choice
+because a schema is validated at **both ends of one registration** — the Exchange
+enforcing it and the client pre-checking against it — so a limit one side invents
+refuses payloads the other accepts, which is the disagreement the field exists to
+prevent.
+
+The `pattern` rules are the ones worth explaining, and there are two of them because
+`pattern` fails in two different ways.
+
+The first is about **agreement**. Draft 2020-12 patterns are ECMA-262, and the regex
+engines real implementations run do not agree on that grammar. Part of the gap is
+loud — Go's RE2 refuses the lookaround and backreferences ECMA allows, so a schema
+using them compiles for one implementation and fails for the next. The dangerous part
+is silent: `\s` is `[\t\n\f\r ]` to RE2, adds the vertical tab in Python, and adds
+that plus every Unicode space separator in JavaScript. `[:alpha:]` inside a bracket
+expression is a character class to RE2 and the literal characters `:alph` to
+JavaScript. Every engine compiles those. They then disagree about which registrations
+are valid, with nothing logged.
+
+Where a construct **can** be reconciled it is not refused — `$`, `\d` and `\w` appear
+in almost every real pattern, and an implementation whose engine reads them
+differently is expected to correct it (match ASCII classes; anchor `$` at the end of
+the text and nowhere else). Only what cannot be reconciled is excluded — `\s`, and
+`\B`, which finds no word boundary in the empty string for RE2 and JavaScript and
+finds one in Python.
+
+That correction has to reach **every** place the implementation compiles a regex, not
+just the `pattern` keyword: `patternProperties` states its regexes as keys, and the
+matched-key scans behind `additionalProperties` and `unevaluatedProperties` compile
+them again. Correcting one and not the others is how a property name that is a
+non-ASCII digit came to match `^\d+$` for one implementation and not the other two.
+
+The alphabet is stated as an **allowlist** for a structural reason: the set of escapes
+three engines disagree about is open-ended, so a list of forbidden ones needs a new
+entry every time somebody finds another, and until then the gap is open. The portable
+set is small and closed, and an author who wants something outside it writes the
+characters out.
+
+The second rule is about **availability**, and it is separate because excluding
+lookaround and backreferences does not cover it. `(a+)+` against a 30-character input
+takes minutes: catastrophic backtracking needs neither construct. It has to be a
+publishing rule rather than a runtime timeout, because a regex spin holds its
+interpreter — a consumer cannot reliably interrupt one it has already started.
+
+A **client** that finds a schema breaking any of these rejects it and **skips its
+local pre-check** rather than repairing or truncating it, sending the payload and
+letting the Exchange decide — exactly as it would where no schema is published. A
+local check that cannot run must not become a local veto. An **Exchange** that
+cannot compile its own configured schema is looking at a misconfiguration of its
+deployment, and must not advertise a schema it is not itself enforcing.
 
 ## The Unified RAMP Well-Known File
 

@@ -2730,17 +2730,162 @@ message AccountRegistration {
   // REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, naming the offending
   // members in RegistrationFailure.field_errors. Absent: registration_data is
   // passed through to the system of record uninspected, so an Exchange that
-  // publishes no schema needs no change to stay conformant. Safety rules,
-  // because a consumer reads this schema out of a third party's manifest: it
-  // MUST be self-contained, and a consumer MUST NOT resolve a remote $ref out of
-  // it — doing so turns every reader into an SSRF vector aimed at a URL the
-  // schema's author chose. A consumer SHOULD bound validation time and recursion
-  // depth; draft 2020-12 `pattern` admits regexes with catastrophic
-  // backtracking. Size is capped at 16KB, measured as the UTF-8 bytes of this
-  // member as served in ramp.json; a consumer SHOULD reject an oversized schema
-  // and skip its local pre-check rather than truncate it, which leaves the
-  // Exchange's own enforcement the deciding check exactly as when no schema is
-  // published.
+  // publishes no schema needs no change to stay conformant.
+  //
+  // Absent means the field carries no bytes, or only JSON whitespace — space, tab,
+  // carriage return and line feed, RFC 8259's four and no others. Nothing else
+  // counts, and the distinction is load-bearing rather than pedantic: this is the
+  // enforcement switch, so a byte sequence read as absent is one that turns
+  // validation OFF. A consumer that asked its own language what "blank" means got
+  // three different answers to the same document — U+00A0 and U+3000 are whitespace
+  // to some runtimes and not others, and a decoder that strips a byte order mark
+  // makes a mark followed by a space look like nothing at all. A document that is
+  // not empty and not JSON is malformed, which is a refusal; it is never silence.
+  //
+  // Safety rules, because a consumer reads this schema out of a THIRD PARTY's
+  // manifest and validates against it before any signature has been checked. A
+  // publisher MUST satisfy every rule below and a consumer MUST refuse a schema
+  // that does not. The bounds are stated here as numbers rather than left to each
+  // implementation on purpose: a schema is validated at both ends of the same
+  // registration, and a limit chosen privately by one side refuses payloads the
+  // other accepts.
+  //
+  //   Self-contained. Every $ref, $dynamicRef and $recursiveRef MUST be a
+  //   same-document reference — it begins with "#". A consumer MUST NOT resolve a
+  //   reference that leaves the document: doing so turns every reader into an
+  //   SSRF vector aimed at a URL the schema's author chose.
+  //
+  //   One dialect. $schema, wherever it appears in the document, MUST name
+  //   https://json-schema.org/draft/2020-12/schema (an empty fragment on the end
+  //   is the same value). A document declaring none is read as that dialect. An
+  //   older draft is refused rather than validated under semantics its author did
+  //   not intend.
+  //
+  //   Data is not schema. `const`, `enum`, `default` and `examples` hold arbitrary
+  //   JSON VALUES, and their contents are never read as keywords: a `const` whose
+  //   value happens to carry a "$ref" or "$schema" member states a value a payload
+  //   may equal, not a reference to resolve or a dialect to honour. Both rules
+  //   above therefore stop at those four keywords, and so does the pattern
+  //   alphabet. Their nesting still counts against the depth cap. Likewise the
+  //   child keys of `properties`, `patternProperties`, `$defs`, `definitions` and
+  //   `dependentSchemas` are NAMES rather than keywords, so a property called
+  //   "$ref" is a property.
+  //
+  //   Bounded size: 16KB, measured as the UTF-8 bytes of this member AS SERVED in
+  //   ramp.json.
+  //
+  //   One encoding. The bytes MUST be well-formed UTF-8 (RFC 8259 requires it for
+  //   interchange) and MUST NOT begin with a byte order mark. RFC 8259 forbids
+  //   ADDING a mark and lets a parser ignore one, so both policies conform and the
+  //   choice is made here rather than left to each implementation: parsers differ,
+  //   and one that strips a mark validates a different document — and counts three
+  //   bytes against the size cap that the schema does not contain. A consumer MUST
+  //   NOT repair ill-formed bytes either; substituting U+FFFD silently enforces a
+  //   schema nobody published. A mark is in any case only valid at the start of a
+  //   JSON text, and this is a member inside one.
+  //
+  //   Bounded depth: 32 nested JSON containers, counting the schema itself as the
+  //   first.
+  //
+  //   Bounded WORK: 10000 evaluations, counted statically over the SCHEMA — each
+  //   anyOf/oneOf/allOf branch and prefixItems entry costs its own subschema, and a
+  //   $ref costs its target. It is the cost of applying the schema at ONE location
+  //   in a payload, not of a whole payload: a subschema under `items` is counted
+  //   once here and evaluated once per element at runtime. The size and depth caps
+  //   do not bound it and are not a substitute for it: branches multiply along a
+  //   reference chain, so a 1.6KB schema five containers deep can cost tens of
+  //   millions of evaluations and tens of seconds against a two-member payload. A
+  //   definition nobody references costs nothing, so a document may carry a library
+  //   of them.
+  //
+  //   Bounded reference chains: 100 hops, counted as the longest path of $ref hops
+  //   rather than as the number of references the document contains. This is a
+  //   THIRD axis, and a flat chain of definitions shows why it has to be: each one
+  //   referring to the next is three JSON containers deep however long it is, so
+  //   the depth cap never sees it, and it costs one evaluation per link, so the
+  //   work cap does not either. What it does reach is the recursion a validator
+  //   performs while resolving the chain — a chain of a few hundred exhausted one
+  //   implementation's stack outright, on a document every other rule had passed.
+  //   A schema describing a business entity chains one or two references.
+  //
+  //   No reference cycles. A $ref chain MUST NOT return to a schema already on it.
+  //   The construct is legal JSON Schema and is how a recursive structure is
+  //   written, but its evaluation cost has no static bound and it is what makes a
+  //   validator recurse until it aborts. Registration data describes a business
+  //   entity, which is not a recursive shape.
+  //
+  //   A portable `pattern` alphabet, stated as what a pattern MAY contain rather
+  //   than as what it may not. A group MUST open with "(" or "(?:" and nothing
+  //   else; only the escapes \$, \(, \), \*, \+, \., \/, \?, \D, \W, \[, \\, \],
+  //   \^, \d, \f, \n, \r, \t, \v, \w, \{, \| and \} MAY appear, together with \xHH
+  //   carrying exactly two hexadecimal digits (spelled out rather than ranged, so a
+  //   conformance guard can check the set character by character); a counted repeat
+  //   MUST NOT exceed 1000 and MUST state its first bound, so "a{2,}" is admitted
+  //   and "a{,5}" is not; a "}" outside a bracket expression MUST close a counted
+  //   repeat, so a literal brace is written "\}"; "[:" MUST NOT appear inside a
+  //   bracket expression; a bracket expression MUST close and MUST NOT open with
+  //   "]"; and a range endpoint MUST NOT be one of the shorthand classes ("[\w-x]").
+  //
+  //   The two brace rules are there for the same reason as the bracket ones, and
+  //   were found the same way. "a{,5}" is five literal characters to RE2 and a
+  //   repeat of zero to five to Python, so both engines compile it and then
+  //   disagree about which payloads match — the silent kind. An unmatched "}" is a
+  //   literal to RE2 and to Python and a syntax error to ECMA-262 under the `u`
+  //   flag, which is the loud kind, and exactly what the unmatched "]" rule above
+  //   already refuses.
+  //
+  //   The direction of that rule is the rule. Draft 2020-12 patterns are ECMA-262,
+  //   but the engines implementations run do not agree on it, and the set they
+  //   disagree about has no end: it grows with every dialect and every library
+  //   version, so a list of forbidden escapes needs a new entry each time somebody
+  //   finds one, and until then the gap is open. The portable set is small and
+  //   closed, and an author who wants a construct outside it writes the characters
+  //   out instead.
+  //
+  //   Some of the disagreement is loud — RE2 refuses the lookaround, atomic groups
+  //   and backreferences ECMA allows, so a schema using them compiles for one
+  //   implementation and fails for another. The rest is SILENT, and is why this is
+  //   a MUST rather than a SHOULD: inline flags, Unicode property classes, text
+  //   anchors and POSIX bracket names are accepted by one engine and either refused
+  //   or read DIFFERENTLY by the next, so two conformant validators both compile
+  //   the pattern and then disagree about which payloads match it, with nothing
+  //   logged. `\s` and `\B` are the plainest examples — RE2 reads `\s` as
+  //   [\t\n\f\r ], Python adds the vertical tab, and ECMA-262 adds that plus every
+  //   Unicode space separator; `\B` finds no word boundary in the empty string for
+  //   RE2 and ECMA-262 and finds one for Python. An explicit character class says
+  //   what was meant and means it everywhere.
+  //
+  //   Where a pattern may appear. `pattern` states its regex as a value and
+  //   `patternProperties` states its regexes as KEYS; both are patterns and both
+  //   are held to the alphabet above. They are the only two keywords in the dialect
+  //   that carry one — `propertyNames` reaches the rule through the subschema it
+  //   applies.
+  //
+  //   No nested quantifiers. A quantified group MUST NOT have a body that can
+  //   itself repeat or branch: `(a+)+`, `(a|a)*` and `([a-z]+)*` are refused, while
+  //   `(?:ab)+` is admitted. This is the denial-of-service half of the pattern
+  //   rule, and it is deliberately SEPARATE from the alphabet above, because
+  //   excluding lookaround and backreferences does not cover it — catastrophic
+  //   backtracking needs neither. It has to be a publishing rule rather than a
+  //   runtime bound: a regex spin holds its interpreter, so a consumer cannot
+  //   reliably interrupt one it has already started.
+  //
+  //   Annotations stay annotations. A consumer MUST NOT assert format,
+  //   contentEncoding or contentMediaType. Libraries default differently on each,
+  //   and a schema whose verdict depends on which library read it has no single
+  //   answer.
+  //
+  // The value MUST be a JSON object. Draft 2020-12 also admits a bare boolean as a
+  // schema, but this field is a Struct and cannot carry one.
+  //
+  // A consumer that finds a schema breaking any of these MUST refuse it, and MUST
+  // then SKIP its local pre-check rather than repair or truncate the schema —
+  // leaving the Exchange's own enforcement the deciding check, exactly as when no
+  // schema is published. Refusing locally and declining to send would turn a rule
+  // about reading a third party's document into a denial of service against the
+  // consumer's own user. That is the CLIENT side. An Exchange that cannot compile
+  // its OWN configured schema is looking at a misconfiguration of its deployment,
+  // and MUST NOT advertise a schema it is not itself enforcing.
   google.protobuf.Struct data_schema = 1;
 }
 
@@ -3412,6 +3557,46 @@ message RegisterRequest {
   // AccountRegistration.data_schema. This is NOT an identity claim: the caller's
   // identity is taken from the verified request signature, never from this
   // payload, so nothing here is trusted as authentication.
+  //
+  // Bounded, because a published data_schema is applied to THIS. The schema's own
+  // caps bound the schema; the cost of checking a payload against it is roughly
+  // that cost multiplied by the elements in the payload, and the multiplier was
+  // unbounded — a subschema under `items` is counted once by the schema's
+  // evaluation cap and evaluated once per element at runtime.
+  //
+  //   At most 64 members at the top level. Top level rather than every level:
+  //   nested bulk is already bounded by the byte cap below, and a recursive count
+  //   would refuse a small document that merely nests, which a business entity
+  //   legitimately does — an address is an object.
+  //
+  //   At most 32 nested JSON containers, counting this member itself as the first —
+  //   the same number and the same counting rule as the schema's own depth cap,
+  //   because it is the same question asked of the other document. It is bounded
+  //   for a reason the other two caps do not cover: a deeply nested payload is
+  //   small and has few top-level members, and canonicalising it walks it
+  //   RECURSIVELY, so without a stated bound the verdict was a property of the
+  //   reader's runtime rather than of the payload — one implementation refused
+  //   past roughly five hundred containers on one release of its language and
+  //   accepted nine hundred on the next, while two others accepted every depth
+  //   tried. Checked before the payload is canonicalised, so the bound precedes
+  //   the walk it exists to bound.
+  //
+  //   At most 16384 bytes, measured as this member's RFC 8785 (JCS) CANONICAL JSON
+  //   encoding. The unit is named on purpose and is the load-bearing half of the
+  //   rule: every other cap in this contract is over bytes a party actually served,
+  //   and this member is never served as bytes — it is a Struct, decoded before any
+  //   consumer sees it. "16KB" therefore means nothing until an encoding is chosen,
+  //   and two implementations choosing privately is the same both-ends disagreement
+  //   the schema rules exist to prevent. JCS also pins number formatting, which is
+  //   not a detail: a payload carrying 1e300 is seven bytes under one renderer and
+  //   three hundred under another.
+  //
+  // Both bounds are checked BEFORE the schema runs, for the reason the schema's own
+  // size cap is checked before the document is parsed — a bound that exists to stop
+  // work has to precede the work. A payload breaking either is a malformed request,
+  // NOT REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA: that reason names
+  // non-conformance to a published schema and applies only where one is published,
+  // while these bounds hold either way.
   google.protobuf.Struct registration_data = 2;
 
   // REQUIRED. Bare host of the recipient this request is addressed to (e.g.

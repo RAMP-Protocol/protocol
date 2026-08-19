@@ -18,6 +18,7 @@
     "./scopes": "./src/scopes.ts",
     "./hashurl": "./src/hashurl.ts",
     "./hosts": "./src/hosts.ts",
+    "./regschema": "./src/regschema.ts",
     "./wire": "./src/wire.ts",
     "./core": "./core/verifier.ts",
     "./core/wire-canon": "./core/wire-canon.ts",
@@ -36,6 +37,7 @@
     "test": "tsc -p tsconfig.json --strict --noEmit && vitest run"
   },
   "dependencies": {
+    "ajv": "^8.20.0",
     "canonicalize": "^3.0.0",
     "undici": "^6.27.0"
   },

@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 82 symbols at cross-language parity · 14 documented divergences · 143 Go-idiomatic exclusions · 24 conformance corpora, each tri-replayed.
+**At a glance:** 99 symbols at cross-language parity · 14 documented divergences · 144 Go-idiomatic exclusions · 25 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -35,6 +35,8 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `CanonicalizeMoney` | `canonicalize_money` | `canonicalizeMoney` |
 | `CatalogRejectionDetail` | `catalog_rejection_detail` | `catalogRejectionDetail` |
 | `CheckAudience` | `check_audience` | `checkAudience` |
+| `CheckRegistrationData` | `check_registration_data` | `checkRegistrationData` |
+| `CompileRegistrationSchema` | `compile_registration_schema` | `compileRegistrationSchema` |
 | `ConnectProtocolVersion` | `ConnectProtocolVersion` | `ConnectProtocolVersion` |
 | `ConnectProtocolVersionHeader` | `ConnectProtocolVersionHeader` | `ConnectProtocolVersionHeader` |
 | `ContentDigest` | `content_digest` | `contentDigest` |
@@ -46,17 +48,32 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `FormatMoney` | `format_money` | `formatMoney` |
 | `HashURL` | `hash_url` | `hashUrl` |
 | `IsBareDomain` | `is_bare_domain` | `isBareDomain` |
+| `IsSafeSchemaPattern` | `is_safe_schema_pattern` | `isSafeSchemaPattern` |
 | `KeyResolver` | `KeyResolver` | `RequestKeyResolver` |
 | `MaxBareDomainLen` | `MAX_BARE_DOMAIN_LEN` | `maxBareDomainLen` |
+| `MaxRegistrationDataBytes` | `MAX_REGISTRATION_DATA_BYTES` | `maxRegistrationDataBytes` |
+| `MaxRegistrationDataDepth` | `MAX_REGISTRATION_DATA_DEPTH` | `maxRegistrationDataDepth` |
+| `MaxRegistrationDataMembers` | `MAX_REGISTRATION_DATA_MEMBERS` | `maxRegistrationDataMembers` |
+| `MaxRegistrationFieldErrorPathLen` | `MAX_REGISTRATION_FIELD_ERROR_PATH_LEN` | `maxRegistrationFieldErrorPathLen` |
+| `MaxRegistrationFieldErrorTextLen` | `MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN` | `maxRegistrationFieldErrorTextLen` |
+| `MaxRegistrationFieldErrors` | `MAX_REGISTRATION_FIELD_ERRORS` | `maxRegistrationFieldErrors` |
+| `MaxRegistrationSchemaBytes` | `MAX_REGISTRATION_SCHEMA_BYTES` | `maxRegistrationSchemaBytes` |
+| `MaxRegistrationSchemaDepth` | `MAX_REGISTRATION_SCHEMA_DEPTH` | `maxRegistrationSchemaDepth` |
+| `MaxRegistrationSchemaEvaluations` | `MAX_REGISTRATION_SCHEMA_EVALUATIONS` | `maxRegistrationSchemaEvaluations` |
+| `MaxRegistrationSchemaRefHops` | `MAX_REGISTRATION_SCHEMA_REF_HOPS` | `maxRegistrationSchemaRefHops` |
 | `NewIdempotencyKey` | `generate_idempotency_key` | `generateIdempotencyKey` |
 | `NormalizeScopes` | `normalize_scopes` | `normalizeScopes` |
 | `OfferSignatureAlgorithm` | `OFFER_SIGNATURE_ALGORITHM` | `OFFER_SIGNATURE_ALGORITHM` |
 | `ParseMoney` | `parse_money` | `parseMoney` |
 | `ProtocolVersion` | `ProtocolVersion` | `ProtocolVersion` |
 | `Reason` | `reason` | `reason` |
+| `RegistrationDataVerdict` | `RegistrationDataVerdict` | `RegistrationDataVerdict` |
 | `RegistrationFailureDetail` | `registration_failure_detail` | `registrationFailureDetail` |
+| `RegistrationSchema` | `RegistrationSchema` | `RegistrationSchema` |
+| `RegistrationSchemaDialect` | `REGISTRATION_SCHEMA_DIALECT` | `registrationSchemaDialect` |
 | `RequestIDHeader` | `RequestIDHeader` | `RequestIDHeader` |
 | `RetrievalAuthFailureDetail` | `retrieval_auth_failure_detail` | `retrievalAuthFailureDetail` |
+| `SchemaVerdict` | `SchemaVerdict` | `SchemaVerdict` |
 | `ScopesSubset` | `scopes_subset` | `scopesSubset` |
 | `SignAgentBinding` | `sign_agent_binding` | `signInbound` |
 | `SignOffer` | `sign_offer_jcs` | `signOffer` |
@@ -274,6 +291,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.NewMultisigContext` | Go context.Context accessor; py/ts thread multisig state explicitly. |
 | `helpers.PoPOptions` | Go options struct for the delivery-proof signer; Python takes the same values as keyword arguments and TS as an options object. |
 | `helpers.RedactURL` | Go query-stripping helper for a signed URL headed to a log; py/ts redact inline at the log site. |
+| `helpers.RegistrationSchemaCompileTimeout` | Go-only wall-clock backstop on compilation, not part of the accepted/refused contract and deliberately absent from the ports: Go's runtime preempts, while a CPU-bound spin holds CPython's interpreter and blocks Node's event loop, so a timer there cannot interrupt the work it names. What bounds all three identically is static — the size, depth and evaluation caps and the pattern alphabet — and no admitted schema should ever reach this timeout. |
 | `helpers.RetrievalAuthFailureReasonFromToken` | Go lookup from the delivery edge's refusal token to the typed enum; py/ts branch on the token string directly. |
 | `helpers.SharedValidator` | Go protovalidate validator singleton; TS/Python ship no protovalidate face. |
 | `helpers.SignOfferAcceptanceWith` | Go Signer-custody variant of SignOfferAcceptance so the SDK never holds the key; py/ts pass key material directly to their single acceptance signer. |
@@ -320,6 +338,7 @@ Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness
 | `helpers/testdata/multisig-chain-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/offer-verify-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/pop-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/registration-schema-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/scopes-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/sign-request-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/signedurl-vectors.json` | ✅ | ✅ | ✅ |
