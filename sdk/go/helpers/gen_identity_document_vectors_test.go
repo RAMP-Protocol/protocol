@@ -201,6 +201,17 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		{"out_of_range_port_on_the_base", "https://a.example:70000/.well-known/ramp.json", "/x", ""},
 		{"out_of_range_port_on_the_reference", base, "https://a.example:70000/x", ""},
 		{"zero_port_on_the_base", "https://a.example:0/.well-known/ramp.json", "/x", ""},
+		// Two colons in one authority. Refused here for a port that is not a
+		// port, which is what splitting on the FIRST colon produces. Split on the
+		// LAST colon instead and the host half is "a.example:8443", which
+		// IsBareDomain accepts through its optional-port branch — every origin
+		// check downstream then runs against a hostname that is not one. The
+		// second case is the same shape with a foldable port: fold the trailing
+		// :443 away and the leftover colon disappears into the host, so the
+		// output looks well-formed while being wrong.
+		{"two_colons_in_the_base_authority", "https://a.example:8443:9/.well-known/ramp.json", "/x", ""},
+		{"two_default_ports_in_the_base_authority", "https://a.example:443:443/.well-known/ramp.json", "/x", ""},
+		{"two_colons_in_the_reference_authority", base, "https://a.example:8443:9/x", ""},
 
 		// Refused — the BASE is not usable, checked before the reference is even
 		// looked at. Nothing downstream catches these: the first two resolve to a

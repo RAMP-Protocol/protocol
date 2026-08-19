@@ -136,13 +136,22 @@ export function checkAudience(self: string, ...claimed: string[]): AudienceVerdi
 	return "accepted";
 }
 
-// splitHostPort splits `host[:port]` on the last colon; no colon means no port.
+// splitHostPort splits `host[:port]` on the FIRST colon; no colon means no port.
 // Shared by the audience comparison and the identity-document rule, because the
 // 443 fold below is half of BOTH origin comparisons and a change to it must not
-// have to be made twice. Anything stranger than host[:port] is refused by
-// isBareDomain, before this or right after it.
+// have to be made twice.
+//
+// The first colon, not the last, because the caller cannot check what this hands
+// back. Splitting `a.example:8443:9` on the LAST colon gives the host half
+// `a.example:8443`, and isBareDomain accepts that — its pattern admits an
+// optional port, so it cannot tell a host from a host that already carries one.
+// Every origin check downstream then runs against the wrong hostname. Splitting
+// on the FIRST colon puts everything after it in the port half, where
+// portIsWritable refuses it. Values that reached here through isBareDomain hold
+// at most one colon, so the two rules agree on them and the audience corpus is
+// unaffected.
 function splitHostPort(v: string): [string, string] {
-	const i = v.lastIndexOf(":");
+	const i = v.indexOf(":");
 	if (i < 0) {
 		return [v, ""];
 	}
@@ -270,6 +279,28 @@ function portIsWritable(port: string): boolean {
 	return n >= 1 && n <= 65535;
 }
 
+// vetAuthority checks one authority and returns its host and its folded port.
+// Written once and called for both the base and the reference. The two used to
+// hold the same four steps inline, and the split rule they share is exactly the
+// kind of thing that gets fixed in one copy and not the other.
+//
+// Refuses userinfo without echoing the value, since that is where a credential
+// would be. `label` names which of the two strings is at fault and is the only
+// difference between the two calls.
+function vetAuthority(authority: string, label: string): [string, string] {
+	if (authority.includes("@")) {
+		throw new Error(`identity document: ${label} carries userinfo`);
+	}
+	const [host, port] = splitHostPort(authority);
+	if (!isBareDomain(host)) {
+		throw new Error(`identity document: ${label} does not name a plain host`);
+	}
+	if (!portIsWritable(port)) {
+		throw new Error(`identity document: ${label} names a port outside 1-65535`);
+	}
+	return [host, foldDefaultPort(port)];
+}
+
 /**
  * Resolve an `identity_documents` member against the URL ramp.json came from.
  *
@@ -317,21 +348,10 @@ export function resolveIdentityDocument(manifestUrl: string, ref: string): strin
 	if (baseAuthorityMatch === null) {
 		throw new Error("identity document: manifest URL names no authority");
 	}
-	// Always present when the pattern matched; the ?? keeps the strict index
-	// check happy, and an empty authority is refused by isBareDomain below anyway.
-	const baseAuthority = baseAuthorityMatch[1] ?? "";
-	if (baseAuthority.includes("@")) {
-		// Deliberately does not echo the URL: it carries the credential.
-		throw new Error("identity document: manifest URL carries userinfo");
-	}
-	const [baseHost, rawBasePort] = splitHostPort(baseAuthority);
-	if (!isBareDomain(baseHost)) {
-		throw new Error("identity document: manifest URL does not name a plain host");
-	}
-	if (!portIsWritable(rawBasePort)) {
-		throw new Error("identity document: manifest URL names a port outside 1-65535");
-	}
-	const basePort = foldDefaultPort(rawBasePort);
+	// The authority is always present when the pattern matched; the ?? keeps the
+	// strict index check happy, and an empty authority is refused by isBareDomain
+	// inside vetAuthority anyway.
+	const [baseHost, basePort] = vetAuthority(baseAuthorityMatch[1] ?? "", "manifest URL");
 
 	if (ref.trim() === "") {
 		throw new Error("identity document: empty reference");
@@ -359,22 +379,11 @@ export function resolveIdentityDocument(manifestUrl: string, ref: string): strin
 		throw new Error("identity document: reference names no authority");
 	}
 	if (refAuthorityMatch !== null) {
-		const refAuthority = refAuthorityMatch[1] ?? "";
-		if (refAuthority.includes("@")) {
-			// Deliberately does not echo the reference: it carries the credential.
-			throw new Error("identity document: reference carries userinfo");
-		}
-		const [refHost, refPort] = splitHostPort(refAuthority);
-		if (!isBareDomain(refHost)) {
-			throw new Error("identity document: reference does not name a plain host");
-		}
-		if (!portIsWritable(refPort)) {
-			throw new Error("identity document: reference names a port outside 1-65535");
-		}
+		const [refHost, refPort] = vetAuthority(refAuthorityMatch[1] ?? "", "reference");
 		if (refHost.toLowerCase() !== baseHost.toLowerCase()) {
 			throw new Error("identity document: reference is not on the manifest's origin");
 		}
-		if (foldDefaultPort(refPort) !== basePort) {
+		if (refPort !== basePort) {
 			throw new Error("identity document: reference is on a different port than the manifest");
 		}
 	}

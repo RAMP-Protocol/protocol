@@ -137,14 +137,23 @@ def check_audience(self_domain: str, *claimed: str) -> AudienceVerdict:
 
 
 def _split_host_port(v: str) -> tuple[str, str]:
-    """Split ``host[:port]`` on the last colon; no colon means no port.
+    """Split ``host[:port]`` on the FIRST colon; no colon means no port.
 
     Shared by the audience comparison and the identity-document rule, because the
     443 fold below is half of BOTH origin comparisons and a change to it must not
-    have to be made twice. Anything stranger than host[:port] is refused by
-    ``is_bare_domain``, before this or right after it.
+    have to be made twice.
+
+    The first colon, not the last, because the caller cannot check what this
+    hands back. Splitting ``a.example:8443:9`` on the LAST colon gives the host
+    half ``a.example:8443``, and ``is_bare_domain`` accepts that — its pattern
+    admits an optional port, so it cannot tell a host from a host that already
+    carries one. Every origin check downstream then runs against the wrong
+    hostname. Splitting on the FIRST colon puts everything after it in the port
+    half, where ``_port_is_writable`` refuses it. Values that reached here
+    through ``is_bare_domain`` hold at most one colon, so the two rules agree on
+    them and the audience corpus is unaffected.
     """
-    host, sep, port = v.rpartition(":")
+    host, sep, port = v.partition(":")
     if not sep:
         return v, ""
     return host, port
@@ -269,6 +278,27 @@ def _port_is_writable(port: str) -> bool:
     return len(port) <= 5 and port.isdigit() and port.isascii() and 1 <= int(port) <= 65535
 
 
+def _vet_authority(authority: str, label: str) -> tuple[str, str]:
+    """Check one authority and return its host and its folded port.
+
+    Written once and called for both the base and the reference. The two used to
+    hold the same four steps inline, and the split rule they share is exactly the
+    kind of thing that gets fixed in one copy and not the other.
+
+    Refuses userinfo without echoing the value, since that is where a credential
+    would be. ``label`` names which of the two strings is at fault and is the
+    only difference between the two calls.
+    """
+    if "@" in authority:
+        raise ValueError(f"identity document: {label} carries userinfo")
+    host, port = _split_host_port(authority)
+    if not is_bare_domain(host):
+        raise ValueError(f"identity document: {label} does not name a plain host")
+    if not _port_is_writable(port):
+        raise ValueError(f"identity document: {label} names a port outside 1-65535")
+    return host, _fold_default_port(port)
+
+
 def _merge_path(base_path: str, ref_path: str) -> str:
     """RFC 3986 5.2.3. The base always names an authority here, so an empty base
     path merges as if it were "/"."""
@@ -367,16 +397,7 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     base_auth_m = _URI_AUTHORITY_RE.match(manifest_url)
     if base_auth_m is None:
         raise ValueError("identity document: manifest URL names no authority")
-    base_authority = base_auth_m.group(1)
-    if "@" in base_authority:
-        # Deliberately does not echo the URL: it carries the credential.
-        raise ValueError("identity document: manifest URL carries userinfo")
-    base_host, base_port = _split_host_port(base_authority)
-    if not is_bare_domain(base_host):
-        raise ValueError("identity document: manifest URL does not name a plain host")
-    if not _port_is_writable(base_port):
-        raise ValueError("identity document: manifest URL names a port outside 1-65535")
-    base_port = _fold_default_port(base_port)
+    base_host, base_port = _vet_authority(base_auth_m.group(1), "manifest URL")
 
     if not ref.strip():
         raise ValueError("identity document: empty reference")
@@ -398,18 +419,10 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
         # to a URL with no host rather than borrowing the base's.
         raise ValueError("identity document: reference names no authority")
     if ref_auth_m is not None:
-        ref_authority = ref_auth_m.group(1)
-        if "@" in ref_authority:
-            # Deliberately does not echo the reference: it carries the credential.
-            raise ValueError("identity document: reference carries userinfo")
-        ref_host, ref_port = _split_host_port(ref_authority)
-        if not is_bare_domain(ref_host):
-            raise ValueError("identity document: reference does not name a plain host")
-        if not _port_is_writable(ref_port):
-            raise ValueError("identity document: reference names a port outside 1-65535")
+        ref_host, ref_port = _vet_authority(ref_auth_m.group(1), "reference")
         if ref_host.lower() != base_host.lower():
             raise ValueError("identity document: reference is not on the manifest's origin")
-        if _fold_default_port(ref_port) != base_port:
+        if ref_port != base_port:
             raise ValueError("identity document: reference is on a different port than the manifest")
 
     # Only the path, query and fragment are taken from the join: the authority is

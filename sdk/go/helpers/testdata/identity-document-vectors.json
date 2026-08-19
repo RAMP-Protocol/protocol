@@ -400,6 +400,27 @@
       "resolved": ""
     },
     {
+      "name": "two_colons_in_the_base_authority",
+      "manifest_url": "https://a.example:8443:9/.well-known/ramp.json",
+      "ref": "/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "two_default_ports_in_the_base_authority",
+      "manifest_url": "https://a.example:443:443/.well-known/ramp.json",
+      "ref": "/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "two_colons_in_the_reference_authority",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://a.example:8443:9/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
       "name": "base_is_http",
       "manifest_url": "http://a.example/ramp.json",
       "ref": "/doc",
