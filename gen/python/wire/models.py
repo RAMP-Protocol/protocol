@@ -425,6 +425,17 @@ class GetAccountStatusResponse(WireModel):
     )
 
 
+class IdentityDocuments(WireModel):
+    signature_agent_card: constr(min_length=1) | None = Field(
+        None,
+        description='URI reference to this participant\'s Signature Agent Card. Absence is NOT\n symmetric with wba_directory: it means NOT ADVERTISED, not "look elsewhere".\n RAMP defines no canonical path for this document, so a consumer MUST NOT\n guess one.',
+    )
+    wba_directory: constr(min_length=1) | None = Field(
+        None,
+        description="URI reference to this participant's Web Bot Auth directory — the RFC 7517\n JWK Set described by WBAFile. Absent means fall back to the WBA-canonical\n path /.well-known/http-message-signatures-directory on the host that served\n this manifest, which is what consumers do today; publishing this member\n relocates that document rather than adding a lookup step.",
+    )
+
+
 class IngestionSource(Enum):
     INGESTION_SOURCE_RAMP_SITEMAP = 'INGESTION_SOURCE_RAMP_SITEMAP'
     INGESTION_SOURCE_RSL = 'INGESTION_SOURCE_RSL'
@@ -1321,7 +1332,7 @@ class Requester(WireModel):
         max_length=260,
     ) = Field(
         ...,
-        description='Domain the requester belongs to — used for public key lookup, so the value\n is concatenated into a URL the verifier fetches ({domain}/.well-known/ramp.json,\n WellKnownManifest with role=ROLE_AGENT). It carries the same bare-host shape\n "Request recipient" defines in the file header, for the same structural\n reason: a scheme, path or query smuggled in here would choose what gets\n fetched, not merely from where.',
+        description='Domain the requester belongs to. It carries the same bare-host shape\n "Request recipient" defines in the file header, for the same structural\n reason: a scheme, path or query smuggled in here would choose what gets\n fetched, not merely from where. It is NOT how a verifier finds this\n requester\'s keys: those live in the WBA directory, and verification resolves\n that directory from the COVERED `Signature-Agent` header, never from this\n self-asserted value.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -1636,6 +1647,10 @@ class WellKnownManifest(WireModel):
     )
     health_endpoint: str | None = Field(
         None, description='Exchange-only. Health check endpoint URL.'
+    )
+    identity_documents: IdentityDocuments | None = Field(
+        None,
+        description="Any role. Where this participant serves its identity documents — its WBA\n directory and its Signature Agent Card. Optional, and discovery metadata\n only: a verifier still resolves the WBA directory from the COVERED\n `Signature-Agent` header, so omitting the block keeps exactly today's\n behaviour. See IdentityDocuments for the URI-resolution and same-origin\n rules, and for why absence means different things on the two members.",
     )
     max_intermediary_hops: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,

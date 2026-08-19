@@ -1968,6 +1968,39 @@
     }
   },
   {
+    "id": "IdentityDocuments/signature_agent_card/too_short",
+    "message": "IdentityDocuments",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "signature_agent_card": "",
+      "wba_directory": "x"
+    }
+  },
+  {
+    "id": "IdentityDocuments/valid",
+    "message": "IdentityDocuments",
+    "valid": true,
+    "json": {
+      "signature_agent_card": "x",
+      "wba_directory": "x"
+    }
+  },
+  {
+    "id": "IdentityDocuments/wba_directory/too_short",
+    "message": "IdentityDocuments",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "signature_agent_card": "x",
+      "wba_directory": ""
+    }
+  },
+  {
     "id": "License/uri_digest/empty_ok",
     "message": "License",
     "valid": true,
@@ -7979,6 +8012,10 @@
     ],
     "json": {
       "domain": "exchange.example",
+      "identity_documents": {
+        "signature_agent_card": "/.well-known/signature-agent-card.json",
+        "wba_directory": "/.well-known/http-message-signatures-directory"
+      },
       "terms_digest": "sha256:abababababababababababababababababababababababababababababababab",
       "terms_uri": "https://exchange.example/terms",
       "ver": "1.0"
@@ -7990,6 +8027,10 @@
     "valid": true,
     "json": {
       "domain": "exchange.example",
+      "identity_documents": {
+        "signature_agent_card": "/.well-known/signature-agent-card.json",
+        "wba_directory": "/.well-known/http-message-signatures-directory"
+      },
       "role": "ROLE_EXCHANGE",
       "terms_digest": "",
       "terms_uri": "https://exchange.example/terms",
@@ -8005,6 +8046,10 @@
     ],
     "json": {
       "domain": "exchange.example",
+      "identity_documents": {
+        "signature_agent_card": "/.well-known/signature-agent-card.json",
+        "wba_directory": "/.well-known/http-message-signatures-directory"
+      },
       "role": "ROLE_EXCHANGE",
       "terms_digest": "two words",
       "terms_uri": "https://exchange.example/terms",
@@ -8020,6 +8065,10 @@
     ],
     "json": {
       "domain": "exchange.example",
+      "identity_documents": {
+        "signature_agent_card": "/.well-known/signature-agent-card.json",
+        "wba_directory": "/.well-known/http-message-signatures-directory"
+      },
       "role": "ROLE_EXCHANGE",
       "terms_digest": "1.2.3",
       "terms_uri": "https://exchange.example/terms",
@@ -8035,6 +8084,10 @@
     ],
     "json": {
       "domain": "exchange.example",
+      "identity_documents": {
+        "signature_agent_card": "/.well-known/signature-agent-card.json",
+        "wba_directory": "/.well-known/http-message-signatures-directory"
+      },
       "role": "ROLE_EXCHANGE",
       "terms_digest": "!!bad!!",
       "terms_uri": "https://exchange.example/terms",
@@ -8050,6 +8103,10 @@
     ],
     "json": {
       "domain": "exchange.example",
+      "identity_documents": {
+        "signature_agent_card": "/.well-known/signature-agent-card.json",
+        "wba_directory": "/.well-known/http-message-signatures-directory"
+      },
       "role": "ROLE_EXCHANGE",
       "terms_digest": "\u0000ctl\u0000",
       "terms_uri": "https://exchange.example/terms",
@@ -8065,6 +8122,10 @@
     ],
     "json": {
       "domain": "exchange.example",
+      "identity_documents": {
+        "signature_agent_card": "/.well-known/signature-agent-card.json",
+        "wba_directory": "/.well-known/http-message-signatures-directory"
+      },
       "role": "ROLE_EXCHANGE",
       "terms_digest": " ",
       "terms_uri": "https://exchange.example/terms",
@@ -8080,6 +8141,10 @@
     ],
     "json": {
       "domain": "exchange.example",
+      "identity_documents": {
+        "signature_agent_card": "/.well-known/signature-agent-card.json",
+        "wba_directory": "/.well-known/http-message-signatures-directory"
+      },
       "role": "ROLE_EXCHANGE",
       "terms_digest": "-5",
       "terms_uri": "https://exchange.example/terms",
@@ -8095,6 +8160,10 @@
     ],
     "json": {
       "domain": "exchange.example",
+      "identity_documents": {
+        "signature_agent_card": "/.well-known/signature-agent-card.json",
+        "wba_directory": "/.well-known/http-message-signatures-directory"
+      },
       "role": "ROLE_EXCHANGE",
       "terms_digest": "NaN",
       "terms_uri": "https://exchange.example/terms",
@@ -8110,6 +8179,10 @@
     ],
     "json": {
       "domain": "exchange.example",
+      "identity_documents": {
+        "signature_agent_card": "/.well-known/signature-agent-card.json",
+        "wba_directory": "/.well-known/http-message-signatures-directory"
+      },
       "role": "ROLE_EXCHANGE",
       "terms_digest": "Infinity",
       "terms_uri": "https://exchange.example/terms",
@@ -8125,6 +8198,10 @@
     ],
     "json": {
       "domain": "exchange.example",
+      "identity_documents": {
+        "signature_agent_card": "/.well-known/signature-agent-card.json",
+        "wba_directory": "/.well-known/http-message-signatures-directory"
+      },
       "role": "ROLE_EXCHANGE",
       "terms_digest": "1E3",
       "terms_uri": "https://exchange.example/terms",
@@ -8137,6 +8214,10 @@
     "valid": true,
     "json": {
       "domain": "exchange.example",
+      "identity_documents": {
+        "signature_agent_card": "/.well-known/signature-agent-card.json",
+        "wba_directory": "/.well-known/http-message-signatures-directory"
+      },
       "role": "ROLE_EXCHANGE",
       "terms_digest": "sha256:abababababababababababababababababababababababababababababababab",
       "terms_uri": "https://exchange.example/terms",

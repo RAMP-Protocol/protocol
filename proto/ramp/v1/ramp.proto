@@ -1596,12 +1596,13 @@ message Requester {
   // Unique requester identifier (e.g., "agent-research-bot-001").
   string id = 1;
 
-  // Domain the requester belongs to — used for public key lookup, so the value
-  // is concatenated into a URL the verifier fetches ({domain}/.well-known/ramp.json,
-  // WellKnownManifest with role=ROLE_AGENT). It carries the same bare-host shape
+  // Domain the requester belongs to. It carries the same bare-host shape
   // "Request recipient" defines in the file header, for the same structural
   // reason: a scheme, path or query smuggled in here would choose what gets
-  // fetched, not merely from where.
+  // fetched, not merely from where. It is NOT how a verifier finds this
+  // requester's keys: those live in the WBA directory, and verification resolves
+  // that directory from the COVERED `Signature-Agent` header, never from this
+  // self-asserted value.
   string domain = 2 [
     (buf.validate.field).string = {
       max_len: 260,
@@ -1648,9 +1649,11 @@ message Requester {
   repeated string scopes = 6 [(buf.validate.field).repeated.max_items = 64];
 
   // Request authentication is handled at the HTTP layer via RFC 9421
-  // HTTP Message Signatures (alg=ed25519). The Requester's public key
-  // is published at {domain}/.well-known/ramp.json as a WellKnownManifest
-  // (role=ROLE_AGENT) with inline JWK keys.
+  // HTTP Message Signatures (alg=ed25519). The Requester's public keys are NOT
+  // in ramp.json: they live in the WBA directory (WBAFile), and a verifier
+  // resolves that directory from the COVERED `Signature-Agent` header.
+  // WellKnownManifest.identity_documents may ADVERTISE where that directory is
+  // served; advertising it is all it does.
 
   // Optional delegation — present when the requester acts on behalf of
   // another entity (user, organization, upstream agent).
@@ -2744,6 +2747,43 @@ message AccountRegistration {
   google.protobuf.Struct data_schema = 1;
 }
 
+// IdentityDocuments — where this participant serves its identity documents: its
+// Web Bot Auth directory and its Signature Agent Card. Discovery metadata only.
+// Publishing this block does not change how a request signature is verified: a
+// verifier still resolves the WBA directory from the COVERED `Signature-Agent`
+// header, exactly as before. Both members are RFC 3986 URI references, relative
+// or absolute, and a consumer resolves each against the URL it fetched this
+// manifest FROM — never against the self-asserted `domain` member, which would
+// let a hostile manifest validate itself; `endpoint` already carries the same
+// reasoning. After resolution the URL MUST be on the SAME ORIGIN as the manifest
+// — `https` scheme, equal hostname, equal effective port, where an omitted port
+// and `:443` are the same port — and MUST NOT carry userinfo. That is
+// deliberately stricter than the `endpoint` rule, which does allow a subdomain,
+// because the two fields fail differently: whoever takes over an `endpoint` host
+// misdirects calls they still cannot sign for, while whoever takes over an
+// identity-document host publishes their own keys and BECOMES this participant.
+// An empty block means the same as no block. Key material and Signature Agent
+// Card contents are never copied in here, and the emergency revocation list
+// stays where it is, linked from the WBA directory (WBAFile.revocation_url).
+message IdentityDocuments {
+  // URI reference to this participant's Web Bot Auth directory — the RFC 7517
+  // JWK Set described by WBAFile. Absent means fall back to the WBA-canonical
+  // path /.well-known/http-message-signatures-directory on the host that served
+  // this manifest, which is what consumers do today; publishing this member
+  // relocates that document rather than adding a lookup step.
+  optional string wba_directory = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+
+  // URI reference to this participant's Signature Agent Card. Absence is NOT
+  // symmetric with wba_directory: it means NOT ADVERTISED, not "look elsewhere".
+  // RAMP defines no canonical path for this document, so a consumer MUST NOT
+  // guess one.
+  optional string signature_agent_card = 2 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
 // WellKnownManifest — RAMP commercial overlay, served at /.well-known/ramp.json
 // by every RAMP participant (agent, exchange, broker, publisher).
 //
@@ -2891,6 +2931,14 @@ message WellKnownManifest {
   optional string terms_digest = 31 [
     (buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$"
   ];
+
+  // Any role. Where this participant serves its identity documents — its WBA
+  // directory and its Signature Agent Card. Optional, and discovery metadata
+  // only: a verifier still resolves the WBA directory from the COVERED
+  // `Signature-Agent` header, so omitting the block keeps exactly today's
+  // behaviour. See IdentityDocuments for the URI-resolution and same-origin
+  // rules, and for why absence means different things on the two members.
+  optional IdentityDocuments identity_documents = 32;
 
   // Extension point
   google.protobuf.Struct ext = 15;

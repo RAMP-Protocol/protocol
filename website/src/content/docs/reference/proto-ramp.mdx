@@ -294,6 +294,12 @@ How to open an account at an Exchange, published as the optional `account_regist
 
 ::proto-message{name=AccountRegistration}
 
+### IdentityDocuments
+
+Where a participant serves its identity documents, published as the optional `identity_documents` block on the manifest. Discovery metadata only — it does not change how a request signature is verified.
+
+::proto-message{name=IdentityDocuments}
+
 ### WBAFile
 
 The pure WBA directory, served at `/.well-known/http-message-signatures-directory` (`Content-Type: application/jwk-set+json`). Holds each participant's inline signing keys and an optional emergency-revocation pointer. Keys are identified by their RFC 7638 thumbprint (the RFC 9421 `keyid`).
