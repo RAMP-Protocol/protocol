@@ -1090,12 +1090,32 @@ that port instead.
 The durable lesson is not about URLs. A parity corpus proves parity only over the
 inputs it contains, and a corpus assembled from realistic values will contain
 only realistic values — which is precisely the region where independent
-implementations already agree. What caught this was a differential sweep: 21141
-base/reference pairs, most of them nonsense, run through all three
+implementations already agree. What caught this was a differential sweep:
+thousands of base/reference pairs, most of them nonsense, run through all three
 implementations and compared. It found three divergence classes that no reviewer
-had named, including one the first round of fixes had not closed. Each of those
-classes is now a generated vector, so the corpus covers the disagreements rather
-than the happy path.
+had named, including one the first round of fixes had not closed.
+
+The sweep then made the same mistake one level up. It was a scratch script, run
+once and thrown away, and its alphabet dropped every ASCII byte into a PATH and
+nowhere else — never a query, never a fragment, never a base carrying dot
+segments or a second colon. A later round found four more divergence classes, and
+three of them a wider alphabet would have caught. A corpus assembled from
+realistic values contains only realistic values; a sweep written from one
+position covers only that position.
+
+So the sweep is no longer a script. `sdk/go/helpers/gen_identity_document_sweep_vectors_test.go`
+emits `testdata/identity-document-sweep-vectors.json`, both ports replay it, and
+`sdk/python/tests/test_corpus_replay_completeness.py` makes replaying it in all
+three languages mandatory. Nothing has to be remembered after the next Go, CPython
+or Node upgrade changes a URL parser.
+
+It sits beside the hand-written corpus rather than replacing it, and the two
+answer different questions. The hand-written one carries the verdict its author
+INTENDED and refuses to emit when the real face disagrees, so it catches "the
+behaviour changed". The sweep records whatever Go answers, because no author can
+declare a verdict for thousands of machine-made inputs, so it catches "the three
+implementations answer differently". A diff in the sweep file means something
+moved; whether it broke is a question for the intent corpus.
 
 One thing the fix did not change is the authority rebuild at the end of each
 port, which reassembles the output from the already-checked base host and port

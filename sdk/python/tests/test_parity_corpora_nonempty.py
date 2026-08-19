@@ -67,6 +67,11 @@ _CORPUS_SPECS: list[tuple[pathlib.Path, Callable[[Any], Any], str]] = [
     (GO_TESTDATA / "audience-vectors.json", lambda d: d["bare_domain"], "bare-domain"),
     (GO_TESTDATA / "audience-vectors.json", lambda d: d["audience"], "audience"),
     (GO_TESTDATA / "identity-document-vectors.json", lambda d: d["identity_document"], "identity-document"),
+    (
+        GO_TESTDATA / "identity-document-sweep-vectors.json",
+        lambda d: d["identity_document_sweep"],
+        "identity-document-sweep",
+    ),
     (CONFORMANCE_CORPUS / "crossfield.json", _whole, "crossfield"),
 ]
 

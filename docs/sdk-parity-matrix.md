@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 83 symbols at cross-language parity · 14 documented divergences · 143 Go-idiomatic exclusions · 25 conformance corpora, each tri-replayed.
+**At a glance:** 83 symbols at cross-language parity · 14 documented divergences · 143 Go-idiomatic exclusions · 26 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -317,6 +317,7 @@ Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness
 | `helpers/testdata/error-detail-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/hashurl-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/idempotency-validate-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/identity-document-sweep-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/identity-document-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/money-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/multisig-chain-vectors.json` | ✅ | ✅ | ✅ |
