@@ -320,9 +320,10 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 // an error surfaced to an operator is exactly where a leaked credential ends up.
 //
 // The cases are chosen to reach DIFFERENT refusals, because the risk is not one
-// bad message but one path nobody converted. The last two carry the credential
+// bad message but one path nobody converted. Four of them carry the credential
 // somewhere Go never parses as userinfo, so the userinfo checks do not fire and
-// the string travels on to a much later refusal.
+// the string travels on to a much later refusal — and the last two do it on the
+// BASE, which is the only way to reach two of the refusals at all.
 func TestIdentityDocumentRefusalDoesNotEchoTheCredential(t *testing.T) {
 	const secret = "s3cr3t"
 	for _, c := range []struct{ name, manifest, ref string }{
@@ -341,6 +342,13 @@ func TestIdentityDocumentRefusalDoesNotEchoTheCredential(t *testing.T) {
 		// an opaque reference under a scheme that is not https, and it is
 		// refused for that instead.
 		{"in a schemeless-looking reference", "https://a.example/.well-known/ramp.json", "u:" + secret + "@a.example/x"},
+		// The five above put the credential on the REFERENCE. These two put it
+		// on the BASE in the same two opaque shapes, and they are the only way
+		// to reach the "names no host" and "is not https" refusals with a
+		// credential in hand — a base that parses normally is stopped by the
+		// userinfo check long before either of them.
+		{"in an opaque manifest URL", "https:u:" + secret + "@a.example/ramp.json", "/x"},
+		{"in a schemeless-looking manifest URL", "u:" + secret + "@a.example/ramp.json", "/x"},
 	} {
 		_, err := ResolveIdentityDocument(c.manifest, c.ref)
 		if err == nil {

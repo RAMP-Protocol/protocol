@@ -83,11 +83,12 @@ describe("sdk/ts resolveIdentityDocument matches the sdk/go oracle vectors", () 
 	// refusal that names the very userinfo it is refusing puts the credential
 	// wherever the caller logs its errors.
 	//
-	// The cases reach DIFFERENT refusals on purpose. The last three carry the
+	// The cases reach DIFFERENT refusals on purpose. Five of them carry the
 	// credential somewhere no parser reads as userinfo — a reference that does not
-	// parse at all, and two opaque references with no authority component — so the
-	// userinfo checks never fire and the string travels on to a much later refusal.
-	// This is the same set the Go oracle covers.
+	// parse at all, and opaque forms with no authority component — so the userinfo
+	// checks never fire and the string travels on to a much later refusal. The last
+	// two put it on the BASE, which is the only way to reach two of the refusals at
+	// all. This is the same set the Go oracle covers.
 	it("a refusal does not echo the credential", () => {
 		const secret = "s3cr3t";
 		const cases: [string, string][] = [
@@ -96,6 +97,8 @@ describe("sdk/ts resolveIdentityDocument matches the sdk/go oracle vectors", () 
 			["https://a.example/.well-known/ramp.json", `https://u:${secret}@a.example/%zz`],
 			["https://a.example/.well-known/ramp.json", `https:u:${secret}@a.example/x`],
 			["https://a.example/.well-known/ramp.json", `u:${secret}@a.example/x`],
+			[`https:u:${secret}@a.example/ramp.json`, "/x"],
+			[`u:${secret}@a.example/ramp.json`, "/x"],
 		];
 		for (const [manifestUrl, ref] of cases) {
 			expect(refusalMessage(manifestUrl, ref)).not.toContain(secret);
