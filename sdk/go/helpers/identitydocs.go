@@ -176,14 +176,22 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 	// it. Safe only because IsBareDomain has already refused every host shape
 	// that would need quoting.
 	//
-	// The QUERY and the FRAGMENT are taken as SUBSTRINGS of the strings the
-	// author wrote, not from url.URL's serializer, for the same reason. RFC 3986
-	// 3.4 and 3.5 define both components that way, and the three SDKs run three
-	// serializers that disagree inside the character set untameReason admits on
-	// purpose: WHATWG percent-encodes an apostrophe in a query, and this one
-	// used to re-encode a second hash in a fragment. Only the PATH still comes
-	// from the parser, where a wide differential sweep found the three agree.
-	path := resolved.EscapedPath()
+	// The PATH, the QUERY and the FRAGMENT are all taken from the strings the
+	// author wrote, not from url.URL's serializer. RFC 3986 3.3, 3.4 and 3.5
+	// define all three as substrings, and the three SDKs run three serializers
+	// that disagree inside the character set untameReason admits on purpose:
+	// WHATWG percent-encodes an apostrophe in a query, and this one used to
+	// re-encode a second hash in a fragment.
+	//
+	// The path was the last component still coming from ResolveReference, and it
+	// was wrong. net/url drops the empty segment when a "..' pops past the root,
+	// where RFC 3986 5.2.4 keeps it: "..//x" against a base of /ramp.json is
+	// //x, because step 2C removes nothing from an empty output buffer and step
+	// 2E then moves the empty segment. Both ports hand-write 5.2.4 and both
+	// answered //x while this oracle answered /x. So 5.2.2, 5.2.3 and 5.2.4 are
+	// written out here too, and ResolveReference is left to do only what it is
+	// still trusted for: the scheme and the authority.
+	path := resolvedPath(manifestURL, ref, refURL.Host != "")
 	if path == "" {
 		// RFC 3986 6.2.3: under a hierarchical scheme an empty path is
 		// equivalent to "/", and "/" is the normalized form. The WHATWG parser
@@ -225,6 +233,112 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 		out.WriteString(fragment)
 	}
 	return out.String(), nil
+}
+
+// rawPathOf returns the path component of a URI reference or URL, exactly as
+// written: the string with its fragment, query, scheme and authority removed.
+func rawPathOf(s string) string {
+	if i := strings.IndexByte(s, '#'); i >= 0 {
+		s = s[:i]
+	}
+	if i := strings.IndexByte(s, '?'); i >= 0 {
+		s = s[:i]
+	}
+	// A scheme is a colon reached before any "/", so "/a:b" keeps its colon.
+	if i := strings.IndexAny(s, ":/"); i >= 0 && s[i] == ':' {
+		s = s[i+1:]
+	}
+	if strings.HasPrefix(s, "//") {
+		j := strings.IndexByte(s[2:], '/')
+		if j < 0 {
+			return ""
+		}
+		s = s[2+j:]
+	}
+	return s
+}
+
+// mergePath is RFC 3986 5.2.3. The base always names an authority by the time
+// this runs, so an empty base path merges as if it were "/".
+func mergePath(basePath, refPath string) string {
+	if basePath == "" {
+		return "/" + refPath
+	}
+	return basePath[:strings.LastIndexByte(basePath, '/')+1] + refPath
+}
+
+// removeDotSegments is RFC 3986 5.2.4, transcribed step by step.
+//
+// The UNDERFLOW cases are the reason this is written out rather than delegated:
+// steps 2C and 2D pop the output buffer only "if any", so a "..' that pops past
+// the root removes nothing and leaves whatever follows — including an empty
+// segment — in place. net/url collapses that empty segment; both ports and the
+// RFC keep it.
+//
+// Not a refusal: "../card.json" is a form the field is specified to support and
+// there is a vector pinning it.
+func removeDotSegments(path string) string {
+	var out []string
+	for path != "" {
+		switch {
+		case strings.HasPrefix(path, "../"):
+			path = path[3:]
+		case strings.HasPrefix(path, "./"):
+			path = path[2:]
+		case strings.HasPrefix(path, "/./"):
+			path = "/" + path[3:]
+		case path == "/.":
+			path = "/"
+		case strings.HasPrefix(path, "/../"):
+			path = "/" + path[4:]
+			if len(out) > 0 {
+				out = out[:len(out)-1]
+			}
+		case path == "/..":
+			path = "/"
+			if len(out) > 0 {
+				out = out[:len(out)-1]
+			}
+		case path == "." || path == "..":
+			path = ""
+		default:
+			// Move one segment, its leading "/" included, to the output. Popping
+			// one element above therefore drops a segment AND its slash, which
+			// is what 5.2.4 asks for.
+			i := strings.IndexByte(path, '/')
+			if strings.HasPrefix(path, "/") {
+				// Skip the leading slash: it belongs to THIS segment.
+				if i = strings.IndexByte(path[1:], '/'); i >= 0 {
+					i++
+				}
+			}
+			if i < 0 {
+				out = append(out, path)
+				path = ""
+			} else {
+				out = append(out, path[:i])
+				path = path[i:]
+			}
+		}
+	}
+	return strings.Join(out, "")
+}
+
+// resolvedPath is RFC 3986 5.2.2's path arm: pick the path, merge it if it is
+// relative, then remove dot segments ONCE on whichever branch produced it.
+func resolvedPath(manifestURL, ref string, refHasAuthority bool) string {
+	refPath, basePath := rawPathOf(ref), rawPathOf(manifestURL)
+	switch {
+	case refHasAuthority, strings.HasPrefix(refPath, "/"):
+		return removeDotSegments(refPath)
+	case refPath == "":
+		// The base path is INHERITED, and it goes through 5.2.4 like any other:
+		// a base of /a/../ramp.json with a query-only reference must not keep
+		// the dot segments.
+		return removeDotSegments(basePath)
+	default:
+		return removeDotSegments(mergePath(basePath, refPath))
+	}
 }
 
 // rawQueryOf returns the query a URI reference or URL DEFINES, exactly as

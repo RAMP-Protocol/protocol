@@ -267,6 +267,34 @@
       "resolved": "https://a.example/a/ramp.json?q"
     },
     {
+      "name": "dot_segment_underflow_before_an_empty_segment",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "..//x",
+      "accepted": true,
+      "resolved": "https://a.example//x"
+    },
+    {
+      "name": "rooted_dot_segment_underflow_before_an_empty_segment",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/..//x",
+      "accepted": true,
+      "resolved": "https://a.example//x"
+    },
+    {
+      "name": "dot_segment_underflow_leaving_a_trailing_empty_segment",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "..//",
+      "accepted": true,
+      "resolved": "https://a.example//"
+    },
+    {
+      "name": "dot_segments_popping_without_underflow",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "../..//x",
+      "accepted": true,
+      "resolved": "https://a.example//x"
+    },
+    {
       "name": "padded_port_on_the_base",
       "manifest_url": "https://a.example:0443/.well-known/ramp.json",
       "ref": "/x",

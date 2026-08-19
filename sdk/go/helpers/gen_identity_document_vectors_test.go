@@ -150,6 +150,19 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		{"dot_segments_on_the_base_query_only_reference", "https://a.example/a/../ramp.json", "?q", "https://a.example/ramp.json?q"},
 		{"dot_segments_on_the_base_fragment_only_reference", "https://a.example/a/../ramp.json", "#f", "https://a.example/ramp.json#f"},
 		{"single_dot_segment_on_the_base", "https://a.example/a/./ramp.json", "?q", "https://a.example/a/ramp.json?q"},
+		// A dot segment that pops PAST THE ROOT with an empty segment behind it.
+		// RFC 3986 5.2.4 step 2C removes nothing from an empty output buffer, so
+		// the empty segment survives and step 2E moves it: the answer is "//x",
+		// not "/x". Go's net/url collapses it, which is why this oracle stopped
+		// taking its path from ResolveReference. Both ports already answered
+		// this way. The last row is the control: from a deeper base the same
+		// reference pops WITHOUT underflow, and every implementation, net/url
+		// included, kept the empty segment there — which is what pins the
+		// trigger to the underflow rather than to empty segments in general.
+		{"dot_segment_underflow_before_an_empty_segment", base, "..//x", "https://a.example//x"},
+		{"rooted_dot_segment_underflow_before_an_empty_segment", base, "/..//x", "https://a.example//x"},
+		{"dot_segment_underflow_leaving_a_trailing_empty_segment", base, "..//", "https://a.example//"},
+		{"dot_segments_popping_without_underflow", "https://a.example/a/b/ramp.json", "../..//x", "https://a.example//x"},
 		// A padded port is a different string from :443 and does not fold, so
 		// it survives into the output. It is accepted on purpose: the port rule
 		// bounds the VALUE, and reading it as text would flip this verdict.

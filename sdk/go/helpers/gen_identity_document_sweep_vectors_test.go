@@ -93,6 +93,26 @@ var sweepManifests = append([]string{
 	"",
 }, sweepBases...)
 
+// sweepDotAtoms build references out of dot segments and EMPTY segments, in
+// every pairing. This is the class the first two sweep alphabets missed: they
+// held dot segments and they held empty segments, but never a "..' that pops
+// past the root with an empty segment behind it, which is where net/url and RFC
+// 3986 5.2.4 part company. Crossed with bases of four different depths, because
+// whether a pop underflows depends on how deep the base is.
+var sweepDotAtoms = []string{
+	"", "/", "//", "///", ".", "..", "./", "../", "/.", "/..", "/./", "/../",
+	"x", "/x", "//x", "x/",
+}
+
+// sweepDotBases vary only in path depth, which is the one property that decides
+// whether a given run of "..' segments underflows.
+var sweepDotBases = []string{
+	"https://a.example/ramp.json",
+	"https://a.example/a/ramp.json",
+	"https://a.example/a/b/ramp.json",
+	"https://a.example//ramp.json",
+}
+
 func buildIdentityDocumentSweepVectors(t *testing.T) []identityDocumentVector {
 	t.Helper()
 	var out []identityDocumentVector
@@ -123,6 +143,16 @@ func buildIdentityDocumentSweepVectors(t *testing.T) []identityDocumentVector {
 	for _, manifest := range sweepManifests {
 		for _, ref := range sweepStructuralRefs {
 			record(manifest, ref)
+		}
+	}
+	for _, manifest := range sweepDotBases {
+		for _, a := range sweepDotAtoms {
+			for _, b := range sweepDotAtoms {
+				if a+b == "" {
+					continue // the empty reference, already covered and refused
+				}
+				record(manifest, a+b)
+			}
 		}
 	}
 	return out
