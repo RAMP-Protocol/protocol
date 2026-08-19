@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import re
 from typing import Literal
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 
 # BARE_DOMAIN_PATTERN is the wire shape of a domain-valued field: a bare domain
 # with an optional ":port", never a URL. It carries the same bytes as the Go
@@ -180,6 +180,11 @@ _URI_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
 _URI_AUTHORITY_RE = re.compile(r"^(?:[A-Za-z][A-Za-z0-9+.\-]*:)?//([^/?#]*)")
 
 
+# A colon reached before the first "/", "?" or "#". Read only when the reference
+# carries no scheme, where such a colon cannot be a scheme delimiter.
+_COLON_BEFORE_PATH_RE = re.compile(r"[^/?#]*:")
+
+
 def _uri_scheme(ref: str) -> str:
     m = _URI_SCHEME_RE.match(ref)
     return m.group(0)[:-1].lower() if m else ""
@@ -198,6 +203,123 @@ def _fold_default_port(port: str) -> str:
     return "" if port == "443" else port
 
 
+# Every non-alphanumeric byte the coarse RFC 3986 character set admits: the
+# unreserved punctuation, the gen-delims, the sub-delims, and the percent sign
+# that introduces an escape.
+_URI_PUNCTUATION = frozenset("-._~" ":/?#[]@" "!$&'()*+,;=" "%")
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+
+
+def _untame_reason(s: str) -> str:
+    """Say why ``s`` may not be resolved, as a fragment completing "the reference ...".
+
+    Returns "" when the string is fine. NEVER echoes the input, which can carry
+    a credential. Port of ``untameReason`` in sdk/go/helpers/identitydocs.go.
+
+    This exists because the three SDKs do not share a URL parser, and the three
+    parsers disagree about everything outside this character set. Go percent-
+    encodes a literal "|" and a space, this port and the TypeScript one keep
+    them; a control character makes the authority regex above read an ABSOLUTE
+    reference as a relative one and skip every origin check; Go refuses an
+    invalid escape and the other two accept it. Reproducing three parsers byte
+    for byte is not achievable, so the untame input is refused instead.
+
+    DO NOT tighten this to the per-component pchar grammar. pchar would refuse
+    "[" and "]", which all three SDKs currently agree on, and there is a vector
+    pinning that.
+    """
+    for i, c in enumerate(s):
+        if not (c.isascii() and (c.isalnum() or c in _URI_PUNCTUATION)):
+            # Every control character, every space, the backslash, and every
+            # non-ASCII character leaves through here. ``str.isalnum`` is true
+            # for far more than ASCII, which is why the isascii guard comes
+            # first rather than after it.
+            return "is not written in the RFC 3986 character set"
+        if c != "%":
+            continue
+        esc = s[i + 1 : i + 3]
+        if len(esc) < 2 or esc[0] not in _HEX_DIGITS or esc[1] not in _HEX_DIGITS:
+            return "carries an invalid percent-escape"
+        # A percent-encoded dot needs its own refusal. The rule above admits a
+        # percent followed by two hex digits, and _remove_dot_segments only ever
+        # sees a LITERAL dot, so "%2e" would survive every other check — and the
+        # three SDKs split on it: Go and this port keep it, the WHATWG parser
+        # behind the TypeScript port decodes it and then collapses the segment,
+        # which names a DIFFERENT DOCUMENT.
+        if esc.lower() == "2e":
+            return "carries a percent-encoded dot segment"
+    return ""
+
+
+def _port_is_writable(port: str) -> bool:
+    """Is this a decimal number a TCP port can take? An omitted port passes.
+
+    Port of ``portIsWritable`` in sdk/go/helpers/identitydocs.go. The five-digit
+    cap is not decoration: a padded ":0443" is accepted (it is a different
+    string from ":443" and does not fold, which a vector pins), so the value
+    cannot be compared as text — and without a length bound a long run of
+    leading zeros overflows Go's Atoi while this port's unbounded int accepts
+    it, which would be a new divergence.
+    """
+    if port == "":
+        return True
+    return len(port) <= 5 and port.isdigit() and port.isascii() and 1 <= int(port) <= 65535
+
+
+def _merge_path(base_path: str, ref_path: str) -> str:
+    """RFC 3986 5.2.3. The base always names an authority here, so an empty base
+    path merges as if it were "/"."""
+    if base_path == "":
+        return "/" + ref_path
+    return base_path[: base_path.rfind("/") + 1] + ref_path
+
+
+def _remove_dot_segments(path: str) -> str:
+    """RFC 3986 5.2.4, run on the joined path.
+
+    Needed because this port resolves the path itself. It also closes the
+    divergence that started this: the old ``urljoin`` call returned an ABSOLUTE
+    reference untouched, so this port alone failed to normalize
+    "https://a.example/a/../b" — Go and TypeScript both answer /b. It runs on
+    every branch rather than only the absolute one, and is idempotent.
+
+    Not a refusal: "../card.json" is a form the field is specified to support
+    and there is a vector pinning it.
+    """
+    out: list[str] = []
+    while path:
+        if path.startswith("../"):
+            path = path[3:]
+        elif path.startswith("./"):
+            path = path[2:]
+        elif path.startswith("/./"):
+            path = "/" + path[3:]
+        elif path == "/.":
+            path = "/"
+        elif path.startswith("/../"):
+            path = "/" + path[4:]
+            if out:
+                out.pop()
+        elif path == "/..":
+            path = "/"
+            if out:
+                out.pop()
+        elif path in (".", ".."):
+            path = ""
+        else:
+            # Move one segment, its leading "/" included, to the output. Popping
+            # one element above therefore drops a segment AND its slash, which
+            # is what 5.2.4 asks for.
+            i = path.find("/", 1) if path.startswith("/") else path.find("/")
+            if i < 0:
+                out.append(path)
+                path = ""
+            else:
+                out.append(path[:i])
+                path = path[i:]
+    return "".join(out)
+
+
 def resolve_identity_document(manifest_url: str, ref: str) -> str:
     """Resolve an ``identity_documents`` member against the URL ramp.json came from.
 
@@ -206,10 +328,13 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     ``domain`` member — a hostile manifest that named its own anchor would
     validate itself.
 
-    Refuses unless the base is https, names a plain host and carries no userinfo;
-    the reference is non-empty; and the resolved URL is https, carries no
-    userinfo and sits on the SAME ORIGIN as the base (equal host, equal effective
-    port). Vetting the base is not a courtesy: a base of
+    Refuses unless BOTH strings are tame (written in the coarse RFC 3986
+    character set, every percent-escape valid, no percent-encoded dot segment —
+    see ``_untame_reason``); the base is https, names a plain host and carries no
+    userinfo; the reference is non-empty; and the resolved URL is https, carries
+    no userinfo, names a port inside 1-65535 and sits on the SAME ORIGIN as the
+    base (equal host, equal effective port). Vetting the base is not a courtesy:
+    a base of
     ``http://a.example/ramp.json`` resolving to ``https://a.example/doc`` passes
     every later check, and accepting it means trusting a manifest that arrived
     unauthenticated.
@@ -220,6 +345,20 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     Raises:
         ValueError: the reference may not be fetched.
     """
+    if why := _untame_reason(manifest_url):
+        # The base is checked as strictly as the reference. A tab in the base
+        # PATH — not a leading one, which the scheme check already catches — was
+        # accepted here and refused by Go, and every answer below is computed
+        # from this string.
+        raise ValueError(f"identity document: manifest URL {why}")
+    if "#" in manifest_url:
+        # A fragment is never sent to a server, so the URL a manifest was FETCHED
+        # FROM cannot carry one. Refused rather than ignored: RFC 3986 5.2.2
+        # inherits the base's fragment for a reference that defines none, and the
+        # three SDKs disagree about whether a reference of "#" defines an empty
+        # fragment or none at all. No fragment on the base, no question to
+        # disagree about.
+        raise ValueError("identity document: manifest URL carries a fragment")
     if _uri_scheme(manifest_url) != "https":
         raise ValueError("identity document: manifest URL is not https")
     base_auth_m = _URI_AUTHORITY_RE.match(manifest_url)
@@ -232,11 +371,22 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     base_host, base_port = _split_host_port(base_authority)
     if not is_bare_domain(base_host):
         raise ValueError("identity document: manifest URL does not name a plain host")
+    if not _port_is_writable(base_port):
+        raise ValueError("identity document: manifest URL names a port outside 1-65535")
     base_port = _fold_default_port(base_port)
 
     if not ref.strip():
         raise ValueError("identity document: empty reference")
+    if why := _untame_reason(ref):
+        raise ValueError(f"identity document: reference {why}")
     ref_scheme = _uri_scheme(ref)
+    # RFC 3986 3.3 and 4.2: a reference with no scheme is path-noscheme, and its
+    # FIRST segment may not contain a colon — ":/x" and "1:x" would otherwise be
+    # ambiguous with a scheme. Go's url.Parse refuses ":/x"; this port and the
+    # TypeScript one resolved both into an ordinary path segment. Spelled out so
+    # the answer does not depend on which parser happens to notice.
+    if not ref_scheme and _COLON_BEFORE_PATH_RE.match(ref):
+        raise ValueError("identity document: reference's first segment carries a colon")
     ref_auth_m = _URI_AUTHORITY_RE.match(ref)
     if ref_scheme and ref_scheme != "https":
         raise ValueError("identity document: reference does not resolve to an https URL")
@@ -252,6 +402,8 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
         ref_host, ref_port = _split_host_port(ref_authority)
         if not is_bare_domain(ref_host):
             raise ValueError("identity document: reference does not name a plain host")
+        if not _port_is_writable(ref_port):
+            raise ValueError("identity document: reference names a port outside 1-65535")
         if ref_host.lower() != base_host.lower():
             raise ValueError("identity document: reference is not on the manifest's origin")
         if _fold_default_port(ref_port) != base_port:
@@ -260,13 +412,45 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     # Only the path, query and fragment are taken from the join: the authority is
     # rebuilt from the values already checked above, which is what makes the
     # output canonical rather than an echo of however the manifest spelled it.
-    joined = urlsplit(urljoin(manifest_url, ref))
+    #
+    # THE REBUILD IS LOAD-BEARING, not a formatting step. The origin checks above
+    # read the authority off the RAW string with a regex; if that regex is ever
+    # made to disagree with the join about where the authority ends, the join can
+    # land on another host while every check above passes. Rebuilding from
+    # base_host means the answer is on the checked origin even then. That is not
+    # theoretical — before the tame predicate above, a leading tab made this
+    # regex read an absolute reference to evil.example as a relative path, and
+    # this line was the only thing that kept the result on a.example.
+    #
+    # The merge below is RFC 3986 5.2.2 and 5.2.3 written out rather than
+    # delegated to urljoin. urljoin routes through urlparse, which splits
+    # ";params" off the last path segment and then drops an EMPTY params — so it
+    # silently turns "/x;" into "/x", where Go and the WHATWG parser both keep
+    # the semicolon. urlsplit has no params concept, so parsing with it and
+    # merging by hand is what makes this port agree.
+    ref_parts = urlsplit(ref)
+    base_parts = urlsplit(manifest_url)
+    if ref_auth_m is not None:
+        path, query = _remove_dot_segments(ref_parts.path), ref_parts.query
+    elif ref_parts.path == "":
+        path = base_parts.path
+        # 5.2.2 inherits the base's query only when the reference DEFINED none.
+        # urlsplit cannot tell an empty query from an absent one, so read the
+        # "?" off the raw reference, ignoring anything in the fragment.
+        query = ref_parts.query if "?" in ref.split("#", 1)[0] else base_parts.query
+    elif ref_parts.path.startswith("/"):
+        path, query = _remove_dot_segments(ref_parts.path), ref_parts.query
+    else:
+        path, query = _remove_dot_segments(_merge_path(base_parts.path, ref_parts.path)), ref_parts.query
+
     out = "https://" + base_host.lower()
     if base_port:
         out += ":" + base_port
-    out += joined.path
-    if joined.query:
-        out += "?" + joined.query
-    if joined.fragment:
-        out += "#" + joined.fragment
+    # RFC 3986 6.2.3: under a hierarchical scheme an empty path is equivalent to
+    # "/", and "/" is the normalized form.
+    out += path or "/"
+    if query:
+        out += "?" + query
+    if ref_parts.fragment:
+        out += "#" + ref_parts.fragment
     return out

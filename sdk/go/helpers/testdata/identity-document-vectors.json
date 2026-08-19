@@ -204,6 +204,202 @@
       "resolved": ""
     },
     {
+      "name": "square_brackets_in_the_path",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/a[b]c",
+      "accepted": true,
+      "resolved": "https://a.example/a[b]c"
+    },
+    {
+      "name": "percent_escape_kept_verbatim",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/a%41b",
+      "accepted": true,
+      "resolved": "https://a.example/a%41b"
+    },
+    {
+      "name": "bare_trailing_question_mark",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/x?",
+      "accepted": true,
+      "resolved": "https://a.example/x"
+    },
+    {
+      "name": "empty_path_is_root",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://a.example",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "dot_segments_absolute_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://a.example/a/../b",
+      "accepted": true,
+      "resolved": "https://a.example/b"
+    },
+    {
+      "name": "dot_segments_relative_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/a/../b",
+      "accepted": true,
+      "resolved": "https://a.example/b"
+    },
+    {
+      "name": "padded_port_on_the_base",
+      "manifest_url": "https://a.example:0443/.well-known/ramp.json",
+      "ref": "/x",
+      "accepted": true,
+      "resolved": "https://a.example:0443/x"
+    },
+    {
+      "name": "colon_in_a_later_segment",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/a:b",
+      "accepted": true,
+      "resolved": "https://a.example/a:b"
+    },
+    {
+      "name": "semicolon_in_the_path",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/x;",
+      "accepted": true,
+      "resolved": "https://a.example/x;"
+    },
+    {
+      "name": "control_character_in_the_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "\thttps://u:s3cr3t@evil.example:8443/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "control_character_in_the_base_path",
+      "manifest_url": "https://a.example/ra\tmp.json",
+      "ref": "/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "invalid_percent_escape_in_the_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/a%zz",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "invalid_percent_escape_in_the_base",
+      "manifest_url": "https://a.example/%zz/ramp.json",
+      "ref": "/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "encoded_dot_segments_in_the_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/%2e%2e/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "encoded_dot_segments_in_the_base",
+      "manifest_url": "https://a.example/x/%2E%2E/ramp.json",
+      "ref": "/y",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "vertical_bar_in_the_path",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/a|b",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "caret_in_the_path",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/a^b",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "backslash_in_the_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "\\evil.example/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "space_in_the_path",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/a b",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "non_ascii_in_the_path",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/café.json",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "empty_authority",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "///x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "empty_authority_bare",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "//",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "colon_opens_the_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": ":/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "first_segment_is_not_a_scheme",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "1:x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "non_numeric_port_on_the_base",
+      "manifest_url": "https://a.example:abc/.well-known/ramp.json",
+      "ref": "/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "out_of_range_port_on_the_base",
+      "manifest_url": "https://a.example:70000/.well-known/ramp.json",
+      "ref": "/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "out_of_range_port_on_the_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://a.example:70000/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "zero_port_on_the_base",
+      "manifest_url": "https://a.example:0/.well-known/ramp.json",
+      "ref": "/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
       "name": "base_is_http",
       "manifest_url": "http://a.example/ramp.json",
       "ref": "/doc",
@@ -241,6 +437,13 @@
     {
       "name": "base_is_empty",
       "manifest_url": "",
+      "ref": "/doc",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "base_carries_a_fragment",
+      "manifest_url": "https://a.example/ramp.json#f",
       "ref": "/doc",
       "accepted": false,
       "resolved": ""

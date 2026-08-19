@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -27,11 +28,13 @@ import (
 //
 // The base is the fetch URL, never the manifest's self-asserted `domain` member:
 // a hostile manifest that named its own anchor would validate itself. Refusals,
-// in order: the base must be https, name a host and carry no userinfo; the
-// reference must be non-empty and parse; and after resolution the URL must be
-// https, carry no userinfo, and sit on the SAME ORIGIN as the base — equal
-// hostname, equal effective port, where an omitted port and :443 are the same
-// port.
+// in order: BOTH strings must be tame — written in the coarse RFC 3986
+// character set, with every percent-escape valid and no percent-encoded dot
+// segment, see untameReason; the base must be https, name a host and carry no
+// userinfo; the reference must be non-empty and parse; and after resolution the
+// URL must be https, carry no userinfo, name a port inside 1-65535, and sit on
+// the SAME ORIGIN as the base — equal hostname, equal effective port, where an
+// omitted port and :443 are the same port.
 //
 // Vetting the base is a refusal rather than a courtesy because the later checks
 // cannot stand in for it. A base of http://a.example/ramp.json resolving to
@@ -43,6 +46,22 @@ import (
 // requires the manifest be served over TLS, so a base that is not https is out
 // of contract and this says so instead of working around it.
 func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
+	if why := untameReason(manifestURL); why != "" {
+		// The base is checked as strictly as the reference. A tab in the base
+		// PATH — not a leading one, which the scheme check already catches — is
+		// accepted by two of the three SDKs and refused by the third, and every
+		// answer downstream is computed from this string.
+		return "", fmt.Errorf("identity document: manifest URL %s", why)
+	}
+	if strings.Contains(manifestURL, "#") {
+		// A fragment is never sent to a server, so the URL a manifest was
+		// FETCHED FROM cannot carry one. Refused rather than ignored: RFC 3986
+		// 5.2.2 inherits the base's fragment for a reference that defines none,
+		// and the three SDKs disagree about whether a reference of "#" defines
+		// an empty fragment or none at all. No fragment on the base, no
+		// question to disagree about.
+		return "", errors.New("identity document: manifest URL carries a fragment")
+	}
 	base, err := url.Parse(manifestURL)
 	if err != nil {
 		// Deliberately does not echo the value: an unparseable URL can still
@@ -64,6 +83,34 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 
 	if strings.TrimSpace(ref) == "" {
 		return "", errors.New("identity document: empty reference")
+	}
+	if why := untameReason(ref); why != "" {
+		return "", fmt.Errorf("identity document: reference %s", why)
+	}
+	// A network-path reference is "//" followed by an AUTHORITY, and an empty
+	// authority is no host. Spelled out because Go is the odd one here:
+	// url.Parse declines to read a leading "//" as an authority marker when the
+	// authority is empty and no scheme was written, so it hands back either a
+	// plain path ("///x") or an entirely empty reference ("//"), and both then
+	// inherit the base's host. Both other SDKs read the authority off the raw
+	// string and refuse, and they are the ones matching RFC 3986.
+	if strings.HasPrefix(ref, "//") {
+		authority := ref[2:]
+		if i := strings.IndexAny(authority, "/?#"); i >= 0 {
+			authority = authority[:i]
+		}
+		if authority == "" {
+			return "", errors.New("identity document: reference names an empty authority")
+		}
+	}
+	// RFC 3986 3.3 and 4.2: a reference with no scheme is path-noscheme, and its
+	// FIRST segment may not contain a colon — ":/x" and "1:x" would otherwise be
+	// ambiguous with a scheme. url.Parse refuses the first and accepts the
+	// second; both other SDKs resolved both into an ordinary path segment.
+	// Spelled out so the answer does not depend on which parser happens to
+	// notice.
+	if i := strings.IndexAny(ref, ":/?#"); i >= 0 && ref[i] == ':' && !isSchemeName(ref[:i]) {
+		return "", errors.New("identity document: reference's first segment carries a colon")
 	}
 	refURL, err := url.Parse(ref)
 	if err != nil {
@@ -99,6 +146,12 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 	if !strings.EqualFold(baseHost, resolvedHost) {
 		return "", fmt.Errorf("identity document: reference %q is not on the manifest's origin", ref)
 	}
+	if !portIsWritable(base.Port()) {
+		return "", fmt.Errorf("identity document: manifest URL %q names a port outside 1-65535", manifestURL)
+	}
+	if !portIsWritable(resolved.Port()) {
+		return "", fmt.Errorf("identity document: reference %q names a port outside 1-65535", ref)
+	}
 	basePort := canonicalPort(base.Scheme, base.Port())
 	if basePort != canonicalPort(resolved.Scheme, resolved.Port()) {
 		return "", fmt.Errorf("identity document: reference %q is on a different port than the manifest", ref)
@@ -110,9 +163,127 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 	// rebuild the authority by hand only because IsBareDomain has already refused every
 	// shape that would need quoting.
 	out := *resolved
+	// A bare trailing "?" is url.URL.ForceQuery, a Go-specific way of
+	// remembering that the reference was written with an empty query. It is not
+	// RFC 3986 semantics and both other SDKs drop it.
+	out.ForceQuery = false
+	if out.Path == "" {
+		// RFC 3986 6.2.3: under a hierarchical scheme an empty path is
+		// equivalent to "/", and "/" is the normalized form. The WHATWG parser
+		// behind the TypeScript port already returns "/" here, so on this one
+		// point that port was right and this oracle was the deviant.
+		out.Path = "/"
+	}
 	out.Host = strings.ToLower(resolvedHost)
 	if basePort != "" {
 		out.Host += ":" + basePort
 	}
 	return out.String(), nil
+}
+
+// uriPunctuation is every non-alphanumeric byte the coarse RFC 3986 character
+// set admits: the unreserved punctuation, the gen-delims, the sub-delims, and
+// the percent sign that introduces an escape.
+const uriPunctuation = "-._~" + ":/?#[]@" + "!$&'()*+,;=" + "%"
+
+// untameReason reports, as a fragment that completes "the reference <reason>",
+// why a string may not be resolved — or "" when it may. It NEVER echoes the
+// input, which can carry a credential.
+//
+// This exists because the three SDKs do not share a URL parser, and the three
+// parsers disagree about everything outside this character set. Go percent-
+// encodes a literal "|" and a space, the other two keep them; a control
+// character makes the Python and TypeScript authority regexes read an absolute
+// reference as a relative one and skip every origin check; Go refuses an
+// invalid escape and the other two accept it. Reproducing three parsers byte
+// for byte is not achievable, so the untame input is refused instead. A refusal
+// ports cleanly; a divergent acceptance does not.
+//
+// DO NOT tighten this to the per-component pchar grammar. pchar would refuse
+// "[" and "]", which all three SDKs currently agree on — "/a[b]c" stays literal
+// in every one of them, and there is a vector pinning that. The coarse set is
+// the one that lands on the right side of every measured case: it refuses "|"
+// and "^", which diverge, and admits "[" and "]", which do not.
+func untameReason(s string) string {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case 'A' <= c && c <= 'Z', 'a' <= c && c <= 'z', '0' <= c && c <= '9':
+			continue
+		case strings.IndexByte(uriPunctuation, c) >= 0:
+			// Admitted. A percent still has to introduce a real escape.
+		default:
+			// Every control character, every space, the backslash, and every
+			// non-ASCII byte leaves through here.
+			return "is not written in the RFC 3986 character set"
+		}
+		if c != '%' {
+			continue
+		}
+		if i+2 >= len(s) || !isHexDigit(s[i+1]) || !isHexDigit(s[i+2]) {
+			return "carries an invalid percent-escape"
+		}
+		// A percent-encoded dot needs its own refusal. The rule above admits a
+		// percent followed by two hex digits, and remove_dot_segments only ever
+		// sees a LITERAL dot, so "%2e" would survive every other check — and
+		// the three SDKs split on it: Go and Python keep it, the WHATWG parser
+		// behind the TypeScript port decodes it and then collapses the segment,
+		// which names a DIFFERENT DOCUMENT.
+		if s[i+1] == '2' && (s[i+2] == 'e' || s[i+2] == 'E') {
+			return "carries a percent-encoded dot segment"
+		}
+	}
+	return ""
+}
+
+func isHexDigit(c byte) bool {
+	return '0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F'
+}
+
+// portIsWritable reports whether a written-out port is a decimal number a TCP
+// port can actually take. An omitted port passes: the scheme's default applies.
+//
+// url.Parse already refuses a non-numeric port, but it accepts an out-of-range
+// one — ":70000" resolves fine today — and the other two SDKs read the port off
+// the raw string with no check at all, where ":abc" reaches the WHATWG parser
+// and throws a raw TypeError outside the error family that port documents.
+//
+// The five-digit cap is not decoration. A padded ":0443" is accepted (it is a
+// different string from ":443" and does not fold, which a vector pins), so the
+// value cannot simply be compared as text — and without a length bound a long
+// run of leading zeros overflows Go's Atoi while Python's unbounded int accepts
+// it, which would be a new divergence.
+func portIsWritable(port string) bool {
+	if port == "" {
+		return true
+	}
+	if len(port) > 5 {
+		return false
+	}
+	for i := 0; i < len(port); i++ {
+		if port[i] < '0' || port[i] > '9' {
+			return false
+		}
+	}
+	n, err := strconv.Atoi(port)
+	return err == nil && n >= 1 && n <= 65535
+}
+
+// isSchemeName reports whether s is an RFC 3986 scheme name: one ALPHA followed
+// by any run of ALPHA, DIGIT, "+", "-" and ".".
+func isSchemeName(s string) bool {
+	if s == "" {
+		return false
+	}
+	if c := s[0]; !('A' <= c && c <= 'Z' || 'a' <= c && c <= 'z') {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		c := s[i]
+		if !('A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || '0' <= c && c <= '9' ||
+			c == '+' || c == '-' || c == '.') {
+			return false
+		}
+	}
+	return true
 }

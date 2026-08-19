@@ -107,7 +107,10 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		//   becomes ASCII only under NFKC, so it is the case that catches a port
 		//   which normalizes width before checking the shape.
 		//
-		// Neither is redundant: each catches its own wrong ordering.
+		// Neither is redundant: each catches its own wrong ordering. Both are
+		// now refused one step earlier, by the tame predicate, which admits no
+		// non-ASCII byte at all — IsBareDomain sits behind it and would still
+		// refuse them if that predicate were ever loosened.
 		{"kelvin_sign_host", "https://market.example/.well-known/ramp.json", "https://marKet.example/dir", ""},
 		{"fullwidth_letter_host", "https://exchange.example/.well-known/ramp.json", "https://Ｅxchange.example/dir", ""},
 
@@ -119,6 +122,86 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		{"base_is_an_ipv6_literal", "https://[::1]/.well-known/ramp.json", "/dir", ""},
 		{"trailing_root_dot_host", base, "https://a.example./dir", ""},
 
+		// Accepted — tame characters the coarse RFC 3986 set admits, pinned so
+		// nobody "tidies" the predicate into the per-component pchar grammar.
+		// pchar would refuse "[" and "]", and all three SDKs already agree on
+		// them; a percent-escape that is not an encoded dot is likewise kept
+		// verbatim by all three rather than decoded.
+		{"square_brackets_in_the_path", base, "/a[b]c", "https://a.example/a[b]c"},
+		{"percent_escape_kept_verbatim", base, "/a%41b", "https://a.example/a%41b"},
+
+		// Accepted — the three canonical-output rules that used to split. Each
+		// row is a case where two SDKs agreed and the third did not.
+		//
+		//   A bare trailing "?" is Go's ForceQuery, not RFC 3986 semantics.
+		//   An empty path is "/" under RFC 3986 6.2.3, which is what WHATWG
+		//   already returned and what this oracle now returns.
+		//   Dot segments in an ABSOLUTE reference must still be removed; the
+		//   relative form is the one Python already got right, so both are here.
+		{"bare_trailing_question_mark", base, "/x?", "https://a.example/x"},
+		{"empty_path_is_root", base, "https://a.example", "https://a.example/"},
+		{"dot_segments_absolute_reference", base, "https://a.example/a/../b", "https://a.example/b"},
+		{"dot_segments_relative_reference", base, "/a/../b", "https://a.example/b"},
+		// A padded port is a different string from :443 and does not fold, so
+		// it survives into the output. It is accepted on purpose: the port rule
+		// bounds the VALUE, and reading it as text would flip this verdict.
+		{"padded_port_on_the_base", "https://a.example:0443/.well-known/ramp.json", "/x", "https://a.example:0443/x"},
+
+		// Accepted — a colon and a semicolon that are ordinary path characters.
+		// A colon is legal in any segment but the first of a schemeless
+		// reference, and a semicolon is a sub-delim. The semicolon is here
+		// because Python's urljoin used to eat a trailing one as an empty
+		// ";params", which is why this port resolves the path itself.
+		{"colon_in_a_later_segment", base, "/a:b", "https://a.example/a:b"},
+		{"semicolon_in_the_path", base, "/x;", "https://a.example/x;"},
+
+		// Refused — untame input. One row per class the three URL engines split
+		// on, each verified by running all three implementations. Without these
+		// the whole predicate is unpinned: no case in the corpus above holds a
+		// single character outside the coarse RFC 3986 set.
+		//
+		// The control character in the reference is the headline case. A
+		// leading TAB makes the Python and TypeScript authority regexes read
+		// this ABSOLUTE reference as a relative path, so the https check, the
+		// userinfo check, the origin check and the port check are all skipped
+		// at once. It resolved to https://a.example/x — on the right origin
+		// only because the authority is rebuilt from the already-checked base.
+		// That rebuild is the last line of defence, not a formatting step.
+		{"control_character_in_the_reference", base, "\thttps://u:s3cr3t@evil.example:8443/x", ""},
+		// Not a LEADING control character in the base: a leading one is already
+		// refused, for the wrong reason, by the scheme check. The PATH is the
+		// gap — two SDKs accepted this and one refused it.
+		{"control_character_in_the_base_path", "https://a.example/ra\tmp.json", "/x", ""},
+		{"invalid_percent_escape_in_the_reference", base, "/a%zz", ""},
+		{"invalid_percent_escape_in_the_base", "https://a.example/%zz/ramp.json", "/x", ""},
+		// Encoded dot segments, lower case on one side and upper on the other.
+		{"encoded_dot_segments_in_the_reference", base, "/%2e%2e/x", ""},
+		{"encoded_dot_segments_in_the_base", "https://a.example/x/%2E%2E/ramp.json", "/y", ""},
+		{"vertical_bar_in_the_path", base, "/a|b", ""},
+		{"caret_in_the_path", base, "/a^b", ""},
+		{"backslash_in_the_reference", base, "\\evil.example/x", ""},
+		{"space_in_the_path", base, "/a b", ""},
+		{"non_ascii_in_the_path", base, "/caf\u00e9.json", ""},
+		// An empty authority is no authority. Go read the first as a plain path
+		// and the second as an EMPTY reference, so it returned the manifest URL
+		// itself; both other SDKs refused both.
+		{"empty_authority", base, "///x", ""},
+		{"empty_authority_bare", base, "//", ""},
+		// RFC 3986 path-noscheme: the first segment of a schemeless reference
+		// may not hold a colon. Go refused the first of these and accepted the
+		// second; both other SDKs accepted both as ordinary path segments.
+		{"colon_opens_the_reference", base, ":/x", ""},
+		{"first_segment_is_not_a_scheme", base, "1:x", ""},
+
+		// Refused — a port that is not a port. The first two reach the WHATWG
+		// parser as a raw TypeError in the TypeScript port unless they are
+		// refused before it runs, which is outside the error family that port
+		// documents.
+		{"non_numeric_port_on_the_base", "https://a.example:abc/.well-known/ramp.json", "/x", ""},
+		{"out_of_range_port_on_the_base", "https://a.example:70000/.well-known/ramp.json", "/x", ""},
+		{"out_of_range_port_on_the_reference", base, "https://a.example:70000/x", ""},
+		{"zero_port_on_the_base", "https://a.example:0/.well-known/ramp.json", "/x", ""},
+
 		// Refused — the BASE is not usable, checked before the reference is even
 		// looked at. Nothing downstream catches these: the first two resolve to a
 		// URL that is https and on the matching host, and would be accepted by an
@@ -129,6 +212,11 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		{"base_has_no_scheme", "a.example/ramp.json", "/doc", ""},
 		{"base_has_no_host", "https:///ramp.json", "/doc", ""},
 		{"base_is_empty", "", "/doc", ""},
+		// A fragment is never sent to a server, so the URL a manifest was
+		// fetched from cannot carry one — and while it does, RFC 3986 5.2.2
+		// asks whether a reference of "#" defines an empty fragment or none,
+		// which is a question the three parsers answered differently.
+		{"base_carries_a_fragment", "https://a.example/ramp.json#f", "/doc", ""},
 	}
 	out := make([]identityDocumentVector, 0, len(cases))
 	for _, c := range cases {

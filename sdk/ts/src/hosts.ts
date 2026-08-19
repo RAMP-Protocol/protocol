@@ -199,6 +199,78 @@ function foldDefaultPort(port: string): string {
 	return port === "443" ? "" : port;
 }
 
+// Every byte the coarse RFC 3986 character set admits: the unreserved set, the
+// gen-delims, the sub-delims, and the percent sign that introduces an escape.
+const uriCharRe = /^[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]$/;
+const hexDigitRe = /^[0-9A-Fa-f]$/;
+
+/**
+ * Say why `s` may not be resolved, as a fragment completing "the reference …",
+ * or "" when it is fine. NEVER echoes the input, which can carry a credential.
+ * Port of `untameReason` in sdk/go/helpers/identitydocs.go.
+ *
+ * This exists because the three SDKs do not share a URL parser, and the three
+ * parsers disagree about everything outside this character set. Go percent-
+ * encodes a literal "|" and a space, this port and the Python one keep them; a
+ * control character makes the authority regex above read an ABSOLUTE reference
+ * as a relative one and skip every origin check; Go refuses an invalid escape
+ * and the other two accept it. Reproducing three parsers byte for byte is not
+ * achievable, so the untame input is refused instead.
+ *
+ * DO NOT tighten this to the per-component pchar grammar. pchar would refuse
+ * "[" and "]", which all three SDKs currently agree on, and there is a vector
+ * pinning that.
+ */
+function untameReason(s: string): string {
+	for (let i = 0; i < s.length; i++) {
+		const c = s[i] ?? "";
+		if (!uriCharRe.test(c)) {
+			// Every control character, every space, the backslash, and every
+			// non-ASCII code unit leaves through here.
+			return "is not written in the RFC 3986 character set";
+		}
+		if (c !== "%") {
+			continue;
+		}
+		const a = s[i + 1] ?? "";
+		const b = s[i + 2] ?? "";
+		if (!hexDigitRe.test(a) || !hexDigitRe.test(b)) {
+			return "carries an invalid percent-escape";
+		}
+		// A percent-encoded dot needs its own refusal. The rule above admits a
+		// percent followed by two hex digits, and dot-segment removal only ever
+		// sees a LITERAL dot, so "%2e" would survive every other check — and
+		// this is the port that splits: `new URL` decodes it and then collapses
+		// the segment, which names a DIFFERENT DOCUMENT than Go and Python
+		// return.
+		if (`${a}${b}`.toLowerCase() === "2e") {
+			return "carries a percent-encoded dot segment";
+		}
+	}
+	return "";
+}
+
+/**
+ * Is this a decimal number a TCP port can take? An omitted port passes. Port of
+ * `portIsWritable` in sdk/go/helpers/identitydocs.go.
+ *
+ * The five-digit cap is not decoration: a padded ":0443" is accepted (it is a
+ * different string from ":443" and does not fold, which a vector pins), so the
+ * value cannot be compared as text — and without a length bound a long run of
+ * leading zeros overflows Go's Atoi while the other two accept it, which would
+ * be a new divergence.
+ */
+function portIsWritable(port: string): boolean {
+	if (port === "") {
+		return true;
+	}
+	if (port.length > 5 || !/^[0-9]+$/.test(port)) {
+		return false;
+	}
+	const n = Number(port);
+	return n >= 1 && n <= 65535;
+}
+
 /**
  * Resolve an `identity_documents` member against the URL ramp.json came from.
  *
@@ -206,9 +278,12 @@ function foldDefaultPort(port: string): string {
  * URL the manifest was actually FETCHED FROM, never its self-asserted `domain`
  * member — a hostile manifest that named its own anchor would validate itself.
  *
- * Refuses unless the base is https, names a plain host and carries no userinfo;
- * the reference is non-empty; and the resolved URL is https, carries no userinfo
- * and sits on the SAME ORIGIN as the base (equal host, equal effective port).
+ * Refuses unless BOTH strings are tame (written in the coarse RFC 3986 character
+ * set, every percent-escape valid, no percent-encoded dot segment — see
+ * `untameReason`); the base is https, names a plain host and carries no
+ * userinfo; the reference is non-empty; and the resolved URL is https, carries
+ * no userinfo, names a port inside 1-65535 and sits on the SAME ORIGIN as the
+ * base (equal host, equal effective port).
  * Vetting the base is not a courtesy: a base of `http://a.example/ramp.json`
  * resolving to `https://a.example/doc` passes every later check, and accepting
  * it means trusting a manifest that arrived unauthenticated.
@@ -219,6 +294,23 @@ function foldDefaultPort(port: string): string {
  * @throws Error when the reference may not be fetched.
  */
 export function resolveIdentityDocument(manifestUrl: string, ref: string): string {
+	const baseWhy = untameReason(manifestUrl);
+	if (baseWhy !== "") {
+		// The base is checked as strictly as the reference. A tab in the base
+		// PATH — not a leading one, which the scheme check already catches — was
+		// accepted here and refused by Go, and every answer below is computed
+		// from this string.
+		throw new Error(`identity document: manifest URL ${baseWhy}`);
+	}
+	if (manifestUrl.includes("#")) {
+		// A fragment is never sent to a server, so the URL a manifest was FETCHED
+		// FROM cannot carry one. Refused rather than ignored: RFC 3986 5.2.2
+		// inherits the base's fragment for a reference that defines none, and the
+		// three SDKs disagree about whether a reference of "#" defines an empty
+		// fragment or none at all. No fragment on the base, no question to
+		// disagree about.
+		throw new Error("identity document: manifest URL carries a fragment");
+	}
 	if (uriScheme(manifestUrl) !== "https") {
 		throw new Error("identity document: manifest URL is not https");
 	}
@@ -237,12 +329,27 @@ export function resolveIdentityDocument(manifestUrl: string, ref: string): strin
 	if (!isBareDomain(baseHost)) {
 		throw new Error("identity document: manifest URL does not name a plain host");
 	}
+	if (!portIsWritable(rawBasePort)) {
+		throw new Error("identity document: manifest URL names a port outside 1-65535");
+	}
 	const basePort = foldDefaultPort(rawBasePort);
 
 	if (ref.trim() === "") {
 		throw new Error("identity document: empty reference");
 	}
+	const refWhy = untameReason(ref);
+	if (refWhy !== "") {
+		throw new Error(`identity document: reference ${refWhy}`);
+	}
 	const refScheme = uriScheme(ref);
+	// RFC 3986 3.3 and 4.2: a reference with no scheme is path-noscheme, and its
+	// FIRST segment may not contain a colon — ":/x" and "1:x" would otherwise be
+	// ambiguous with a scheme. Go's url.Parse refuses ":/x"; this port and the
+	// Python one resolved both into an ordinary path segment. Spelled out so the
+	// answer does not depend on which parser happens to notice.
+	if (refScheme === "" && /^[^/?#]*:/.test(ref)) {
+		throw new Error("identity document: reference's first segment carries a colon");
+	}
 	const refAuthorityMatch = uriAuthorityRe.exec(ref);
 	if (refScheme !== "" && refScheme !== "https") {
 		throw new Error("identity document: reference does not resolve to an https URL");
@@ -262,6 +369,9 @@ export function resolveIdentityDocument(manifestUrl: string, ref: string): strin
 		if (!isBareDomain(refHost)) {
 			throw new Error("identity document: reference does not name a plain host");
 		}
+		if (!portIsWritable(refPort)) {
+			throw new Error("identity document: reference names a port outside 1-65535");
+		}
 		if (refHost.toLowerCase() !== baseHost.toLowerCase()) {
 			throw new Error("identity document: reference is not on the manifest's origin");
 		}
@@ -274,7 +384,25 @@ export function resolveIdentityDocument(manifestUrl: string, ref: string): strin
 	// rebuilt from the values already checked above, which is what makes the
 	// output canonical rather than an echo of however the manifest spelled it —
 	// and what keeps WHATWG's own normalizations out of the answer.
-	const joined = new URL(ref, manifestUrl);
+	//
+	// THE REBUILD IS LOAD-BEARING, not a formatting step. The origin checks above
+	// read the authority off the RAW string with a regex; if that regex is ever
+	// made to disagree with `new URL` about where the authority ends, the join
+	// can land on another host while every check above passes. Rebuilding from
+	// baseHost means the answer is on the checked origin even then. That is not
+	// theoretical — before the tame predicate above, a leading tab made this
+	// regex read an absolute reference to evil.example as a relative path, and
+	// this line was the only thing that kept the result on a.example.
+	let joined: URL;
+	try {
+		joined = new URL(ref, manifestUrl);
+	} catch {
+		// `new URL` throws a bare TypeError, which is outside the error family
+		// this function documents. Everything measured that reached it is
+		// refused above, so this is the backstop rather than the rule — but a
+		// caller catching by message prefix must never see an unhandled throw.
+		throw new Error("identity document: reference cannot be resolved against the manifest URL");
+	}
 	const authority = basePort === "" ? baseHost.toLowerCase() : `${baseHost.toLowerCase()}:${basePort}`;
 	return `https://${authority}${joined.pathname}${joined.search}${joined.hash}`;
 }
