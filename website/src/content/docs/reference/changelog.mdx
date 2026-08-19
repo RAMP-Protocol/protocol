@@ -17,7 +17,11 @@ resolvers now vet the advertised endpoint before returning or caching it, both r
 `host` argument that is not a plain hostname before building the fetch URL from it, and
 `hostOf`/`isBareHost`/`hostAnchored` (`host_of`/`is_bare_host`/`host_anchored`) are
 public in both. The private copies collapsed into the shared predicate, so the WBA
-revocation poll is anchored by the same rule as the endpoint.
+revocation poll compares its candidate by the same rule as the endpoint. The value
+it anchors AGAINST is still derived by each platform's own URL parser, so a
+directory that spells out a default port is read differently in TypeScript than in
+Go and Python; aligning that is the port of the fetchable-directory policy, tracked
+separately.
 
 The refusal itself also got one shape wider, in all three. It was decided over a plain
 URL parse of the advertised value while the anchoring half re-read the same string
@@ -35,8 +39,11 @@ credentials in the URL will now be refused by a Python or TypeScript consumer th
 previously accepted it. `buf breaking` reports nothing: no field, message or encoding
 moves. The rule is corpus-locked to two new shared vector files
 (`helpers/testdata/host-rule-vectors.json`, `resolvers/testdata/endpoint-vet-vectors.json`)
-that all three SDKs replay, so the three can no longer answer differently. Per-language
-surface: `docs/sdk-parity-matrix.md`.
+that all three SDKs replay. What that buys is narrower than "the three now agree
+about everything", and worth stating precisely: a divergence on a rule the corpus
+covers fails CI instead of shipping, and the corpus covers the rule's boundaries
+rather than every string a caller can construct. Per-language surface:
+`docs/sdk-parity-matrix.md`.
 
 **The registration schema's rules become checkable, and two of them were wrong
 (comment-only, no wire change).** The previous revision stated a rule set for

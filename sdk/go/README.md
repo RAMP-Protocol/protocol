@@ -248,3 +248,10 @@ host is reserved. The address/scheme decisions are corpus-locked
 - **Cross-field CEL is pinned** to `conformance/corpus/crossfield.json`, generated
   by the same protovalidate oracle the rest of the conformance suite uses.
 - Covered by the repo gate: `go build/vet/test ./...` via `scripts/ci-local.sh`.
+- **Requires a `go` directive of 1.26 or later**, and that is part of the contract
+  rather than a build detail. `net/url`'s host-colon strictness is the
+  `urlstrictcolons` GODEBUG, which defaults on only for modules declaring 1.26; under
+  an older directive `helpers.IsBareHost` admits references the shared conformance
+  vectors — and the Python and TypeScript ports — refuse. A guard in the package
+  asserts the behaviour rather than the setting, so a build that would answer
+  differently fails rather than drifting.

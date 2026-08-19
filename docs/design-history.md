@@ -1107,7 +1107,10 @@ reports no userinfo and no host at all, while the anchor parse reads the value a
 https, recovers `exchange.example` and matches it. A credential-bearing endpoint
 was therefore accepted, and only the spelled-out `https://u:p@host` form was
 refused — a spelling check where a credential check was intended. Both halves now
-read the reference once, the same way. The lesson is the smaller half of the same
+read the reference once, the same way, in all three languages: the ports keep that
+single reading in a module of their own, because the alternative — the rule half
+scanning the authority itself while the anchor half handed the whole string back to
+be parsed again — is the same two-readings shape wearing different clothes. The lesson is the smaller half of the same
 one above: a rule checked on one parse and enforced on another is two rules, and
 the value that separates them is the value it was written for.
 

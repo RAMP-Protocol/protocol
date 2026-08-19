@@ -1,11 +1,37 @@
 package helpers_test
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
+
+// TestHostRuleRunsUnderStrictHostColons pins the toolchain property the corpus is
+// generated under, because the predicates' answers depend on it.
+//
+// net/url's host-colon strictness is a GODEBUG, urlstrictcolons, and it defaults on
+// only for modules declaring go >= 1.26. Under an older directive
+// url.Parse("https://exchange.example::443") SUCCEEDS, so IsBareHost answers true
+// where the committed vector — and both ports — say the reference is not a host.
+//
+// This module declares 1.26, so there is no live divergence. The guard is here for
+// the two ways one could arrive: a consumer building sdk/go/helpers from a module on
+// an older directive gets a different rule than the corpus publishes, and a
+// RAMP_UPDATE_VECTORS=1 run under such a module would quietly rewrite the goldens to
+// the looser answer rather than fail. It is asserted behaviourally rather than by
+// reading the GODEBUG, because the behaviour is the thing that matters and
+// internal/godebug is not importable.
+func TestHostRuleRunsUnderStrictHostColons(t *testing.T) {
+	const doubled = "https://exchange.example::443"
+	if _, err := url.Parse(doubled); err == nil {
+		t.Fatalf("url.Parse(%q) succeeded: this toolchain is running with "+
+			"godebug urlstrictcolons=0, under which the host predicates admit references "+
+			"the committed vectors and both ports refuse. Build with a go directive of "+
+			"1.26 or later, and do not regenerate the corpora from here.", doubled)
+	}
+}
 
 func TestIsBareHost(t *testing.T) {
 	tests := map[string]struct {
