@@ -163,6 +163,11 @@ func TestIdentityDocumentRefusalDoesNotEchoTheCredential(t *testing.T) {
 	for _, c := range []struct{ name, manifest, ref string }{
 		{"in the reference", "https://a.example/.well-known/ramp.json", "https://u:" + secret + "@a.example/x"},
 		{"in the manifest URL", "https://u:" + secret + "@a.example/ramp.json", "/x"},
+		// The two above both PARSE, so neither reaches the parse-failure
+		// branch. This one does not parse — an invalid percent-escape — and
+		// that branch is the one that used to print the reference twice, once
+		// from %q and once from the wrapped *url.Error.
+		{"in a reference that does not parse", "https://a.example/.well-known/ramp.json", "https://u:" + secret + "@a.example/%zz"},
 	} {
 		_, err := ResolveIdentityDocument(c.manifest, c.ref)
 		if err == nil {

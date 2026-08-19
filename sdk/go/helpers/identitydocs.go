@@ -67,7 +67,10 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 	}
 	refURL, err := url.Parse(ref)
 	if err != nil {
-		return "", fmt.Errorf("identity document: reference %q is not a URI reference: %w", ref, err)
+		// Deliberately does not echo the value, and deliberately does not wrap
+		// the parse error: an unparseable reference can still carry a
+		// credential, and url.Error prints the input it failed on.
+		return "", errors.New("identity document: reference is not a URI reference")
 	}
 	resolved := base.ResolveReference(refURL)
 	if resolved.User != nil {
