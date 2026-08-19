@@ -29,6 +29,7 @@ import {
 // error classes and the four named constructors are the ported public surface.
 import {
 	DirectoryUnavailable,
+	EndpointRefused,
 	NoEndpoint,
 	createStaticKeyResolver,
 	createWellKnownEndpointResolver,
@@ -153,11 +154,17 @@ describe("createWellKnownKeyResolver", () => {
 });
 
 describe("createWellKnownEndpointResolver", () => {
+	// Every endpoint in this file is LATE-BOUND to the origin that serves it: an
+	// Exchange advertises ITSELF, so the value is not known until its server has an
+	// address. That is not test bookkeeping — it is the endpoint rule. An endpoint
+	// on any other host is one the resolver refuses to hand back, so a fixed
+	// exchange.example string served from a loopback port would exercise the
+	// refusal path rather than the behaviour each of these tests is about.
 	it("resolves each host to its OWN endpoint (per-host cache isolation)", async () => {
-		const epA = "https://exchange-a.example/ramp.v1.ExchangeService";
-		const epB = "https://exchange-b.example/ramp.v1.ExchangeService";
 		const a = await startOrigin();
 		const b = await startOrigin();
+		const epA = `http://${a.host}/ramp.v1.ExchangeService`;
+		const epB = `http://${b.host}/ramp.v1.ExchangeService`;
 		a.setManifest(manifestJson(epA));
 		b.setManifest(manifestJson(epB));
 		try {
@@ -174,8 +181,8 @@ describe("createWellKnownEndpointResolver", () => {
 	});
 
 	it("serves the second resolve for the same host from cache", async () => {
-		const ep = "https://exchange.example/ramp.v1.ExchangeService";
 		const origin = await startOrigin();
+		const ep = `http://${origin.host}/ramp.v1.ExchangeService`;
 		origin.setManifest(manifestJson(ep));
 		try {
 			const r = createWellKnownEndpointResolver({ ttlMs: HOUR_MS, scheme: "http", fetch: loopbackFetch });
@@ -188,8 +195,8 @@ describe("createWellKnownEndpointResolver", () => {
 	});
 
 	it("refetches after the TTL expires", async () => {
-		const ep = "https://exchange.example/ramp.v1.ExchangeService";
 		const origin = await startOrigin();
+		const ep = `http://${origin.host}/ramp.v1.ExchangeService`;
 		origin.setManifest(manifestJson(ep));
 		try {
 			let now = ANCHOR_MS;
@@ -238,6 +245,78 @@ describe("createWellKnownEndpointResolver", () => {
 			// was reachable and decoded, it simply advertises no endpoint.
 			await expect(r.resolveEndpoint(origin.host)).rejects.toBeInstanceOf(NoEndpoint);
 			expect(origin.manifestHits()).toBe(1);
+		} finally {
+			await origin.close();
+		}
+	});
+
+	// The WIRING half of the endpoint rule. Which endpoints the rule refuses is
+	// settled by the shared vectors (host-rule.parity.test.ts and
+	// endpoint-vet.parity.test.ts); what these cases pin is that the resolver
+	// actually asks — before it hands anything back, and before it caches.
+	it("refuses an endpoint on a host unrelated to the one that served the manifest", async () => {
+		const origin = await startOrigin();
+		origin.setManifest(manifestJson("https://cdn.other.example/ramp.v1.ExchangeService"));
+		try {
+			const r = createWellKnownEndpointResolver({ ttlMs: HOUR_MS, scheme: "http", fetch: loopbackFetch });
+			// A VERDICT, not a transport failure: the Exchange answered and the answer
+			// is unusable, so a caller classifying retryability reads this as final.
+			await expect(r.resolveEndpoint(origin.host)).rejects.toBeInstanceOf(EndpointRefused);
+		} finally {
+			await origin.close();
+		}
+	});
+
+	it("refuses an endpoint carrying credentials, with or without a scheme", async () => {
+		const origin = await startOrigin();
+		try {
+			const r = createWellKnownEndpointResolver({ scheme: "http", fetch: loopbackFetch });
+			for (const ep of [
+				`http://user:pass@${origin.host}/ramp.v1.ExchangeService`,
+				// Schemeless. A plain URL parse reads "user" as the scheme and finds no
+				// userinfo at all, while the anchor check recovers the host and matches
+				// it — so this is the shape a rule that reads the reference twice lets
+				// through.
+				`user:pass@${origin.host}/ramp.v1.ExchangeService`,
+			]) {
+				origin.setManifest(manifestJson(ep));
+				await expect(r.resolveEndpoint(origin.host)).rejects.toBeInstanceOf(EndpointRefused);
+			}
+		} finally {
+			await origin.close();
+		}
+	});
+
+	it("does not cache a refused endpoint", async () => {
+		const origin = await startOrigin();
+		origin.setManifest(manifestJson("https://cdn.other.example/ramp.v1.ExchangeService"));
+		try {
+			const r = createWellKnownEndpointResolver({ ttlMs: HOUR_MS, scheme: "http", fetch: loopbackFetch });
+			await expect(r.resolveEndpoint(origin.host)).rejects.toBeInstanceOf(EndpointRefused);
+			// The Exchange fixes its manifest. A resolver that had cached the refused
+			// value would keep refusing for the whole TTL.
+			const ep = `http://${origin.host}/ramp.v1.ExchangeService`;
+			origin.setManifest(manifestJson(ep));
+			expect(await r.resolveEndpoint(origin.host)).toBe(ep);
+		} finally {
+			await origin.close();
+		}
+	});
+
+	it("refuses to resolve a host that is not a bare host", async () => {
+		const origin = await startOrigin();
+		origin.setManifest(manifestJson(`http://${origin.host}/ramp.v1.ExchangeService`));
+		try {
+			const r = createWellKnownEndpointResolver({ scheme: "http", fetch: loopbackFetch });
+			// The fetch URL is built by concatenation, so a smuggled path would choose
+			// WHAT gets fetched. Refused before the network, so the origin is never hit.
+			//
+			// The refusal is the invalid-host fault, NOT EndpointRefused: the bad value
+			// is the caller's argument, and no manifest was read to have a verdict on.
+			for (const bad of [`${origin.host}/.well-known/evil.json`, `http://${origin.host}`, ""]) {
+				await expect(r.resolveEndpoint(bad)).rejects.toThrow(/not a usable host/);
+			}
+			expect(origin.manifestHits()).toBe(0);
 		} finally {
 			await origin.close();
 		}

@@ -15,6 +15,7 @@ import {
 	WBAFileSchema,
 } from "../../../gen/ts/wire/schemas.ts";
 import { decodeBase64UrlStrict } from "../src/base64url.ts";
+import { hostAnchored } from "../src/hosts.ts";
 import { thumbprint } from "../src/thumbprint.ts";
 import {
 	DirectoryUnavailable,
@@ -284,7 +285,7 @@ class WBAResolverImpl implements WBAKeyResolver {
 		file: WBAFile,
 	): Promise<void> {
 		const revURL = file.revocation_url;
-		if (!revURL || !hostAnchored(host, revURL)) return;
+		if (!revURL || !wbaHostAnchored(host, revURL)) return;
 		const body = await fetchSoft(this.fetchFn, revURL);
 		if (body === undefined) return;
 		let list: ReturnType<typeof KeyRevocationListSchema.parse>;
@@ -355,21 +356,31 @@ function directoryBase(
 	return { base: `${url.protocol}//${url.host}`, host: url.host };
 }
 
-/** Whether `candidate`'s host is anchored to `anchor` — equal or a subdomain
- * (case-insensitive, full-label boundary, so "evil-a.com" is not under "a.com").
- * An SSRF guard: a cross-host revocation_url is skipped, the key stays valid. */
-function hostAnchored(anchor: string, candidate: string): boolean {
-	let url: URL;
+/** Whether `candidate` is anchored to `anchor` — the same host and port, or a
+ * subdomain of that host on that port. An SSRF guard: a cross-host
+ * revocation_url is skipped, and the key stays valid.
+ *
+ * The predicate itself is the shared hostAnchored, which is the ONE place the
+ * rule is written; this wrapper exists for the two things that are local to WBA.
+ * It answers a bool rather than throwing, because a directory that names an
+ * unparseable revocation_url is simply not anchored and its caller logs a skip.
+ * And it requires an ABSOLUTE reference: the shared predicate reads a schemeless
+ * value as https, which is right for an exchange domain and wrong here, where the
+ * value is a URL a directory published rather than a domain it named.
+ *
+ * This used to be a private near-namesake that compared `URL.host`. It agreed on
+ * ordinary hosts and diverged on the ones that matter: a default port folded away
+ * at parse time cannot borrow a scheme from the other side, so an anchor of
+ * "a.example:80" and a candidate of "http://a.example:80" reached two different
+ * answers, and a directory that spelled its port out stopped anchoring its own
+ * revocation URL. A skipped revocation poll leaves a revoked key resolving. */
+function wbaHostAnchored(anchor: string, candidate: string): boolean {
+	if (!candidate.includes("://")) return false;
 	try {
-		url = new URL(candidate);
+		return hostAnchored(anchor, candidate);
 	} catch {
 		return false;
 	}
-	if (url.host === "") return false;
-	const a = anchor.toLowerCase().replace(/\.$/, "");
-	const c = url.host.toLowerCase().replace(/\.$/, "");
-	if (a === "") return false;
-	return c === a || c.endsWith(`.${a}`);
 }
 
 /** The key in `file` whose RFC 7638 thumbprint equals `keyID` (locally computed),

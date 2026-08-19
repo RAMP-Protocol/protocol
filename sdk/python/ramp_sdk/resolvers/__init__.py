@@ -20,6 +20,7 @@ from ramp_sdk.resolvers._http import (
 from ramp_sdk.resolvers._ssrf import SsrfError, blocked_address
 from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
+    EndpointRefusedError,
     KeyExpiredError,
     KeyRevokedError,
     NoEndpointError,
@@ -44,6 +45,7 @@ __all__ = [
     "CachedOfferKeyResolver",
     "DirectoryFetch",
     "DirectoryUnavailableError",
+    "EndpointRefusedError",
     "KeyExpiredError",
     "KeyRevokedError",
     "NoEndpointError",
