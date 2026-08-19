@@ -109,6 +109,15 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 			return "", errors.New("identity document: reference names an empty authority")
 		}
 	}
+	// One hash at most. RFC 3986 3.5 gives a reference a single fragment that
+	// runs to the end of the string, so a second hash is not a URI reference at
+	// all — it is a fragment with a hash inside it, which has to be written
+	// %23. The three parsers disagree about it: this one re-encodes the second
+	// hash, the other two keep it. Refused rather than picked a winner for,
+	// because no correct reference reaches this line.
+	if strings.Count(ref, "#") > 1 {
+		return "", errors.New("identity document: reference carries more than one fragment")
+	}
 	// RFC 3986 3.3 and 4.2: a reference with no scheme is path-noscheme, and its
 	// FIRST segment may not contain a colon — ":/x" and "1:x" would otherwise be
 	// ambiguous with a scheme. url.Parse refuses the first and accepts the
@@ -161,28 +170,85 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 		return "", errors.New("identity document: reference is on a different port than the manifest")
 	}
 
-	// Canonical output: the host lowercased and a default port folded away. The
-	// same input then produces the same string in every SDK, instead of each
-	// echoing however the manifest happened to spell the authority. Safe to
-	// rebuild the authority by hand only because IsBareDomain has already refused every
-	// shape that would need quoting.
-	out := *resolved
-	// A bare trailing "?" is url.URL.ForceQuery, a Go-specific way of
-	// remembering that the reference was written with an empty query. It is not
-	// RFC 3986 semantics and both other SDKs drop it.
-	out.ForceQuery = false
-	if out.Path == "" {
+	// Canonical output, assembled by hand. The authority is rebuilt from the
+	// values already checked, so the same input produces the same string in
+	// every SDK instead of each echoing however the manifest happened to spell
+	// it. Safe only because IsBareDomain has already refused every host shape
+	// that would need quoting.
+	//
+	// The QUERY and the FRAGMENT are taken as SUBSTRINGS of the strings the
+	// author wrote, not from url.URL's serializer, for the same reason. RFC 3986
+	// 3.4 and 3.5 define both components that way, and the three SDKs run three
+	// serializers that disagree inside the character set untameReason admits on
+	// purpose: WHATWG percent-encodes an apostrophe in a query, and this one
+	// used to re-encode a second hash in a fragment. Only the PATH still comes
+	// from the parser, where a wide differential sweep found the three agree.
+	path := resolved.EscapedPath()
+	if path == "" {
 		// RFC 3986 6.2.3: under a hierarchical scheme an empty path is
 		// equivalent to "/", and "/" is the normalized form. The WHATWG parser
 		// behind the TypeScript port already returns "/" here, so on this one
 		// point that port was right and this oracle was the deviant.
-		out.Path = "/"
+		path = "/"
 	}
-	out.Host = strings.ToLower(resolvedHost)
+
+	var out strings.Builder
+	out.WriteString("https://")
+	out.WriteString(strings.ToLower(resolvedHost))
 	if basePort != "" {
-		out.Host += ":" + basePort
+		out.WriteString(":")
+		out.WriteString(basePort)
+	}
+	out.WriteString(path)
+	// RFC 3986 5.2.2 inherits the base's query in ONE case: the reference has an
+	// empty path, no authority and no scheme, and defines no query of its own —
+	// which in practice means a fragment-only reference. A reference carrying
+	// any path drops the base's query even though it defines none.
+	query, hasQuery := rawQueryOf(ref)
+	if !hasQuery && refURL.Host == "" && !refURL.IsAbs() && refURL.Path == "" {
+		// The base cannot carry a fragment, refused above, so everything after
+		// its first "?" is its query.
+		query, hasQuery = rawQueryOf(manifestURL)
+	}
+	// A query or a fragment that is DEFINED BUT EMPTY leaves no mark on the
+	// output: "/x?" and "/x#" both answer "/x". Go remembers the bare "?" as
+	// url.URL.ForceQuery, which is not RFC 3986 semantics and which both other
+	// SDKs drop, so this drops it too and treats the hash the same way.
+	if hasQuery && query != "" {
+		out.WriteString("?")
+		out.WriteString(query)
+	}
+	// The fragment is never inherited: RFC 3986 5.2.2 takes it from the
+	// reference on every branch. The base has none in any case.
+	if fragment, _ := rawFragmentOf(ref); fragment != "" {
+		out.WriteString("#")
+		out.WriteString(fragment)
 	}
 	return out.String(), nil
+}
+
+// rawQueryOf returns the query a URI reference or URL DEFINES, exactly as
+// written, and whether it defines one at all. RFC 3986 3.4: the query runs from
+// the first "?" outside the fragment to the fragment or the end of the string.
+func rawQueryOf(s string) (string, bool) {
+	if i := strings.IndexByte(s, '#'); i >= 0 {
+		s = s[:i]
+	}
+	i := strings.IndexByte(s, '?')
+	if i < 0 {
+		return "", false
+	}
+	return s[i+1:], true
+}
+
+// rawFragmentOf returns the fragment a URI reference DEFINES, exactly as
+// written. RFC 3986 3.5: the fragment is everything after the first "#".
+func rawFragmentOf(s string) (string, bool) {
+	i := strings.IndexByte(s, '#')
+	if i < 0 {
+		return "", false
+	}
+	return s[i+1:], true
 }
 
 // uriPunctuation is every non-alphanumeric byte the coarse RFC 3986 character

@@ -163,6 +163,39 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		{"colon_in_a_later_segment", base, "/a:b", "https://a.example/a:b"},
 		{"semicolon_in_the_path", base, "/x;", "https://a.example/x;"},
 
+		// Accepted — the QUERY and the FRAGMENT, which nothing above covers. No
+		// vector carried a non-empty query and the hash appeared nowhere in this
+		// corpus, so both components were unpinned while the three SDKs took
+		// them from three different serializers. The apostrophe is the one
+		// character that split them in query position: it is a sub-delim the
+		// tame predicate admits, and WHATWG's special-query encode set holds it,
+		// so the TypeScript port alone answered %27.
+		{"apostrophe_in_the_query", base, "/x?a='b", "https://a.example/x?a='b"},
+		{"apostrophe_is_the_whole_query", base, "/x?'", "https://a.example/x?'"},
+		{"apostrophe_in_the_fragment", base, "/x?a=b#c'd", "https://a.example/x?a=b#c'd"},
+		// A fragment is KEPT on the reference, though the manifest URL refuses
+		// one. Not an inconsistency: the base is a URL a document WAS FETCHED
+		// FROM, so it could never have carried a fragment, while the reference is
+		// a value an author WROTE, where a fragment names an entry inside the
+		// document — a verification method in a Signature Agent Card, the way a
+		// DID document names one. It is inert for the fetch either way.
+		{"fragment_on_the_reference", base, "/doc#frag", "https://a.example/doc#frag"},
+		{"fragment_only_reference", base, "#frag", "https://a.example/.well-known/ramp.json#frag"},
+		// Defined but empty, on both components: no mark on the output.
+		{"bare_trailing_hash", base, "/doc#", "https://a.example/doc"},
+
+		// Accepted — a QUERY-BEARING manifest URL, the branch RFC 3986 5.2.2
+		// treats as a special case and which no vector reached. The base's query
+		// is inherited ONLY by a reference with an empty path that defines no
+		// query of its own. A reference carrying ANY path drops it, which is the
+		// half most likely to be got wrong by an implementation reading 5.2.2
+		// as "inherit when the reference defines no query".
+		{"query_base_path_reference_drops_it", "https://a.example/ramp.json?bq", "/x", "https://a.example/x"},
+		{"query_base_relative_reference_drops_it", "https://a.example/ramp.json?bq", "x", "https://a.example/x"},
+		{"query_base_fragment_reference_inherits_it", "https://a.example/ramp.json?bq", "#f", "https://a.example/ramp.json?bq#f"},
+		{"query_base_query_reference_replaces_it", "https://a.example/ramp.json?bq", "?rq", "https://a.example/ramp.json?rq"},
+		{"query_base_empty_query_reference", "https://a.example/ramp.json?bq", "?", "https://a.example/ramp.json"},
+
 		// Refused — untame input. One row per class the three URL engines split
 		// on, each verified by running all three implementations. Without these
 		// the whole predicate is unpinned: no case in the corpus above holds a
@@ -200,6 +233,13 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		// second; both other SDKs accepted both as ordinary path segments.
 		{"colon_opens_the_reference", base, ":/x", ""},
 		{"first_segment_is_not_a_scheme", base, "1:x", ""},
+		// Refused — a second hash. RFC 3986 3.5 gives a reference one fragment
+		// that runs to the end of the string, so this is not a URI reference:
+		// a hash inside a fragment has to be written %23. It is also the one
+		// character Go re-encodes in a fragment, measured across 29 forms, so
+		// refusing it removes that divergence rather than picking a winner.
+		{"two_hashes_in_the_reference", base, "/doc#f#g", ""},
+		{"two_hashes_with_an_empty_second_fragment", base, "/doc#f#", ""},
 
 		// Refused — a port that is not a port. The first two reach the WHATWG
 		// parser as a raw TypeError in the TypeScript port unless they are

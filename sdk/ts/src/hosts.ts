@@ -285,6 +285,27 @@ function portIsWritable(port: string): boolean {
 	return n >= 1 && n <= 65535;
 }
 
+// rawQueryOf returns the query a reference or URL DEFINES, exactly as written,
+// and whether it defines one at all. RFC 3986 §3.4: the query runs from the
+// first "?" outside the fragment to the fragment or the end of the string. Read
+// as a SUBSTRING rather than through `new URL`, because the three SDKs run three
+// serializers that disagree inside the character set untameReason admits on
+// purpose — WHATWG's special-query encode set holds the apostrophe, a sub-delim
+// this rule accepts.
+function rawQueryOf(s: string): [string, boolean] {
+	const hash = s.indexOf("#");
+	const head = hash < 0 ? s : s.slice(0, hash);
+	const q = head.indexOf("?");
+	return q < 0 ? ["", false] : [head.slice(q + 1), true];
+}
+
+// rawFragmentOf returns the fragment a reference DEFINES, exactly as written;
+// RFC 3986 §3.5.
+function rawFragmentOf(s: string): string {
+	const i = s.indexOf("#");
+	return i < 0 ? "" : s.slice(i + 1);
+}
+
 // vetAuthority checks one authority and returns its host and its folded port.
 // Written once and called for both the base and the reference. The two used to
 // hold the same four steps inline, and the split rule they share is exactly the
@@ -366,6 +387,15 @@ export function resolveIdentityDocument(manifestUrl: string, ref: string): strin
 	if (refWhy !== "") {
 		throw new Error(`identity document: reference ${refWhy}`);
 	}
+	if ((ref.match(/#/g) ?? []).length > 1) {
+		// RFC 3986 3.5 gives a reference a single fragment that runs to the end of
+		// the string, so a second hash is not a URI reference at all — it is a
+		// fragment with a hash inside it, which has to be written %23. The three
+		// parsers disagree about it: Go re-encodes the second hash, this port and
+		// the Python one keep it. Refused rather than picked a winner for, because
+		// no correct reference reaches this line.
+		throw new Error("identity document: reference carries more than one fragment");
+	}
 	const refScheme = uriScheme(ref);
 	// RFC 3986 3.3 and 4.2: a reference with no scheme is path-noscheme, and its
 	// FIRST segment may not contain a colon — ":/x" and "1:x" would otherwise be
@@ -394,10 +424,14 @@ export function resolveIdentityDocument(manifestUrl: string, ref: string): strin
 		}
 	}
 
-	// Only the path, query and fragment are taken from the join: the authority is
-	// rebuilt from the values already checked above, which is what makes the
-	// output canonical rather than an echo of however the manifest spelled it —
-	// and what keeps WHATWG's own normalizations out of the answer.
+	// Only the PATH is taken from the join. The authority is rebuilt from the
+	// values already checked above, and the query and the fragment are taken as
+	// SUBSTRINGS of the strings the author wrote — which is what makes the output
+	// canonical rather than an echo of however the manifest spelled it, and what
+	// keeps WHATWG's own normalizations out of the answer. `joined.search` used
+	// to supply the query, and it percent-encodes an apostrophe that the other
+	// two SDKs keep. A wide differential sweep found the three agree on the path,
+	// and only there.
 	//
 	// THE REBUILD IS LOAD-BEARING, not a formatting step. The origin checks above
 	// read the authority off the RAW string with a regex; if that regex is ever
@@ -418,5 +452,24 @@ export function resolveIdentityDocument(manifestUrl: string, ref: string): strin
 		throw new Error("identity document: reference cannot be resolved against the manifest URL");
 	}
 	const authority = basePort === "" ? baseHost.toLowerCase() : `${baseHost.toLowerCase()}:${basePort}`;
-	return `https://${authority}${joined.pathname}${joined.search}${joined.hash}`;
+
+	// RFC 3986 5.2.2 inherits the base's query in ONE case: the reference has an
+	// empty path, no authority and no scheme, and defines no query of its own —
+	// which in practice means a fragment-only reference. A reference carrying any
+	// path drops the base's query even though it defines none.
+	let [query, hasQuery] = rawQueryOf(ref);
+	const refPath = ref.split(/[?#]/, 1)[0] ?? "";
+	if (!hasQuery && refAuthorityMatch === null && refScheme === "" && refPath === "") {
+		// The base cannot carry a fragment, refused above, so everything after its
+		// first "?" is its query.
+		[query, hasQuery] = rawQueryOf(manifestUrl);
+	}
+	// A query or a fragment that is DEFINED BUT EMPTY leaves no mark on the
+	// output: "/x?" and "/x#" both answer "/x".
+	const queryPart = hasQuery && query !== "" ? `?${query}` : "";
+	// The fragment is never inherited: RFC 3986 5.2.2 takes it from the reference
+	// on every branch, and the base has none in any case.
+	const fragment = rawFragmentOf(ref);
+	const fragmentPart = fragment === "" ? "" : `#${fragment}`;
+	return `https://${authority}${joined.pathname}${queryPart}${fragmentPart}`;
 }

@@ -313,6 +313,24 @@ def _merge_path(base_path: str, ref_path: str) -> str:
     return base_path[: base_path.rfind("/") + 1] + ref_path
 
 
+def _raw_query_of(s: str) -> tuple[str, bool]:
+    """The query a reference or URL DEFINES, exactly as written, and whether it has one.
+
+    RFC 3986 §3.4: the query runs from the first "?" outside the fragment to the
+    fragment or the end of the string. Read as a SUBSTRING rather than through a
+    URL library, because the three SDKs run three serializers that disagree
+    inside the character set ``_untame_reason`` admits on purpose.
+    """
+    head = s.split("#", 1)[0]
+    _, sep, query = head.partition("?")
+    return query, bool(sep)
+
+
+def _raw_fragment_of(s: str) -> str:
+    """The fragment a reference DEFINES, exactly as written; RFC 3986 §3.5."""
+    return s.split("#", 1)[1] if "#" in s else ""
+
+
 def _remove_dot_segments(path: str) -> str:
     """RFC 3986 5.2.4, run on the joined path.
 
@@ -410,6 +428,14 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
         raise ValueError("identity document: empty reference")
     if why := _untame_reason(ref):
         raise ValueError(f"identity document: reference {why}")
+    if ref.count("#") > 1:
+        # RFC 3986 3.5 gives a reference a single fragment that runs to the end
+        # of the string, so a second hash is not a URI reference at all — it is
+        # a fragment with a hash inside it, which has to be written %23. The
+        # three parsers disagree about it: Go re-encodes the second hash, this
+        # port and the TypeScript one keep it. Refused rather than picked a
+        # winner for, because no correct reference reaches this line.
+        raise ValueError("identity document: reference carries more than one fragment")
     ref_scheme = _uri_scheme(ref)
     # RFC 3986 3.3 and 4.2: a reference with no scheme is path-noscheme, and its
     # FIRST segment may not contain a colon — ":/x" and "1:x" would otherwise be
@@ -454,7 +480,7 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     ref_parts = urlsplit(ref)
     base_parts = urlsplit(manifest_url)
     if ref_auth_m is not None:
-        path, query = ref_parts.path, ref_parts.query
+        path = ref_parts.path
     elif ref_parts.path == "":
         # The base path is INHERITED, not copied: it goes through 5.2.4 below
         # like every other branch. A base of https://a.example/a/../ramp.json
@@ -462,17 +488,23 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
         # segments, and Go and TypeScript both remove them - same origin,
         # different document name.
         path = base_parts.path
-        # 5.2.2 inherits the base's query only when the reference DEFINED none.
-        # urlsplit cannot tell an empty query from an absent one, so read the
-        # "?" off the raw reference, ignoring anything in the fragment.
-        query = ref_parts.query if "?" in ref.split("#", 1)[0] else base_parts.query
     elif ref_parts.path.startswith("/"):
-        path, query = ref_parts.path, ref_parts.query
+        path = ref_parts.path
     else:
-        path, query = _merge_path(base_parts.path, ref_parts.path), ref_parts.query
+        path = _merge_path(base_parts.path, ref_parts.path)
     # 5.2.4 runs ONCE, on whichever path the branches above produced. Calling it
     # inside each branch is how the inherited one came to be missed.
     path = _remove_dot_segments(path)
+
+    # RFC 3986 5.2.2 inherits the base's query in ONE case: the reference has an
+    # empty path, no authority and no scheme, and defines no query of its own —
+    # which in practice means a fragment-only reference. A reference carrying any
+    # path drops the base's query even though it defines none.
+    query, ref_has_query = _raw_query_of(ref)
+    if not ref_has_query and ref_auth_m is None and not ref_scheme and ref_parts.path == "":
+        # The base cannot carry a fragment, refused above, so everything after
+        # its first "?" is its query.
+        query, _ = _raw_query_of(manifest_url)
 
     out = "https://" + base_host.lower()
     if base_port:
@@ -480,8 +512,12 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     # RFC 3986 6.2.3: under a hierarchical scheme an empty path is equivalent to
     # "/", and "/" is the normalized form.
     out += path or "/"
+    # A query or a fragment that is DEFINED BUT EMPTY leaves no mark on the
+    # output: "/x?" and "/x#" both answer "/x".
     if query:
         out += "?" + query
-    if ref_parts.fragment:
-        out += "#" + ref_parts.fragment
+    # The fragment is never inherited: RFC 3986 5.2.2 takes it from the reference
+    # on every branch, and the base has none in any case.
+    if fragment := _raw_fragment_of(ref):
+        out += "#" + fragment
     return out

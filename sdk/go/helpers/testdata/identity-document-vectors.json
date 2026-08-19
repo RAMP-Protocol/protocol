@@ -288,6 +288,83 @@
       "resolved": "https://a.example/x;"
     },
     {
+      "name": "apostrophe_in_the_query",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/x?a='b",
+      "accepted": true,
+      "resolved": "https://a.example/x?a='b"
+    },
+    {
+      "name": "apostrophe_is_the_whole_query",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/x?'",
+      "accepted": true,
+      "resolved": "https://a.example/x?'"
+    },
+    {
+      "name": "apostrophe_in_the_fragment",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/x?a=b#c'd",
+      "accepted": true,
+      "resolved": "https://a.example/x?a=b#c'd"
+    },
+    {
+      "name": "fragment_on_the_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/doc#frag",
+      "accepted": true,
+      "resolved": "https://a.example/doc#frag"
+    },
+    {
+      "name": "fragment_only_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "#frag",
+      "accepted": true,
+      "resolved": "https://a.example/.well-known/ramp.json#frag"
+    },
+    {
+      "name": "bare_trailing_hash",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/doc#",
+      "accepted": true,
+      "resolved": "https://a.example/doc"
+    },
+    {
+      "name": "query_base_path_reference_drops_it",
+      "manifest_url": "https://a.example/ramp.json?bq",
+      "ref": "/x",
+      "accepted": true,
+      "resolved": "https://a.example/x"
+    },
+    {
+      "name": "query_base_relative_reference_drops_it",
+      "manifest_url": "https://a.example/ramp.json?bq",
+      "ref": "x",
+      "accepted": true,
+      "resolved": "https://a.example/x"
+    },
+    {
+      "name": "query_base_fragment_reference_inherits_it",
+      "manifest_url": "https://a.example/ramp.json?bq",
+      "ref": "#f",
+      "accepted": true,
+      "resolved": "https://a.example/ramp.json?bq#f"
+    },
+    {
+      "name": "query_base_query_reference_replaces_it",
+      "manifest_url": "https://a.example/ramp.json?bq",
+      "ref": "?rq",
+      "accepted": true,
+      "resolved": "https://a.example/ramp.json?rq"
+    },
+    {
+      "name": "query_base_empty_query_reference",
+      "manifest_url": "https://a.example/ramp.json?bq",
+      "ref": "?",
+      "accepted": true,
+      "resolved": "https://a.example/ramp.json"
+    },
+    {
       "name": "control_character_in_the_reference",
       "manifest_url": "https://a.example/.well-known/ramp.json",
       "ref": "\thttps://u:s3cr3t@evil.example:8443/x",
@@ -389,6 +466,20 @@
       "name": "first_segment_is_not_a_scheme",
       "manifest_url": "https://a.example/.well-known/ramp.json",
       "ref": "1:x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "two_hashes_in_the_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/doc#f#g",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
+      "name": "two_hashes_with_an_empty_second_fragment",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/doc#f#",
       "accepted": false,
       "resolved": ""
     },
