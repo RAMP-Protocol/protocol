@@ -13,9 +13,9 @@ The redaction lives in the parse's error constructor rather than in the rule, so
 also covers ``host_of`` and ``host_anchored``, which this SDK exports.
 
 Message text is deliberately per-language — the shared corpus records a verdict and
-never a message — so this is a behavioural test in each port rather than a vector.
-The Go oracle still echoes here; that divergence is intentional and is not a parity
-break.
+never a message — so this is a behavioural test in each language rather than a
+vector. The Go sibling is sdk/go/helpers/hosts_redaction_test.go; all three assert
+the same property in their own words.
 """
 
 from __future__ import annotations

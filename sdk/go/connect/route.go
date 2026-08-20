@@ -11,6 +11,7 @@ import (
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 	"github.com/RAMP-Protocol/protocol/sdk/go/internal/endpointrule"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/hostredact"
 	"github.com/RAMP-Protocol/protocol/sdk/go/internal/lrucache"
 	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
@@ -69,11 +70,12 @@ func vetExchangeEndpoint(ctx context.Context, resolver EndpointResolver, exchang
 	// cannot rely on every present and future caller having vetted it.
 	bare, err := helpers.IsBareHost(exchangeDomain)
 	if err != nil {
-		return "", notSent(op, fmt.Errorf("exchange %q is not a usable domain: %w", exchangeDomain, err))
+		return "", notSent(op, fmt.Errorf("exchange %q is not a usable domain: %w", hostredact.Userinfo(exchangeDomain), err))
 	}
 	if !bare {
 		return "", notSent(op, fmt.Errorf(
-			"exchange %q is not a bare domain, refusing to resolve it", exchangeDomain))
+			"exchange %q is not a bare domain, refusing to resolve it",
+			hostredact.Userinfo(exchangeDomain)))
 	}
 	endpoint, err := resolver.ResolveEndpoint(ctx, exchangeDomain)
 	if err != nil {

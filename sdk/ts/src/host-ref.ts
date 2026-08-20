@@ -91,9 +91,10 @@ function authorityStarts(ref: string): number[] {
  * a third-party manifest, where the username is as much the operator's secret as the
  * password is.
  *
- * The oracle does echo the raw reference here, and that is not a parity break: the
- * shared corpus records a verdict and never a message, precisely so each language can
- * phrase its errors its own way. Do not "restore" this to match Go. */
+ * The oracle redacts here too, in its own words — the shared corpus records a verdict
+ * and never a message, so the three languages agree on the property and not on the
+ * wording. Its copy lives in an internal package because three tiers build these
+ * messages there and one of them would otherwise be left echoing. */
 export function redactUserinfo(ref: string): string {
 	for (const start of authorityStarts(ref)) {
 		const [authority, beyond] = splitAuthority(ref.slice(start));
@@ -105,12 +106,6 @@ export function redactUserinfo(ref: string): string {
 	return ref;
 }
 
-// An authority admits a CLOSED set of ASCII characters; everything outside it is
-// refused. Stating the set rather than a list of separators is what makes the
-// refusal structural: a separator nobody thought of is already outside it. Code
-// points at or above 0x80 are admitted — the oracle's parser keeps them, so a name
-// in a non-ASCII script is a usable host even though the wire's domain rule
-// refuses it.
 /** Refuse brackets that enclose anything but an IPv6 address.
  *
  * Per RFC 3986 only an IPv6 address may be bracketed, and the oracle enforces it:
@@ -141,6 +136,12 @@ function vetIpLiteral(ref: string, literal: string): void {
 	}
 }
 
+// An authority admits a CLOSED set of ASCII characters; everything outside it is
+// refused. Stating the set rather than a list of separators is what makes the
+// refusal structural: a separator nobody thought of is already outside it. Code
+// points at or above 0x80 are admitted — the oracle's parser keeps them, so a name
+// in a non-ASCII script is a usable host even though the wire's domain rule
+// refuses it.
 const hostAscii = new Set(
 	"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:[]<>\"",
 );

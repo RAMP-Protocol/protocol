@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/hostredact"
 )
 
 // Host and domain predicates: what a network party's value is allowed to be
@@ -58,10 +60,19 @@ func parseRef(ref string) (parsed *url.URL, hadScheme bool, err error) {
 	}
 	parsed, err = url.Parse(toParse)
 	if err != nil {
-		return nil, false, fmt.Errorf("%w: %q: %w", ErrInvalidHost, ref, err)
+		// url.Parse wraps its cause in a *url.Error carrying the reference it was
+		// given — so the wrapper echoes the credential even once the message above
+		// is redacted. Only the cause is kept: unlike the transport errors the
+		// resolvers tier rebuilds, where the URL is the sole place the value
+		// appears, here it is already named a few characters to the left.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
+		return nil, false, fmt.Errorf("%w: %q: %w", ErrInvalidHost, hostredact.Userinfo(ref), err)
 	}
 	if parsed.Host == "" {
-		return nil, false, fmt.Errorf("%w: %q has no host", ErrInvalidHost, ref)
+		return nil, false, fmt.Errorf("%w: %q has no host", ErrInvalidHost, hostredact.Userinfo(ref))
 	}
 	// One colon separates a host from its port, and a second one means the value is
 	// not a host[:port] at all. Decided HERE rather than left to net/url, because
@@ -86,7 +97,7 @@ func parseRef(ref string) (parsed *url.URL, hadScheme bool, err error) {
 	}
 	if strings.Count(authority, ":") > 1 {
 		return nil, false, fmt.Errorf(
-			"%w: %q: more than one colon after the host", ErrInvalidHost, ref)
+			"%w: %q: more than one colon after the host", ErrInvalidHost, hostredact.Userinfo(ref))
 	}
 	return parsed, hadScheme, nil
 }

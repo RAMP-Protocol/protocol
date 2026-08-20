@@ -142,9 +142,10 @@ def _redact_userinfo(ref: str) -> str:
     arrives in a third-party manifest, where the username is as much the operator's
     secret as the password is.
 
-    The oracle does echo the raw reference here, and that is not a parity break: the
-    shared corpus records a verdict and never a message, precisely so each language
-    can phrase its errors its own way. Do not "restore" this to match Go.
+    The oracle redacts here too, in its own words — the shared corpus records a
+    verdict and never a message, so the three languages agree on the property and
+    not on the wording. Its copy lives in an internal package because three tiers
+    build these messages there and one of them would otherwise be left echoing.
     """
     for start in _authority_starts(ref):
         authority, beyond = _split_authority(ref[start:])

@@ -15,11 +15,13 @@
 package endpointrule
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/hostredact"
 )
 
 // Vet reports whether endpoint may be used for host — the host that served the
@@ -61,7 +63,15 @@ func Vet(host, endpoint string) error {
 	}
 	parsed, err := url.Parse(ref)
 	if err != nil {
-		return fmt.Errorf("host=%q endpoint=%q is not a URL: %w", host, endpoint, err)
+		// The *url.Error wrapper carries the reference it was given, so it echoes
+		// the credential even once the message around it is redacted. Only the
+		// cause is kept; the value is already named, redacted, to its left.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
+		return fmt.Errorf("host=%q endpoint=%q is not a URL: %w",
+			host, hostredact.Userinfo(endpoint), err)
 	}
 	if parsed.User != nil {
 		// Deliberately does not echo the endpoint: it carries the credential.
@@ -69,7 +79,7 @@ func Vet(host, endpoint string) error {
 	}
 	anchored, err := helpers.HostAnchored(host, endpoint)
 	if err != nil {
-		return fmt.Errorf("host=%q endpoint=%q: %w", host, endpoint, err)
+		return fmt.Errorf("host=%q endpoint=%q: %w", host, hostredact.Userinfo(endpoint), err)
 	}
 	if !anchored {
 		return fmt.Errorf("host=%q advertises endpoint %q on a different host", host, endpoint)
