@@ -2951,9 +2951,7 @@ message WellKnownManifest {
   // host match is on a full dot-delimited label boundary, so evil-a.com is not a
   // subdomain of a.com. A port equal to the scheme's default and an omitted port
   // are the SAME port, so https://x, https://x:443 and x all match. An Exchange
-  // reachable on a non-default port names that port on both sides. (One
-  // paragraph deliberately: a blank line here routes the first paragraph into
-  // the generated types' JSON-Schema title, which the Pydantic/Zod export drops.)
+  // reachable on a non-default port names that port on both sides.
   optional string endpoint = 12;
 
   // Exchange-only. Health check endpoint URL.

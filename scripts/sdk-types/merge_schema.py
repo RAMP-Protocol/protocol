@@ -15,6 +15,12 @@
 # idiomatic JSON Schema. Uses the NON-strict variant, then strips the
 # additionalProperties:false it still carries (see open_messages) so `extra` policy
 # is controlled once on the WireModel base / the Zod wire() seam, not baked per class.
+#
+# A third source matters, and it is the one that used to lose text: protoschema splits a
+# multi-paragraph proto comment across `title` (paragraph one) and `description` (the
+# rest), and fills `title` in from the field's own TYPE name when the comment has only
+# one paragraph. So a title is either the head of the documentation or a restatement of
+# the type, and the two need opposite handling — see resolve_titles / carry_title.
 import json, glob, re, os, sys
 from google.protobuf import descriptor_pb2
 
@@ -28,10 +34,47 @@ WKT = {
 }
 
 
-def enum_names_from_descriptor(desc_path):
-    """frozenset(value names, sans *_UNSPECIFIED) -> proto enum simple name."""
+def load_descriptor(desc_path):
+    """The compiled FileDescriptorSet, read once and shared by every reader below."""
     fds = descriptor_pb2.FileDescriptorSet()
     fds.ParseFromString(open(desc_path, "rb").read())
+    return fds
+
+
+# proto field types whose `type_name` names an enum or a message; a scalar has none.
+_FIELD_TYPE_ENUM = descriptor_pb2.FieldDescriptorProto.TYPE_ENUM
+_FIELD_TYPE_MESSAGE = descriptor_pb2.FieldDescriptorProto.TYPE_MESSAGE
+
+
+def field_type_names_from_descriptor(fds):
+    """message simple name -> {proto field name -> the field's enum/message simple name}.
+
+    A scalar field maps to "", which never matches a title. Keyed by SIMPLE name because
+    that is what the merged $defs uses; the contract's only nested message is the
+    synthetic ErrorDetail.MetadataEntry map entry, which has no schema of its own.
+    """
+    out = {}
+
+    def walk(msgs):
+        for m in msgs:
+            out[m.name] = {
+                f.name: (
+                    f.type_name.rsplit(".", 1)[-1]
+                    if f.type in (_FIELD_TYPE_ENUM, _FIELD_TYPE_MESSAGE)
+                    else ""
+                )
+                for f in m.field
+            }
+            walk(m.nested_type)
+
+    for f in fds.file:
+        if f.package in ("ramp.v1", "ramp.admin.v1"):
+            walk(f.message_type)
+    return out
+
+
+def enum_names_from_descriptor(fds):
+    """frozenset(value names, sans *_UNSPECIFIED) -> proto enum simple name."""
     out = {}
 
     def take(enums):
@@ -53,12 +96,81 @@ def enum_names_from_descriptor(desc_path):
     return out
 
 
-def strip_titles(o):
-    if isinstance(o, dict):
-        return {k: strip_titles(v) for k, v in o.items() if k != "title"}
-    if isinstance(o, list):
-        return [strip_titles(x) for x in o]
-    return o
+def title_is_type_derived(title, type_name):
+    """Whether protoschema derived this `title` from the field's TYPE rather than its comment.
+
+    When a field's comment supplies no first paragraph, protoschema fills the title in
+    from the enum or message the field carries, spelled with spaces: `DisputeReason`
+    becomes "Dispute Reason". Spaces are the only difference, so stripping them and
+    comparing case-insensitively is EXACT. A Title-Case shape test is not: it reads
+    "C2PA Status" as three words and never matches `C2PAStatus`, and it would also
+    misread any genuine comment paragraph that happens to be a short unpunctuated phrase.
+    """
+    return bool(type_name) and title.replace(" ", "").lower() == type_name.lower()
+
+
+def carry_title(node, type_name):
+    """Fold a comment-derived `title` into `description`; drop a type-derived one.
+
+    protoschema splits a multi-paragraph proto comment: paragraph one becomes `title`
+    and the remainder becomes `description`. Dropping every title therefore deleted the
+    FIRST paragraph of any comment carrying a blank line — `Offer.signature` lost
+    "REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE Offer",
+    so the generated types stated the canonical-signing rules without ever saying the
+    field is the signature or that it is required. Go was unaffected (ramp.pb.go carries
+    the whole comment), so the loss showed only in the Pydantic and Zod export.
+
+    A type-derived title is still dropped: it repeats the field's own type name, so
+    prepending it would inject "Dispute Reason" into a field whose comment lost nothing.
+    """
+    title = node.get("title")
+    if not isinstance(title, str) or not title.strip():
+        return node
+    out = {k: v for k, v in node.items() if k != "title"}
+    if title_is_type_derived(title, type_name):
+        return out
+    desc = out.get("description")
+    out["description"] = f"{title}\n\n{desc}" if isinstance(desc, str) and desc else title
+    return out
+
+
+def resolve_property_titles(prop, type_name):
+    """Apply carry_title to one property, and to the `items` of a repeated one.
+
+    A repeated field's element schema carries the SAME type name one level down, which
+    is where protoschema puts the type-derived title for a `repeated` enum.
+    """
+    if not isinstance(prop, dict):
+        return prop
+    prop = carry_title(prop, type_name)
+    items = prop.get("items")
+    if isinstance(items, dict):
+        prop = dict(prop)
+        prop["items"] = resolve_property_titles(items, type_name)
+    return prop
+
+
+def resolve_titles(schema, msg_name, field_types):
+    """Resolve every title in one message schema: the root's, then each property's.
+
+    The root title is compared against the MESSAGE's own name, on the same rule — so
+    "Offer — A single resource offer from an Exchange." is carried and "Reporting
+    Policy" (protoschema's fill-in for `ReportingPolicy`) is dropped.
+
+    Titles under `patternProperties` are deliberately left alone: that whole key is the
+    camelCase json_name alias set, which open_messages removes further down the pipeline
+    — the wire is snake_case proto-JSON, so the aliases are not a supported input form.
+    """
+    schema = carry_title(schema, msg_name)
+    props = schema.get("properties")
+    if not isinstance(props, dict):
+        return schema
+    schema = dict(schema)
+    schema["properties"] = {
+        name: resolve_property_titles(prop, field_types.get(name, ""))
+        for name, prop in props.items()
+    }
+    return schema
 
 
 def fix_string_null_default(o):
@@ -142,6 +254,39 @@ def collapse_numeric_strings(o):
     if isinstance(o, list):
         return [collapse_numeric_strings(x) for x in o]
     return o
+
+
+def assert_no_surviving_titles(combined):
+    """Loud guard for resolve_titles. Every `title` must have been either CARRIED into
+    its description (comment-derived) or dropped (type-derived) before the write.
+
+    A survivor means a title site the resolver does not reach, and the two downstream
+    generators handle that site differently — datamodel-code-generator would name a
+    class from it while json-schema-to-zod ignores it — so the two clients would
+    disagree about a message they generated from the same document.
+
+    It looks for `title` whose VALUE is a string, which is the JSON-Schema keyword. A
+    message with a field NAMED title has properties["title"] mapping to that field's
+    SCHEMA, an object, so it is not confused for the keyword — the distinction matters,
+    because the blanket key-strip this replaced deleted Offer.title, ResourceEntry.title
+    and UsageAsset.title from both clients outright.
+    """
+    bad = []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            if isinstance(node.get("title"), str):
+                bad.append(path)
+            for k, v in node.items():
+                walk(v, f"{path}/{k}")
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, f"{path}[{i}]")
+
+    walk(combined, "")
+    if bad:
+        sys.exit("JSON-Schema `title` survived the merge, so a comment's first paragraph "
+                 f"is being dropped — extend resolve_titles: {bad[:5]}")
 
 
 def assert_no_numeric_string_arms(combined):
@@ -281,7 +426,9 @@ def mark_unique(defs, unique_items):
 
 
 def main(src_dir, desc_path, out_file, required_path=None, unique_path=None):
-    enum_name = enum_names_from_descriptor(desc_path)
+    fds = load_descriptor(desc_path)
+    enum_name = enum_names_from_descriptor(fds)
+    field_types = field_type_names_from_descriptor(fds)
     enum_defs = {}   # name -> {"type":"string","enum":[...]}
     unnamed = []
 
@@ -320,7 +467,7 @@ def main(src_dir, desc_path, out_file, required_path=None, unique_path=None):
         if "jsonschema" in base or ".strict." in base or ".bundle." in base:
             continue
         name = re.sub(r"^ramp\.(?:admin\.)?v1\.", "", base.split(".schema")[0])
-        d = strip_titles(json.load(open(f)))
+        d = resolve_titles(json.load(open(f)), name, field_types.get(name, {}))
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d
     defs = fix_string_null_default(open_messages(collapse_numeric_strings(hoist_enums(fix_refs(defs)))))
@@ -346,6 +493,7 @@ def main(src_dir, desc_path, out_file, required_path=None, unique_path=None):
     if unnamed:
         sys.exit(f"inline enums with no descriptor match (value sets): {unnamed[:5]}")
     assert_no_numeric_string_arms(combined)
+    assert_no_surviving_titles(combined)
 
     json.dump(combined, open(out_file, "w"), indent=2)
     print(f"merged {len([k for k in defs if k not in enum_defs])} messages + "

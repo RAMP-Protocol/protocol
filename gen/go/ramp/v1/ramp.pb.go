@@ -7007,9 +7007,7 @@ type WellKnownManifest struct {
 	// host match is on a full dot-delimited label boundary, so evil-a.com is not a
 	// subdomain of a.com. A port equal to the scheme's default and an omitted port
 	// are the SAME port, so https://x, https://x:443 and x all match. An Exchange
-	// reachable on a non-default port names that port on both sides. (One
-	// paragraph deliberately: a blank line here routes the first paragraph into
-	// the generated types' JSON-Schema title, which the Pydantic/Zod export drops.)
+	// reachable on a non-default port names that port on both sides.
 	Endpoint *string `protobuf:"bytes,12,opt,name=endpoint,proto3,oneof" json:"endpoint,omitempty"`
 	// Exchange-only. Health check endpoint URL.
 	HealthEndpoint *string `protobuf:"bytes,13,opt,name=health_endpoint,json=healthEndpoint,proto3,oneof" json:"health_endpoint,omitempty"`
