@@ -36,6 +36,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
+from pydantic import ValidationError
 from wire.models import (
     CatalogRejectionReason,
     DenialReason,
@@ -154,8 +155,20 @@ def error_detail_from(err: Mapping[str, Any] | Iterable[Any]) -> ErrorDetail | N
         payload = entry.get("debug")
         if payload is None and isinstance(entry.get("value"), dict):
             payload = entry["value"]
-        if isinstance(payload, dict):
+        if not isinstance(payload, dict):
+            continue
+        try:
             return parse_error_detail(_proto_names(payload))
+        except ValidationError:
+            # A detail entry that does not decode is not an answer, and it came from a
+            # peer that just refused the call — so it is exactly where a hostile one puts
+            # something malformed. Raising here would replace the typed failure the caller
+            # is about to receive with an untyped one from a library it never called.
+            #
+            # The scan CONTINUES rather than giving up: `details` is a list, an entry that
+            # does not decode says nothing about the next, and the TypeScript twin has
+            # always kept looking.
+            continue
     return None
 
 

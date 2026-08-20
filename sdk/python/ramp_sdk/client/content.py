@@ -108,7 +108,7 @@ def proof_headers(
     except Exception as exc:  # custody can fail any way it likes
         # The given URL is deliberately NOT echoed: this error reaches a log, and a
         # delivery URL carries a live credential in its query.
-        raise CallError(CallErrorKind.NOT_SIGNABLE, _OP, cause=_redact(exc)) from exc
+        raise CallError(CallErrorKind.NOT_SIGNABLE, _OP, cause=redact_url(exc)) from exc
     headers = {
         AGENT_KEY_HEADER: agent_key,
         "signature-input": signature_input,
@@ -231,7 +231,7 @@ def mime_type_of(header: str | None) -> str:
     return media_type if _MEDIA_TYPE_SHAPE.match(media_type) else _DEFAULT_CONTENT_MIME_TYPE
 
 
-def _redact(exc: BaseException) -> str:
+def redact_url(exc: BaseException) -> str:
     """Strip a credential out of a failure that names the URL it was dialing. For a
     delivery fetch that query IS the credential, so a message carrying it leaks even when
     this module's own wording is already redacted."""
@@ -240,4 +240,4 @@ def _redact(exc: BaseException) -> str:
 
 def transport_failure(exc: BaseException) -> CallError:
     """An edge that did not answer, with its URL kept out of the message."""
-    return CallError(CallErrorKind.UNREACHABLE, _OP, cause=_redact(exc))
+    return CallError(CallErrorKind.UNREACHABLE, _OP, cause=redact_url(exc))

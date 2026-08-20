@@ -131,7 +131,13 @@ function canonMessage(objectSchema: AnyZod, wire: Record<string, unknown>): Reco
 	const out: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(wire)) {
 		const name = snake(key);
-		const field = shape[name];
+		// hasOwn, not a truthiness test: a wire key like "__proto__" or "constructor"
+		// resolves to an inherited member of Object.prototype, which is not undefined and
+		// is not a schema — so the unknown-field branch would be skipped and the walk
+		// handed an object with no _def. An offer arrives from a peer, so that key is
+		// attacker-chosen, and the result was a raw TypeError out of a call that promises
+		// a typed failure.
+		const field = Object.hasOwn(shape, name) ? shape[name] : undefined;
 		if (field === undefined) {
 			// Newer-than-pin field: keep it so verification fails CLOSED (the signature
 			// covered bytes this pin cannot reconstruct).

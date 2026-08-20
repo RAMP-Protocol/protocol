@@ -332,7 +332,16 @@ class Verifier:
             return "offer is not an object"
         exchange = offer.get("exchange")
         exchange_str = exchange if isinstance(exchange, str) else ""
-        pub = self._resolver.resolve(exchange_str)
+        # A resolver that RAISES rejects this offer and nothing else. The shipped
+        # resolvers raise on a network failure, and on a Broker fan-out the exchange comes
+        # off a relayed offer — so one Exchange whose key endpoint hangs would otherwise
+        # deny the agent every offer in the response, as an untyped exception out of a call
+        # that promises a typed one. Go returns the resolver's error as this offer's
+        # rejection reason and moves on.
+        try:
+            pub = self._resolver.resolve(exchange_str)
+        except Exception as exc:  # an injected resolver may raise anything
+            return f"no offer-signing key for exchange {exchange_str!r}: {exc}"
         if pub is None:
             return f"no offer-signing key for exchange {exchange_str!r}"
 

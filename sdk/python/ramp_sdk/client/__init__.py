@@ -50,6 +50,7 @@ from .content import (
     edge_refusal,
     proof_headers,
     read_content,
+    redact_url,
     transport_failure,
 )
 from .errors import NOT_CANONICAL_WIRE_NAMING, CallError, CallErrorKind
@@ -150,8 +151,13 @@ class _Face:
             raise as_call_error(plan.op, exc) from exc
         except _ssrf.SsrfError as exc:
             # The guard's refusal is an OSError, not an httpx error, so it would otherwise
-            # escape untyped. Nothing was sent, which is exactly what NOT_SENT means.
-            raise CallError(CallErrorKind.NOT_SENT, plan.op, cause=str(exc)) from exc
+            # escape untyped and break the contract this package states.
+            #
+            # UNREACHABLE, not NOT_SENT, because that is what the oracle answers: in Go the
+            # same refusal comes out of the RoundTripper, so the client reads it as a dial
+            # that did not happen — measured, not assumed. Nothing was sent either way, and
+            # a caller who retries gets the identical refusal.
+            raise CallError(CallErrorKind.UNREACHABLE, plan.op, cause=str(exc)) from exc
 
 
 class Client(_Face):
@@ -261,7 +267,9 @@ class Client(_Face):
         except httpx.HTTPError as exc:
             raise transport_failure(exc) from exc
         except _ssrf.SsrfError as exc:
-            raise CallError(CallErrorKind.NOT_SENT, op, cause=str(exc)) from exc
+            # UNREACHABLE for the reason _send records: it is what Go answers, because the
+            # refusal reaches it through the transport.
+            raise CallError(CallErrorKind.UNREACHABLE, op, cause=redact_url(exc)) from exc
 
 
 class BrokerClient(_Face):

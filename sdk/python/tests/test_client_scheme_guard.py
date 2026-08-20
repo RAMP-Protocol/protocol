@@ -3,11 +3,15 @@
 Mirrors sdk/ts/tests/client-scheme-guard.test.ts.
 
 Two rules meet here. The scheme gate (``_SchemeGuardTransport``) refuses plaintext and
-anything that is not http(s), and the address pin refuses a private target. Both are
-verdicts — nothing was sent — so both must reach the caller as ``NOT_SENT``. They did not:
-``SsrfError`` subclasses ``OSError``, not ``httpx.HTTPError``, so it escaped every send
-site raw and broke the contract this package states, that every verb raises ``CallError``
-and nothing else.
+anything that is not http(s), and the address pin refuses a private target. Both used to
+escape untyped: ``SsrfError`` subclasses ``OSError``, not ``httpx.HTTPError``, so it went
+past every send site raw and broke the contract this package states, that every verb
+raises ``CallError`` and nothing else.
+
+They report UNREACHABLE, which is what the oracle answers — measured, not assumed: in Go
+the same refusal comes out of the RoundTripper, so the client reads it as a dial that did
+not happen. Nothing was sent either way, and a caller who retries gets the identical
+refusal.
 
 Which legs, mirroring Go: the offer-derived legs and the delivery fetch, whose hosts
 another party names. The configured home Exchange keeps a plain transport, as it does in
@@ -57,25 +61,23 @@ def _report(endpoint: str) -> CallError:
     return caught.value
 
 
-def test_the_offer_derived_leg_refuses_plaintext_as_a_verdict() -> None:
+def test_the_offer_derived_leg_refuses_plaintext() -> None:
     # http://issuer.test is anchored and credential-free, so it passes the endpoint rule;
     # what stops it is the scheme.
     failure = _report("http://issuer.test")
-    assert failure.kind is CallErrorKind.NOT_SENT
+    assert failure.kind is CallErrorKind.UNREACHABLE
     assert "scheme" in str(failure).lower()
 
 
-def test_the_offer_derived_leg_refuses_a_private_address_as_a_verdict() -> None:
+def test_the_offer_derived_leg_refuses_a_private_address() -> None:
     failure = _report("https://issuer.test")
-    # The address pin refuses the dial once the name resolves to nothing public; either
-    # way nothing was sent, which is what the kind has to say.
-    assert failure.kind in {CallErrorKind.NOT_SENT, CallErrorKind.UNREACHABLE}
+    assert failure.kind is CallErrorKind.UNREACHABLE
 
 
-def test_the_delivery_leg_refuses_plaintext_as_a_verdict() -> None:
+def test_the_delivery_leg_refuses_plaintext() -> None:
     client = blocking.Client(_config())
     with client, pytest.raises(CallError) as caught:
         client.fetch("http://edge.test/a?token=live-credential")
-    assert caught.value.kind is CallErrorKind.NOT_SENT
+    assert caught.value.kind is CallErrorKind.UNREACHABLE
     # The refusal reaches a log; a delivery URL carries a live credential in its query.
     assert "live-credential" not in str(caught.value)

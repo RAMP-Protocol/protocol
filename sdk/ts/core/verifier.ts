@@ -348,7 +348,20 @@ export class Verifier {
 			return "offer is not an object";
 		const rec = offer as Record<string, unknown>;
 		const exchange = typeof rec.exchange === "string" ? rec.exchange : "";
-		const pub = await this.resolver.resolve(exchange);
+		// A resolver that THROWS rejects this offer and nothing else. The shipped
+		// resolvers raise on a network failure, and on a Broker fan-out the exchange comes
+		// off a relayed offer — so one Exchange whose key endpoint hangs would otherwise
+		// deny the agent every offer in the response, as an untyped exception out of a
+		// call that promises a typed one. Go returns the resolver's error as this offer's
+		// rejection reason and moves on.
+		let pub: Uint8Array<ArrayBuffer> | undefined;
+		try {
+			pub = await this.resolver.resolve(exchange);
+		} catch (cause) {
+			return `no offer-signing key for exchange ${JSON.stringify(exchange)}: ${
+				cause instanceof Error ? cause.message : String(cause)
+			}`;
+		}
 		if (!pub)
 			return `no offer-signing key for exchange ${JSON.stringify(exchange)}`;
 
