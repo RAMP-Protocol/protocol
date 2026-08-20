@@ -4,64 +4,14 @@
 // its fail-closed taxonomy: a fetch/decode failure throws DirectoryUnavailable;
 // an unknown kid is `undefined`; a manifest with no endpoint throws NoEndpoint.
 
-import { anchoredParsed, invalidHost, parseRef } from "../src/host-ref.ts";
+import { endpointRefusal } from "../src/endpoint-rule.ts";
+import { invalidHost } from "../src/host-ref.ts";
 import { isBareHost } from "../src/hosts.ts";
 import { DirectoryUnavailable, EndpointRefused, NoEndpoint } from "./errors.ts";
 import { type FetchLike, defaultFetch, fetchStrict } from "./http.ts";
 import { ed25519KeysFromJwks } from "./jwks.ts";
 
 const DEFAULT_TTL_MS = 300_000; // 5 minutes
-
-/** Why an endpoint a manifest advertises may not be handed back, or undefined
- * when it may.
- *
- * The manifest that named this endpoint is served by the very host the call is
- * bound for, so the endpoint is only as trustworthy as that host. An Exchange may
- * advertise itself or a subdomain of itself, on the same port, and nothing else —
- * a dial-time address guard has no objection to an unrelated PUBLIC host, so
- * nothing below this catches one.
- *
- * Userinfo is refused for a different reason with the same shape: the host
- * comparison reads the authority's host and ignores any user:password before it,
- * so an endpoint carrying credentials would pass the host check and then have the
- * HTTP client stamp an Authorization header the SDK never chose, on a leg that
- * already carries the caller's own signature.
- *
- * It runs HERE, in the resolver, rather than in each caller: the check is a
- * property of reading an endpoint out of a manifest, not of any one caller's plans
- * for it. (The Go oracle keeps the same rule in a shared internal package because
- * it has a second call site — a typed client that re-checks an injected resolver's
- * answer. This SDK has only the one, so the rule lives with it.)
- *
- * Both halves are decided over ONE reading of the reference, by the shared parse
- * in src/host-ref.ts. That is not tidiness: a value naming no scheme is a URL to
- * one parser and a path to another, and the two answers put a credential on
- * opposite sides of the check — "u:p@exchange.example" is where they part. */
-function endpointRefusal(host: string, endpoint: string): string | undefined {
-  let advertised: ReturnType<typeof parseRef>;
-  try {
-    advertised = parseRef(endpoint);
-  } catch (err) {
-    // The error already names the reference, with any credential redacted. Echoing
-    // the raw endpoint alongside it would put the credential straight back — which
-    // is what happened when this branch moved ahead of the userinfo refusal below.
-    return `host=${JSON.stringify(host)}: ${String(err)}`;
-  }
-  if (advertised.hasUserinfo) {
-    // Deliberately does not echo the endpoint: it carries the credential.
-    return `host=${JSON.stringify(host)} advertises an endpoint carrying userinfo`;
-  }
-  let served: ReturnType<typeof parseRef>;
-  try {
-    served = parseRef(host);
-  } catch (err) {
-    return `the serving host is unusable: ${String(err)}`;
-  }
-  if (!anchoredParsed(served, advertised)) {
-    return `host=${JSON.stringify(host)} advertises endpoint ${JSON.stringify(endpoint)} on a different host`;
-  }
-  return undefined;
-}
 
 /** Options for the well-known fetching resolvers. `now` is epoch-ms; tests inject
  * it for deterministic TTL expiry. `fetch` defaults to the global fetch. */

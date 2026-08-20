@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from ramp_sdk._endpoint_rule import endpoint_refusal
 from ramp_sdk._hostref import _redact_userinfo as redact_userinfo
 from ramp_sdk.hosts import is_bare_host
 from ramp_sdk.resolvers.errors import EndpointRefusedError, NoEndpointError
@@ -81,7 +82,7 @@ def vet_exchange_endpoint(
         )
 
     try:
-        return resolver.resolve_endpoint(exchange_domain)
+        endpoint = resolver.resolve_endpoint(exchange_domain)
     except Exception as exc:  # an injected resolver may raise anything
         # Classified by CAUSE, not by position. Reaching the manifest is a network
         # operation, and a DNS blip or a 500 from an otherwise healthy Exchange is
@@ -103,3 +104,21 @@ def vet_exchange_endpoint(
         raise CallError(
             kind, op, cause=f"resolve exchange {exchange_domain!r}: {exc}"
         ) from exc
+
+    # Re-checked here even though the SDK's own resolver already refuses such an endpoint.
+    # The resolver is an injectable seam — its own docs offer it so a caller can drive
+    # reporting without a manifest server — and this module cannot make a SIGNED call
+    # conditional on a stranger's implementation having remembered the rule. The cost is
+    # string work on a path that just did a network fetch.
+    #
+    # The SAME predicate both times, deliberately. Stated twice it drifts, and a
+    # half-mirrored version of this rule is how a signed call ends up carrying credentials
+    # the SDK never chose.
+    refusal = endpoint_refusal(exchange_domain, endpoint)
+    if refusal is not None:
+        raise not_sent(
+            op,
+            f"refusing to send a signed call to the endpoint exchange "
+            f"{redact_userinfo(exchange_domain)!r} advertises: {refusal}",
+        )
+    return endpoint

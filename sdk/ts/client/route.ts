@@ -12,6 +12,7 @@
 // configuration.
 
 import { EndpointRefused, NoEndpoint } from "./../resolvers/errors.ts";
+import { endpointRefusal } from "../src/endpoint-rule.ts";
 import { isBareHost } from "../src/hosts.ts";
 import { redactUserinfo } from "../src/host-ref.ts";
 import { RampCallError, notSent } from "./errors.ts";
@@ -86,8 +87,9 @@ export async function vetExchangeEndpoint(
 		);
 	}
 
+	let endpoint: string;
 	try {
-		return await resolver.resolveEndpoint(exchangeDomain);
+		endpoint = await resolver.resolveEndpoint(exchangeDomain);
 	} catch (cause) {
 		// Classified by CAUSE, not by position. Reaching the manifest is a network
 		// operation, and a DNS blip or a 500 from an otherwise healthy Exchange is
@@ -106,6 +108,28 @@ export async function vetExchangeEndpoint(
 			),
 		});
 	}
+
+	// Re-checked here even though the SDK's own resolver already refuses such an endpoint.
+	// The resolver is an injectable seam — its own docs offer it so a caller can drive
+	// reporting without a manifest server — and this module cannot make a SIGNED call
+	// conditional on a stranger's implementation having remembered the rule. The cost is
+	// string work on a path that just did a network fetch.
+	//
+	// The SAME predicate both times, deliberately. Stated twice it drifts, and a
+	// half-mirrored version of this rule is how a signed call ends up carrying credentials
+	// the SDK never chose.
+	const refusal = endpointRefusal(exchangeDomain, endpoint);
+	if (refusal !== undefined) {
+		throw notSent(
+			op,
+			new Error(
+				`refusing to send a signed call to the endpoint exchange ${redactUserinfo(
+					exchangeDomain,
+				)} advertises: ${refusal}`,
+			),
+		);
+	}
+	return endpoint;
 }
 
 // isVerdict tells the resolver's final answers from its transient ones. The invalid-host
