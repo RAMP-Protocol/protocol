@@ -1,0 +1,112 @@
+{
+  "hex_decode": [
+    {
+      "name": "valid_lower",
+      "hex": "00ff10",
+      "ok": true,
+      "bytes": "00ff10"
+    },
+    {
+      "name": "valid_upper",
+      "hex": "00FF10",
+      "ok": true,
+      "bytes": "00ff10"
+    },
+    {
+      "name": "valid_empty",
+      "hex": "",
+      "ok": true,
+      "bytes": ""
+    },
+    {
+      "name": "odd_length",
+      "hex": "abc",
+      "ok": false,
+      "bytes": ""
+    },
+    {
+      "name": "leading_sign_minus",
+      "hex": "-1",
+      "ok": false,
+      "bytes": ""
+    },
+    {
+      "name": "leading_sign_plus",
+      "hex": "+f",
+      "ok": false,
+      "bytes": ""
+    },
+    {
+      "name": "leading_space",
+      "hex": " a",
+      "ok": false,
+      "bytes": ""
+    },
+    {
+      "name": "trailing_space",
+      "hex": "a ",
+      "ok": false,
+      "bytes": ""
+    },
+    {
+      "name": "non_hex_letter",
+      "hex": "zz",
+      "ok": false,
+      "bytes": ""
+    },
+    {
+      "name": "embedded_null",
+      "hex": "0\u0000",
+      "ok": false,
+      "bytes": ""
+    }
+  ],
+  "note": "Textual rules every SDK applies to bytes a peer chose. snake_from_json_name inverts protojson's lowerCamelCase spelling (ASCII A-Z is the only boundary it can produce); hex is the Offer.signature encoding, where a sign, whitespace or an odd length is not a signature.",
+  "snake_from_json_name": [
+    {
+      "name": "single_word",
+      "json_name": "exchange",
+      "snake": "exchange"
+    },
+    {
+      "name": "two_words",
+      "json_name": "transactionId",
+      "snake": "transaction_id"
+    },
+    {
+      "name": "three_words",
+      "json_name": "agentIdentityHash",
+      "snake": "agent_identity_hash"
+    },
+    {
+      "name": "already_snake",
+      "json_name": "transaction_id",
+      "snake": "transaction_id"
+    },
+    {
+      "name": "trailing_digit",
+      "json_name": "c2paStatus",
+      "snake": "c2pa_status"
+    },
+    {
+      "name": "consecutive_capitals",
+      "json_name": "uriDigest",
+      "snake": "uri_digest"
+    },
+    {
+      "name": "empty",
+      "json_name": "",
+      "snake": ""
+    },
+    {
+      "name": "unicode_titlecase",
+      "json_name": "aǅb",
+      "snake": "aǅb"
+    },
+    {
+      "name": "unicode_uppercase_non_ascii",
+      "json_name": "aÉb",
+      "snake": "aÉb"
+    }
+  ]
+}

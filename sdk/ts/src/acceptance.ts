@@ -37,10 +37,21 @@ export interface AcceptanceInput {
 	idempotencyKey: string;
 }
 
-function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
+// Strict about what a hex digit is, and about the length. Number.parseInt accepts a sign,
+// leading whitespace and a trailing tail — "-1", "+f" and " a" all produce a number — so a
+// signature carrying any of them would decode to bytes rather than being refused, where
+// Go's hex.DecodeString and Python's bytes.fromhex refuse it. An odd length used to
+// truncate silently. The value comes from a peer, so the three languages have to agree on
+// what is a signature and what is garbage.
+const HEX_PAIR = /^[0-9a-fA-F]{2}$/;
+
+function hexToBytes(hex: string): Uint8Array<ArrayBuffer> | undefined {
+	if (hex.length % 2 !== 0) return undefined;
 	const out = new Uint8Array(hex.length / 2);
 	for (let i = 0; i < out.length; i += 1) {
-		out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+		const pair = hex.slice(i * 2, i * 2 + 2);
+		if (!HEX_PAIR.test(pair)) return undefined;
+		out[i] = Number.parseInt(pair, 16);
 	}
 	return out;
 }
@@ -115,13 +126,10 @@ export async function verifyOfferAcceptance(
 	} catch {
 		return false;
 	}
+	const signature = hexToBytes(signatureHex);
+	if (signature === undefined) return false;
 	try {
-		return await crypto.subtle.verify(
-			"Ed25519",
-			publicKey,
-			hexToBytes(signatureHex),
-			payload,
-		);
+		return await crypto.subtle.verify("Ed25519", publicKey, signature, payload);
 	} catch {
 		return false;
 	}

@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+from typing import Any
 
 import pytest
 
@@ -55,6 +56,17 @@ UNREACHABLE: dict[str, str] = {}
 
 def _exports(path: pathlib.Path) -> dict[str, str]:
     return json.loads(path.read_text(encoding="utf-8"))["exports"]
+
+
+def _manifest(path: pathlib.Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+#: The manifest members that decide whether a declared module actually RESOLVES once
+#: installed. The export map alone does not: `./resolvers` was exported and still
+#: unimportable, because the root manifest did not depend on undici. A guard that compared
+#: only the map would not have caught that, and would not catch it recurring.
+_DEPENDENCY_KEYS = ("dependencies", "peerDependencies", "peerDependenciesMeta")
 
 
 @pytest.fixture(scope="module")
@@ -111,3 +123,28 @@ def test_unreachable_entries_are_used_and_necessary(maps) -> None:
         assert key not in root, (
             f"stale entry: {key} IS mirrored into the root map now — drop it from UNREACHABLE"
         )
+
+
+@pytest.mark.parametrize("key", _DEPENDENCY_KEYS)
+def test_the_two_manifests_agree_on_what_a_declared_module_needs(key: str) -> None:
+    """The root map is what a consumer resolves through, so it needs sdk/ts's dependencies.
+
+    The bug this guards is not hypothetical and was not an export-map bug: ``./resolvers``
+    was declared in both maps and still failed to import, because the root manifest did not
+    list undici. Whether a module resolves depends on the dependency block as much as on
+    the map, and ``peerDependenciesMeta`` is part of it — a peer marked optional in one
+    manifest and required in the other changes whether an install succeeds at all.
+    """
+    root, sdk = _manifest(_ROOT_PKG), _manifest(_SDK_TS_PKG)
+    theirs, ours = sdk.get(key, {}), root.get(key, {})
+    missing = {k: v for k, v in theirs.items() if k not in ours}
+    differing = {k: (v, ours[k]) for k, v in theirs.items() if k in ours and ours[k] != v}
+    assert not missing, (
+        f"root package.json is missing {key} that sdk/ts declares: {missing}. "
+        "A consumer resolves through the root manifest, so a module needing these cannot "
+        "be imported."
+    )
+    assert not differing, (
+        f"root and sdk/ts disagree on {key}: "
+        + ", ".join(f"{k}: sdk/ts={s!r} root={r!r}" for k, (s, r) in differing.items())
+    )

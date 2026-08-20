@@ -23,6 +23,8 @@ package conformance
 // an explicit json_name→name map generated from this descriptor. Do not relax the guard.
 
 import (
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"unicode"
@@ -30,12 +32,21 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// snakeFromJSONName is the inverse the SDKs apply, transcribed here so the guard tests
-// the real rule rather than a paraphrase of it.
+// snakeFromJSONName is the inverse the SDKs apply. It is not free-floating: the test
+// below replays the committed wire-names corpus through it, so this copy and the three
+// SDK copies are held to one set of answers rather than to each other's good intentions.
+// That corpus is read as DATA, the way conformance reads every SDK-owned value — this
+// tier sits BELOW the SDKs and imports none of them.
+//
+// ASCII A-Z is the whole boundary test. protoc derives json_name by capitalizing the
+// character after each underscore, and a proto field name is [a-z_][a-z0-9_]*, so nothing
+// else can be a boundary. A Unicode uppercase predicate answers differently for characters
+// protojson never emits, which is exactly how three transcriptions of this rule drifted
+// apart before the corpus existed.
 func snakeFromJSONName(jsonName string) string {
 	var b strings.Builder
 	for _, r := range jsonName {
-		if unicode.IsUpper(r) {
+		if r >= 'A' && r <= 'Z' {
 			b.WriteByte('_')
 			b.WriteRune(unicode.ToLower(r))
 			continue
@@ -43,6 +54,40 @@ func snakeFromJSONName(jsonName string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// wireNamesVectors is the SDK-owned corpus this guard shares. Read by path rather than
+// imported: conformance depends on nothing under sdk/, and a data read does not change
+// that.
+const wireNamesVectors = "../sdk/go/helpers/testdata/wire-names-vectors.json"
+
+// TestJSONNameInverseMatchesTheSharedCorpus keeps this guard's rule and the SDKs' rule the
+// same rule. Without it the two are transcriptions that happen to agree today, which is
+// the state the corpus was introduced to end.
+func TestJSONNameInverseMatchesTheSharedCorpus(t *testing.T) {
+	raw, err := os.ReadFile(wireNamesVectors)
+	if err != nil {
+		t.Fatalf("read %s: %v", wireNamesVectors, err)
+	}
+	var doc struct {
+		Snake []struct {
+			Name     string `json:"name"`
+			JSONName string `json:"json_name"`
+			Snake    string `json:"snake"`
+		} `json:"snake_from_json_name"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse %s: %v", wireNamesVectors, err)
+	}
+	if len(doc.Snake) == 0 {
+		t.Fatalf("%s carries no name vectors — this guard would assert nothing", wireNamesVectors)
+	}
+	for _, v := range doc.Snake {
+		if got := snakeFromJSONName(v.JSONName); got != v.Snake {
+			t.Errorf("%s: snakeFromJSONName(%q) = %q, corpus says %q",
+				v.Name, v.JSONName, got, v.Snake)
+		}
+	}
 }
 
 func TestJSONNameInverseRecoversEveryFieldName(t *testing.T) {

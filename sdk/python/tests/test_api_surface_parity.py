@@ -183,11 +183,21 @@ def enumerate_python() -> set[str]:
     the client tier owns — bounds and timeouts belong beside the client that applies them
     rather than in a namespace of ninety names. Reading each package's ``__all__`` is what
     keeps those in scope, the same way ``resolvers`` was brought in when it landed.
+
+    ``ramp_sdk.sync`` is read for the same reason and was missed for the same one: it is a
+    public face a caller imports by name, so a symbol that exists only there was invisible
+    to this gate — the blocking Client and BrokerClient among them.
     """
     import ramp_sdk
     from ramp_sdk import client, resolvers
+    from ramp_sdk import sync as blocking
 
-    return set(ramp_sdk.__all__) | set(resolvers.__all__) | set(client.__all__)
+    return (
+        set(ramp_sdk.__all__)
+        | set(resolvers.__all__)
+        | set(client.__all__)
+        | set(blocking.__all__)
+    )
 
 
 _TS_INLINE_RE = re.compile(
