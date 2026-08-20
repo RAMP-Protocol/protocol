@@ -76,13 +76,21 @@ func parseRef(ref string) (parsed *url.URL, hadScheme bool, err error) {
 	}
 	// One colon separates a host from its port, and a second one means the value is
 	// not a host[:port] at all. Decided HERE rather than left to net/url, because
-	// there it is a GODEBUG: urlstrictcolons defaults on only for modules declaring
-	// go 1.26, and the default is read from the MAIN module — so a consumer on an
-	// older directive got "exchange.example::443", "a.example:44:3" and five near
-	// relatives accepted, while the corpus this module publishes records them
-	// refused. A rule that answers differently depending on who builds it is not the
-	// rule; stating it in the code makes the committed vectors true for every
-	// consumer rather than only for this repo's CI.
+	// there it is a GODEBUG — urlstrictcolons — and a GODEBUG is something the
+	// consumer sets, not this module. With urlstrictcolons=0, from the environment
+	// or a //go:debug line, url.Parse accepts "exchange.example::443",
+	// "a.example:44:3" and five near relatives that the corpus this module publishes
+	// records refused.
+	//
+	// That is not a hypothetical misuse: GODEBUG exists so an operator can back out
+	// of a behaviour change, and one set for an unrelated URL reason would silently
+	// loosen a predicate that stands in front of a signed call. A rule that answers
+	// differently depending on how the consumer is configured is not the rule.
+	//
+	// The DEFAULT is not the reachable path, whatever the setting's documentation
+	// suggests: it derives from the main module's go directive, and a main module
+	// cannot declare below this one's 1.26 — the build is refused before any of this
+	// runs.
 	//
 	// Counted after the closing bracket when there is one, since the colons inside
 	// an IPv6 literal are the address, not separators.

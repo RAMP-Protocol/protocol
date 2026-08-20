@@ -248,12 +248,13 @@ host is reserved. The address/scheme decisions are corpus-locked
 - **Cross-field CEL is pinned** to `conformance/corpus/crossfield.json`, generated
   by the same protovalidate oracle the rest of the conformance suite uses.
 - Covered by the repo gate: `go build/vet/test ./...` via `scripts/ci-local.sh`.
-- **The host rule does not depend on who builds it.** `net/url`'s host-colon
-  strictness is the `urlstrictcolons` GODEBUG, which defaults on only for modules
-  declaring `go` 1.26 — and that default is read from the **main** module, so it is
-  the consumer's directive that decides, never this one's. `helpers.parseRef`
-  therefore refuses a second colon after the host itself rather than leaving it to
-  the parser, and a guard asserts the refusal through the predicate rather than
-  through `url.Parse`, so it means the same thing under either setting. The
-  committed conformance vectors are true for every consumer, not only for this
-  repo's CI.
+- **The host rule does not depend on how the consumer is configured.** `net/url`'s
+  host-colon strictness is the `urlstrictcolons` GODEBUG, and a GODEBUG is the
+  consumer's to set: under `urlstrictcolons=0` — from the environment or a
+  `//go:debug` line — `url.Parse` accepts `exchange.example::443` and six near
+  relatives the committed vectors record refused. `helpers.parseRef` therefore
+  refuses a second colon after the host itself, and the guard asserts that through
+  the predicate rather than through `url.Parse`, so it means the same thing under
+  either setting. (The setting's *default* is not the reachable path: it derives from
+  the main module's `go` directive, and a main module cannot declare below this
+  module's 1.26 — the build is refused first.)

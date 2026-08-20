@@ -10,13 +10,13 @@ import (
 // TestHostRuleRefusesDoubledColonsWhoeverBuildsIt pins that the doubled-colon
 // refusal is the RULE's, not the toolchain's.
 //
-// net/url's host-colon strictness is a GODEBUG, urlstrictcolons, and it defaults on
-// only for modules declaring go >= 1.26 — read from the MAIN module, so a consumer
-// on an older directive built these predicates with url.Parse accepting
-// "https://exchange.example::443" and got a looser rule than the corpus publishes.
-// parseRef decides the colon itself now, which is why the assertion below is on the
-// predicate rather than on url.Parse: it holds under either setting, and a test that
-// asked url.Parse could only ever report on the toolchain that ran it.
+// net/url's host-colon strictness is a GODEBUG, urlstrictcolons, and a GODEBUG is
+// the consumer's to set: with urlstrictcolons=0 — from the environment or a
+// //go:debug line — url.Parse accepts "https://exchange.example::443" and these
+// predicates would answer looser than the corpus publishes. parseRef decides the
+// colon itself now, which is why the assertion below is on the predicate rather than
+// on url.Parse: it holds under either setting, where a test that asked url.Parse
+// could only ever report on the configuration that ran it.
 //
 // The second half is the part a strictness check cannot state. Every relative here
 // must keep its committed answer, or "refuse a doubled colon" quietly becomes

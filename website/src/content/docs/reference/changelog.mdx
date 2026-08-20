@@ -45,14 +45,16 @@ covers fails CI instead of shipping, and the corpus covers the rule's boundaries
 rather than every string a caller can construct. Per-language surface:
 `docs/sdk-parity-matrix.md`.
 
-One consequence for Go consumers on an older toolchain. `net/url`'s host-colon
-strictness is the `urlstrictcolons` GODEBUG, and its default comes from the MAIN
-module's `go` directive — so a consumer declaring below 1.26 built `helpers.IsBareHost`
-against a parser that accepted `exchange.example::443`, `exchange.example:44:3` and five
-near relatives, while the vectors this repo publishes record every one of them refused.
-A rule whose answer depends on who compiles it is not the rule, so the second colon is
-now refused by the predicate itself. Such a consumer gets refusals it previously did
-not; a consumer already on 1.26 sees no change, and no committed vector moves.
+One consequence for Go consumers who set a GODEBUG. `net/url`'s host-colon strictness
+is the `urlstrictcolons` setting, and a GODEBUG belongs to whoever builds the program:
+under `urlstrictcolons=0`, from the environment or a `//go:debug` line,
+`helpers.IsBareHost` was reading `exchange.example::443`, `exchange.example:44:3` and
+five near relatives through a parser that accepts them, while the vectors this repo
+publishes record every one of them refused. GODEBUG exists so an operator can back out
+of a behaviour change, so one set for an unrelated URL reason would quietly loosen a
+predicate standing in front of a signed call. The second colon is refused by the
+predicate itself now. A consumer running the default posture sees no change, and no
+committed vector moves.
 
 **The registration schema's rules become checkable, and two of them were wrong
 (comment-only, no wire change).** The previous revision stated a rule set for
