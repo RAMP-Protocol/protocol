@@ -32,6 +32,20 @@ const credentialRefs = [
 	`https://u%zz:${SECRET}@exchange.example/v1`,
 	`u:${SECRET}@exchange.example`,
 	`https://u:${SECRET}@`,
+	// Every shape above carries a well-formed prefix, so none of them can reach a
+	// redactor that disagrees with the parse about where the authority starts. These
+	// are that class: a "://" that is not a scheme separator, and an authority opened
+	// by a bare "//" with no "://" in the reference at all.
+	`u:${SECRET}@evil.example/x://a.example`,
+	`ftp:${SECRET}@a.example://x`,
+	`u:${SECRET}@a.example?q=x://y`,
+	`u:${SECRET}@a.example#f://y`,
+	`//u:${SECRET}@a.example`,
+	// A scheme may not begin with a digit, so the parse refuses this outright — but
+	// the credential still sits behind a "://" that a laxer reader would take for a
+	// separator. Pinned because a redactor that reads ONLY by the parse's rule
+	// leaves it untouched.
+	`1https://u:${SECRET}@a.example/`,
 ];
 
 const serving = (endpoint: string): FetchLike => async () => ({

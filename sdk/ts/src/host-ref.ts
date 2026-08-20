@@ -25,14 +25,66 @@ export function invalidHost(ref: string, why: string): Error {
 	);
 }
 
+/** Split what follows an authority's start into the authority and everything after.
+ *
+ * The authority ends at the first delimiter that starts a path, query or fragment —
+ * the three things a reference can carry beyond it.
+ *
+ * One function because the parse and the redaction have to agree on where it ends.
+ * Written twice, a change to the delimiter set moves one copy and not the other, and
+ * the two then read different authorities — a split reading inside the module that
+ * exists to prevent split readings. */
+function splitAuthority(rest: string): [string, string] {
+	const end = rest.search(/[/?#]/);
+	return end < 0 ? [rest, ""] : [rest.slice(0, end), rest.slice(end)];
+}
+
+/** Every index at which an authority could plausibly begin, most authoritative
+ * first, de-duplicated.
+ *
+ * A reference the parse has REFUSED has no one true reading — that is what being
+ * refused means — so the redaction cannot pick a single one and be safe. Each of
+ * these is a reading something could take:
+ *
+ * - past a valid scheme at the front, which is how the parse reads it;
+ * - index 2 behind a bare `//`, which opens an authority while naming no scheme and
+ *   carries no `://` anywhere;
+ * - index 0, a schemeless `host` or `user:pw@host`;
+ * - past the first `://` in the string, which is not a scheme separator to this
+ *   parse but is what a laxer reader downstream may take it for.
+ *
+ * Taking only the first of these traded one leak for another: reading solely by
+ * search let a path segment supply the start, so `u:pw@evil.example/x://a.example`
+ * came back untouched — and reading solely by the parse's rule then left
+ * `1https://u:pw@a.example/` untouched instead, because a scheme may not begin with
+ * a digit. */
+function authorityStarts(ref: string): number[] {
+	const scheme = schemeAtFront.exec(ref);
+	const starts: number[] = [];
+	if (scheme !== null) {
+		starts.push(scheme[0].length);
+	}
+	if (ref.startsWith("//")) {
+		starts.push(2);
+	}
+	starts.push(0);
+	const sep = ref.indexOf("://");
+	if (sep >= 0) {
+		starts.push(sep + 3);
+	}
+	return [...new Set(starts)];
+}
+
 /** Replace any userinfo in a reference with a marker, so a message built from it
  * cannot carry a credential.
  *
  * Deliberately conservative, and deliberately NOT the rule: it runs on strings the
  * parse has already refused, so it cannot assume they are well formed, and
- * over-redacting a message costs nothing while under-redacting is the bug. It looks
- * only for an "@" in what could be the authority, which is why an "@" in a path is
- * left alone.
+ * over-redacting a message costs nothing while under-redacting is the bug. It
+ * redacts at the FIRST reading in authorityStarts that finds an "@", rather than
+ * deciding on one reading — a credential any reader could see is one that must not
+ * reach a log. It looks only for an "@" in what could be the authority, which is why
+ * an "@" in a path is left alone.
  *
  * The whole userinfo goes, not just the password. Go's own url.URL.Redacted() keeps
  * the username, which is right for a URL the caller owns — but this value arrives in
@@ -43,16 +95,14 @@ export function invalidHost(ref: string, why: string): Error {
  * shared corpus records a verdict and never a message, precisely so each language can
  * phrase its errors its own way. Do not "restore" this to match Go. */
 export function redactUserinfo(ref: string): string {
-	const sep = ref.indexOf("://");
-	const start = sep < 0 ? 0 : sep + 3;
-	const rest = ref.slice(start);
-	const end = rest.search(/[/?#]/);
-	const authority = end < 0 ? rest : rest.slice(0, end);
-	const at = authority.lastIndexOf("@");
-	if (at < 0) {
-		return ref;
+	for (const start of authorityStarts(ref)) {
+		const [authority, beyond] = splitAuthority(ref.slice(start));
+		const at = authority.lastIndexOf("@");
+		if (at >= 0) {
+			return `${ref.slice(0, start)}[redacted]${authority.slice(at)}${beyond}`;
+		}
 	}
-	return `${ref.slice(0, start)}[redacted]${authority.slice(at)}${end < 0 ? "" : rest.slice(end)}`;
+	return ref;
 }
 
 // An authority admits a CLOSED set of ASCII characters; everything outside it is
@@ -134,12 +184,7 @@ export function parseRef(ref: string): ParsedRef {
 	const sep = work.indexOf("://");
 	const scheme = hadScheme ? work.slice(0, sep).toLowerCase() : "https";
 
-	// The authority ends at the first delimiter that starts a path, query or
-	// fragment — the three things a reference can carry beyond it.
-	const rest = work.slice(sep + 3);
-	const end = rest.search(/[/?#]/);
-	const authority = end < 0 ? rest : rest.slice(0, end);
-	const beyond = end < 0 ? "" : rest.slice(end);
+	const [authority, beyond] = splitAuthority(work.slice(sep + 3));
 
 	// Escapes are read PER COMPONENT, because the oracle reads them per component.
 	// A malformed escape is refused in a path and in a fragment, and admitted in a

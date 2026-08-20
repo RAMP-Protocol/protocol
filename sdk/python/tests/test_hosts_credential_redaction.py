@@ -38,6 +38,20 @@ _CREDENTIAL_REFS = [
     f"https://u%zz:{_SECRET}@exchange.example/v1",
     f"u:{_SECRET}@exchange.example",
     f"https://u:{_SECRET}@",
+    # Every shape above carries a well-formed prefix, so none of them can reach a
+    # redactor that disagrees with the parse about where the authority starts.
+    # These are that class: a "://" that is not a scheme separator, and an authority
+    # opened by a bare "//" with no "://" in the reference at all.
+    f"u:{_SECRET}@evil.example/x://a.example",
+    f"ftp:{_SECRET}@a.example://x",
+    f"u:{_SECRET}@a.example?q=x://y",
+    f"u:{_SECRET}@a.example#f://y",
+    f"//u:{_SECRET}@a.example",
+    # A scheme may not begin with a digit, so the parse refuses this outright —
+    # but the credential still sits behind a "://" that a laxer reader would take
+    # for a separator. Pinned because a redactor that reads ONLY by the parse's
+    # rule leaves it untouched.
+    f"1https://u:{_SECRET}@a.example/",
 ]
 
 

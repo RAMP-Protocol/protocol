@@ -73,15 +73,68 @@ _DEL = 0x7F
 _CONTROL_MAX = 0x20
 
 
+def _split_authority(rest: str) -> tuple[str, str]:
+    """Split what follows an authority's start into the authority and everything after.
+
+    The authority ends at the first delimiter that starts a path, query or fragment
+    — the three things a reference can carry beyond it.
+
+    One function because the parse and the redaction have to agree on where it ends.
+    Written twice, a change to the delimiter set moves one copy and not the other,
+    and the two then read different authorities — a split reading inside the module
+    that exists to prevent split readings.
+    """
+    for i, c in enumerate(rest):
+        if c in "/?#":
+            return rest[:i], rest[i:]
+    return rest, ""
+
+
+def _authority_starts(ref: str) -> tuple[int, ...]:
+    """Every index at which an authority could plausibly begin, most authoritative
+    first, de-duplicated.
+
+    A reference the parse has REFUSED has no one true reading — that is what being
+    refused means — so the redaction cannot pick a single one and be safe. Each of
+    these is a reading something could take:
+
+    - past a valid scheme at the front, which is how the parse reads it;
+    - index 2 behind a bare ``//``, which opens an authority while naming no scheme
+      and carries no ``://`` anywhere;
+    - index 0, a schemeless ``host`` or ``user:pw@host``;
+    - past the first ``://`` in the string, which is not a scheme separator to this
+      parse but is what a laxer reader downstream may take it for.
+
+    Taking only the first of these traded one leak for another: reading solely by
+    search let a path segment supply the start, so ``u:pw@evil.example/x://a.example``
+    came back untouched — and reading solely by the parse's rule then left
+    ``1https://u:pw@a.example/`` untouched instead, because a scheme may not begin
+    with a digit.
+    """
+    scheme = _SCHEME_AT_FRONT.match(ref)
+    starts = []
+    if scheme is not None:
+        starts.append(scheme.end())
+    if ref.startswith("//"):
+        starts.append(2)
+    starts.append(0)
+    sep = ref.find("://")
+    if sep >= 0:
+        starts.append(sep + 3)
+    return tuple(dict.fromkeys(starts))
+
+
 def _redact_userinfo(ref: str) -> str:
     """Replace any userinfo in a reference with a marker, so a message built from it
     cannot carry a credential.
 
     Deliberately conservative, and deliberately NOT the rule: it runs on strings the
     parse has already refused, so it cannot assume they are well formed, and
-    over-redacting a message costs nothing while under-redacting is the bug. It looks
-    only for an ``@`` in what could be the authority, which is why an ``@`` in a path
-    is left alone.
+    over-redacting a message costs nothing while under-redacting is the bug. It
+    redacts at the FIRST reading in :func:`_authority_starts` that finds an ``@``,
+    rather than deciding on one reading — a credential any reader could see is one
+    that must not reach a log. It looks only for an ``@`` in what could be the
+    authority, which is why an ``@`` in a path is left alone.
 
     The whole userinfo goes, not just the password. Go's own ``url.URL.Redacted()``
     keeps the username, which is right for a URL the caller owns — but this value
@@ -92,18 +145,12 @@ def _redact_userinfo(ref: str) -> str:
     shared corpus records a verdict and never a message, precisely so each language
     can phrase its errors its own way. Do not "restore" this to match Go.
     """
-    sep = ref.find("://")
-    start = 0 if sep < 0 else sep + 3
-    rest = ref[start:]
-    authority, beyond = rest, ""
-    for i, c in enumerate(rest):
-        if c in "/?#":
-            authority, beyond = rest[:i], rest[i:]
-            break
-    at = authority.rfind("@")
-    if at < 0:
-        return ref
-    return f"{ref[:start]}[redacted]{authority[at:]}{beyond}"
+    for start in _authority_starts(ref):
+        authority, beyond = _split_authority(ref[start:])
+        at = authority.rfind("@")
+        if at >= 0:
+            return f"{ref[:start]}[redacted]{authority[at:]}{beyond}"
+    return ref
 
 
 def _invalid_host(ref: str, why: str) -> ValueError:
@@ -122,23 +169,17 @@ def _invalid_host(ref: str, why: str) -> ValueError:
 def _split_components(rest: str) -> tuple[str, str, str]:
     """Split what follows ``://`` into its authority, its path and its fragment.
 
-    The authority ends at the first delimiter that starts a path, query or fragment
-    — the three things a reference can carry beyond it. They are separated because
-    escapes are read PER COMPONENT, exactly as the oracle reads them: a malformed
-    escape is refused in a path and in a fragment, and admitted in a query, which is
-    not unescaped at parse time. Checking the whole reference instead refused
-    ``?q=a%20b``, an ordinary conformant endpoint.
+    The three are separated because escapes are read PER COMPONENT, exactly as the
+    oracle reads them: a malformed escape is refused in a path and in a fragment,
+    and admitted in a query, which is not unescaped at parse time. Checking the
+    whole reference instead refused ``?q=a%20b``, an ordinary conformant endpoint.
 
     The fragment is cut FIRST, and that ordering is the rule rather than a detail:
     everything after the first ``#`` is fragment, so a ``?`` inside one does not
     start a query. Reading the query first leaves ``/#a?b=%zz`` looking like a query
     and admits a malformed escape the oracle refuses.
     """
-    authority, beyond = rest, ""
-    for i, c in enumerate(rest):
-        if c in "/?#":
-            authority, beyond = rest[:i], rest[i:]
-            break
+    authority, beyond = _split_authority(rest)
     before_fragment, _, fragment = beyond.partition("#")
     path = before_fragment.partition("?")[0]
     return authority, path, fragment
