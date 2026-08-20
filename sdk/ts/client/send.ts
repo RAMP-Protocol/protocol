@@ -65,7 +65,7 @@ export function createUnarySend(opts: SendOptions): UnarySend {
 		});
 		return {
 			status: response.statusCode,
-			body: await readBounded(response.body, req.maxBytes),
+			body: await readBounded(response.body, req.maxBytes, req.op),
 		};
 	};
 }
@@ -80,6 +80,7 @@ export function createUnarySend(opts: SendOptions): UnarySend {
 export async function readBounded(
 	body: AsyncIterable<Uint8Array>,
 	maxBytes: number,
+	op = "read response",
 ): Promise<string> {
 	const chunks: Uint8Array[] = [];
 	let total = 0;
@@ -88,7 +89,7 @@ export async function readBounded(
 		if (total > maxBytes) {
 			throw new RampCallError({
 				kind: "too_large",
-				op: "read response",
+				op,
 				cause: new Error(`body exceeds the ${maxBytes} byte cap`),
 			});
 		}

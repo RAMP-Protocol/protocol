@@ -35,6 +35,7 @@ from .errors import (
     NOT_CANONICAL_WIRE_NAMING,
     CallError,
     CallErrorKind,
+    connect_code_from_status,
     kind_of_connect_code,
     malformed,
 )
@@ -145,6 +146,22 @@ def validate_request(
         ) from exc
 
 
+def decode_with_raw(
+    op: str, status: int, body: str, model: type[BaseModel]
+) -> tuple[Any, dict[str, Any]]:
+    """Decode one answer and hand back the RAW object beside the parsed message.
+
+    Discovery needs both and they must be the same read: the parse is the GATE — it proves
+    the answer well formed and its field names canonical — while offer verification has to
+    run over what the responder actually sent, because a parse fills declared defaults and
+    a signature covers no such thing. Parsing the body twice would be a second read of the
+    same bytes for no gain.
+    """
+    payload = _parse_json(op, status, body)
+    parsed = _validate(op, status, payload, model)
+    return parsed, payload if isinstance(payload, dict) else {}
+
+
 def decode(op: str, status: int, body: str, model: type[BaseModel]) -> Any:
     """Turn one answer into a parsed message, or raise the typed failure.
 
@@ -153,7 +170,10 @@ def decode(op: str, status: int, body: str, model: type[BaseModel]) -> Any:
     including the lowerCamelCase ``debug`` projection connect-go emits there and no server
     codec replaces.
     """
-    payload = _parse_json(op, status, body)
+    return _validate(op, status, _parse_json(op, status, body), model)
+
+
+def _validate(op: str, status: int, payload: Any, model: type[BaseModel]) -> Any:
     if not _HTTP_OK <= status < _HTTP_MULTIPLE_CHOICES:
         raise _connect_envelope_error(op, status, payload)
     try:
@@ -182,10 +202,20 @@ def _parse_json(op: str, status: int, body: str) -> Any:
     try:
         return json.loads(body or "{}")
     except ValueError as exc:
-        # A body that is not JSON is not an answer this protocol defines, whatever the
-        # status said. Reported as malformed rather than as the status's own class,
-        # because the status is the peer's claim about a body that turned out not to
-        # exist.
+        # A non-2xx body that is not JSON did not come from the service: it is a gateway,
+        # a proxy or a load balancer answering for it. The STATUS is then the only thing
+        # that classifies it, which is what connect-go does with the same answer — and
+        # calling a momentary 502 malformed would put a retryable outage in the "this peer
+        # is broken" class. A 2xx that is not JSON is a different thing: the service
+        # claimed to answer and did not, which IS malformed.
+        if not _HTTP_OK <= status < _HTTP_MULTIPLE_CHOICES:
+            raise CallError(
+                kind_of_connect_code(connect_code_from_status(status)),
+                op,
+                status=status,
+                reason=connect_code_from_status(status),
+                cause=exc,
+            ) from exc
         raise CallError(CallErrorKind.MALFORMED, op, status=status, cause=exc) from exc
 
 
@@ -193,9 +223,15 @@ def _connect_envelope_error(op: str, status: int, payload: Any) -> CallError:
     envelope = payload if isinstance(payload, dict) else {}
     code = envelope.get("code")
     code = code if isinstance(code, str) else ""
+    # An envelope carrying no code is not a verdict the peer reached, so the STATUS decides
+    # the class — which is what connect-go does with the same answer. Reporting a draining
+    # gateway's 503 as a refusal tells a caller not to retry a usage report that would
+    # succeed a moment later.
+    if not code:
+        code = connect_code_from_status(status)
     message = envelope.get("message")
     return CallError(
-        kind_of_connect_code(code) if code else CallErrorKind.REFUSED,
+        kind_of_connect_code(code),
         op,
         status=status,
         # The peer's own token, which is the Connect code here. A caller that wants more

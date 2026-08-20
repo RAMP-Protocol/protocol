@@ -12,7 +12,6 @@ it hands back.
 from __future__ import annotations
 
 import copy
-import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -46,6 +45,7 @@ from ._call import (
     DEFAULT_MAX_RPC_READ_BYTES,
     Validation,
     decode,
+    decode_with_raw,
     prepare,
     rpc_url,
     validate_request,
@@ -156,8 +156,7 @@ def plan_discover(cfg: ClientConfig, query: dict[str, Any]) -> Plan:
 
 
 def finish_discover(cfg: ClientConfig, plan: Plan, status: int, body: str) -> DiscoveryResult:
-    msg = decode(plan.op, status, body, ResourceResponse)
-    raw = _raw_object(body)
+    msg, raw = decode_with_raw(plan.op, status, body, ResourceResponse)
     return DiscoveryResult(
         # The offers are read from the RAW answer, not the parsed one. A model parse is
         # the GATE — it proves the answer well formed and its field names canonical — but
@@ -166,7 +165,10 @@ def finish_discover(cfg: ClientConfig, plan: Plan, status: int, body: str) -> Di
         # signature covers what the responder sent.
         groups=_discovered_groups(cfg.resolved_verifier(), plan.sent, raw),
         exchange=msg.exchange or "",
-        rate_limit=raw.get("rate_limit") if isinstance(raw.get("rate_limit"), dict) else None,
+        # From the PARSED message, unlike the offers above: a rate limit is the SDK's own
+        # answer to the caller rather than bytes a signature covers, so it goes through the
+        # schema like every other field. TypeScript hands back the parsed value too.
+        rate_limit=msg.rate_limit.model_dump() if msg.rate_limit is not None else None,
     )
 
 
@@ -263,8 +265,7 @@ def finish_resolve(cfg: ClientConfig, plan: Plan, status: int, body: str) -> Dis
     A resolve that finds nothing is a SUCCESSFUL answer carrying a typed reason, not a
     failure.
     """
-    msg = decode(plan.op, status, body, DiscoveryResponse)
-    raw = _raw_object(body)
+    msg, raw = decode_with_raw(plan.op, status, body, DiscoveryResponse)
     groups = raw.get("offer_groups")
     return DiscoveryResult(
         groups=cfg.resolved_verifier().sort_groups(
@@ -533,13 +534,6 @@ def _plan(
         sent=sent,
     )
 
-
-def _raw_object(body: str) -> dict[str, Any]:
-    try:
-        parsed = json.loads(body or "{}")
-    except ValueError:  # pragma: no cover - decode() already refused this body
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
 
 
 def _str_field(record: dict[str, Any] | None, key: str) -> str:

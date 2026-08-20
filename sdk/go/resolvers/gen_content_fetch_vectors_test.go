@@ -104,6 +104,11 @@ func contentFetchCases() []struct {
 		{"refused_leading_digit_reason", 403, `{"reason":"4xx"}`, "application/json"},
 		{"refused_reason_not_a_string", 403, `{"reason":42}`, "application/json"},
 		{"refused_no_reason_member", 403, `{"error":"denied"}`, "application/json"},
+		// A token with a trailing newline. Every anchor here means end-of-INPUT, so it is
+		// not token-shaped — and the token is echoed into a caller's logs, so an anchor
+		// that admitted the newline would be admitting log injection. Python's `$` does,
+		// which is why this is a vector rather than a comment.
+		{"refused_reason_trailing_newline", 403, "{\"reason\":\"url_expired\\n\"}", "application/json"},
 		{"refused_body_not_json", 403, "<html>403</html>", "text/html"},
 		{"refused_empty_body", 401, "", ""},
 

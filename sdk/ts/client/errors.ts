@@ -129,6 +129,36 @@ export function malformed(op: string, cause: unknown): RampCallError {
  * seen. `resource_exhausted` is the read cap seen from this side: the peer's answer was
  * larger than the client agreed to read.
  */
+/**
+ * The Connect code a status implies when the body is not an envelope that names one.
+ *
+ * connect-go derives the code from the HTTP STATUS in exactly two cases: a body it cannot
+ * read as an envelope, and an envelope carrying no code. Both are what a deployment's own
+ * infrastructure produces — a gateway draining, a proxy answering with its own HTML page —
+ * and the difference between "the Exchange declined this" and "nothing answered" is the
+ * whole reason the failure classes exist. Anything not listed is `unknown`, which reads as
+ * a refusal.
+ *
+ * Not a rule invented here: it is connect-go's own table (protocol.go, httpToCode), and
+ * the transport-failure corpus is captured from a real client so a future change to it is
+ * reported rather than mirrored by hand.
+ */
+const STATUS_CODES: Readonly<Record<number, string>> = {
+	400: "internal",
+	401: "unauthenticated",
+	403: "permission_denied",
+	404: "unimplemented",
+	429: "unavailable",
+	502: "unavailable",
+	503: "unavailable",
+	504: "unavailable",
+};
+
+/** The Connect code a non-envelope answer carries, derived from its status. */
+export function connectCodeFromStatus(status: number): string {
+	return STATUS_CODES[status] ?? "unknown";
+}
+
 export function kindOfConnectCode(code: string): CallErrorKind {
 	switch (code) {
 		case "unavailable":

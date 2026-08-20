@@ -12,6 +12,9 @@ import json
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
+
+import httpx
 
 from ramp_sdk.errordetail import retrieval_auth_failure_detail
 from ramp_sdk.pop import AGENT_KEY_HEADER
@@ -21,8 +24,6 @@ from .errors import CallError, CallErrorKind
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-    import httpx
 
     from ramp_sdk.signing_transport import SigningTransport
     from ramp_sdk.window import Window
@@ -59,7 +60,11 @@ _DEFAULT_CONTENT_MIME_TYPE = "application/octet-stream"
 # promoted over this SDK's own classification. Unchecked, a publisher could answer any
 # 4 KiB of text and have it render as though the SDK had said it. Anything that is not
 # token-shaped falls back to the failure class, which the SDK does own.
-_EDGE_REASON_TOKEN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+# \Z, not $: Python's $ also matches before a trailing newline, so "denied\n" would be
+# accepted as a token here and refused by Go and TypeScript, whose anchors mean end-of-
+# input. The token is echoed into a caller's logs, so the one that admits a newline is the
+# one that admits log injection.
+_EDGE_REASON_TOKEN = re.compile(r"\A[a-z][a-z0-9_]{0,63}\Z")
 
 # The ErrorDetail domain for a refusal by a delivery edge. It is the failing surface, not
 # the fetched resource: the field is a stable grouping key for tooling, so it names the
@@ -101,6 +106,7 @@ def proof_headers(
     thumbprint of the agent's request-signing key: a proof minted under any other key
     presents an identity the URL was not issued to. Custody stays in one place.
     """
+    vet_signed_url(signed_url)
     try:
         agent_key, signature_input, signature = signer.sign_agent_binding(
             url=signed_url, window=window
@@ -122,6 +128,51 @@ def proof_headers(
     if request_id is not None:
         headers[RequestIDHeader] = request_id()
     return headers
+
+
+def vet_signed_url(signed_url: str) -> None:
+    """Refuse a delivery URL that cannot be used, before a proof is minted for it.
+
+    Two refusals, both of which Go and TypeScript already make.
+
+    A value that is not a URL at all is a caller error, and naming it here is the only
+    place it can be named: everything downstream treats the string as opaque bytes.
+
+    A URL that does not RE-SERIALIZE to itself is the subtler one. The proof covers
+    ``@target-uri`` as the verbatim string while the request line carries whatever the URL
+    re-serializes to, and the signed-URL contract treats scheme/host/path as opaque — so an
+    Exchange can legitimately mint a URL those two disagree on, a raw space in the path
+    being the reachable case. The signature then cannot verify and the edge reports an
+    undifferentiated 403, so refusing here names the cause instead.
+
+    Neither message echoes the URL: its query IS a live credential.
+    """
+    try:
+        # httpx's own parse, deliberately: what matters is whether the value the TRANSPORT
+        # will put on the request line still matches the bytes the proof covered, and only
+        # this parser answers that. urllib round-trips a raw space verbatim while httpx
+        # percent-encodes it, so checking with urllib would miss the reachable case.
+        reserialized = str(httpx.URL(signed_url))
+    except (ValueError, TypeError, httpx.InvalidURL) as exc:
+        raise CallError(
+            CallErrorKind.MALFORMED, _OP, cause=f"url is unparseable: {type(exc).__name__}"
+        ) from exc
+    parsed = urlsplit(signed_url)
+    if not parsed.scheme or not parsed.netloc:
+        raise CallError(
+            CallErrorKind.MALFORMED,
+            _OP,
+            cause="url names no scheme or no host (value withheld: it carries a live credential)",
+        )
+    if reserialized != signed_url:
+        raise CallError(
+            CallErrorKind.MALFORMED,
+            _OP,
+            cause=(
+                "url is not round-trip stable: it re-serializes to a different value "
+                "(value withheld: it carries a live credential)"
+            ),
+        )
 
 
 def read_content(

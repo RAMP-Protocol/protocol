@@ -469,7 +469,13 @@ async function execute(
 	if (offerSig === "") {
 		throw malformed(op, new Error("cannot accept an unsigned offer"));
 	}
-	const key = opts.idempotencyKey ?? generateIdempotencyKey();
+	// `??` would take an EMPTY pinned key as a value and send it, which fails the
+	// message's own min(1). An empty string is the absence of a key, as Go and Python
+	// both read it.
+	const key =
+		opts.idempotencyKey !== undefined && opts.idempotencyKey !== ""
+			? opts.idempotencyKey
+			: generateIdempotencyKey();
 	const requester = r.opts.requester;
 	// The acceptance covers the offer, the requester and the idempotency key, so a retry
 	// that pins the same key reproduces byte-identical acceptance bytes. That is the
@@ -697,11 +703,14 @@ function stampEnvelope(
 	const sent = clone(op, message);
 	if (sent["ver"] === undefined || sent["ver"] === "") sent["ver"] = ProtocolVersion;
 	const onMessage = sent["idempotency_key"];
+	// Each fallback is taken when the one before it is EMPTY, not merely absent: an empty
+	// pinned key is no key, which is how Go and Python both read it.
 	sent["idempotency_key"] =
-		opts.idempotencyKey ??
-		(typeof onMessage === "string" && onMessage !== ""
-			? onMessage
-			: generateIdempotencyKey());
+		opts.idempotencyKey !== undefined && opts.idempotencyKey !== ""
+			? opts.idempotencyKey
+			: typeof onMessage === "string" && onMessage !== ""
+				? onMessage
+				: generateIdempotencyKey();
 	return sent;
 }
 

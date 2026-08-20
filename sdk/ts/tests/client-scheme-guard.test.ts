@@ -22,6 +22,7 @@ const RPC_PATH = "/ramp.v1.ExchangeService/DiscoverResources";
 function unaryRequest(url: string): UnaryRequest {
 	return {
 		url,
+		op: "discover",
 		signal: new AbortController().signal,
 		// The header a plaintext dial would put on the wire.
 		headers: { "content-type": "application/json", signature: "sig1=:AAAA:" },

@@ -21,7 +21,12 @@ import {
 	ContentTypeJSON,
 	RequestIDHeader,
 } from "../src/wire.ts";
-import { kindOfConnectCode, malformed, RampCallError } from "./errors.ts";
+import {
+	connectCodeFromStatus,
+	kindOfConnectCode,
+	malformed,
+	RampCallError,
+} from "./errors.ts";
 
 /**
  * DEFAULT_MAX_RPC_READ_BYTES caps the response body a single RAMP call will read.
@@ -48,6 +53,9 @@ export interface UnaryRequest {
 	signal: AbortSignal;
 	/** The body bound the send must not read past. */
 	maxBytes: number;
+	/** The verb, so a failure raised inside the send names the call rather than the
+	 * mechanism — Go and Python both report it. */
+	op: string;
 }
 
 /** What a send returns. The body is already read, bounded, as text. */
@@ -59,6 +67,9 @@ export interface UnaryResponse {
 /**
  * The seam the transport dials through. Injected, so an edge runtime supplies its own and
  * a test drives the whole client without a socket.
+ *
+ * An implementation MUST honour `signal`: the tier above sets the call deadline on it and
+ * has no other way to stop a send that never returns. The shipped send passes it to undici.
  *
  * An implementation MUST NOT follow redirects. Following one would re-sign the caller's
  * request for a target the peer chose, after the endpoint check had already passed — a
@@ -104,7 +115,23 @@ export interface UnaryCallOptions {
  * path to some servers and a 404 from them.
  */
 export function rpcURL(target: UnaryTarget): string {
-	return `${target.baseURL.replace(/\/+$/, "")}/${target.service}/${target.method}`;
+	// Joined through URL, not concatenated: a base carrying a query or a fragment would
+	// otherwise swallow the RPC path — "https://x.test?a=1" + "/ramp.v1.…" leaves the path
+	// inside the query string, and the call reaches the origin's root.
+	const base = target.baseURL.replace(/\/+$/, "");
+	const path = `/${target.service}/${target.method}`;
+	try {
+		const url = new URL(base);
+		url.pathname = `${url.pathname.replace(/\/+$/, "")}${path}`;
+		url.search = "";
+		url.hash = "";
+		return url.toString();
+	} catch {
+		// Not a URL this runtime can parse. Left to the send to refuse, which names the
+		// value; failing here would report it as something the caller could fix by
+		// changing the RPC instead of the address.
+		return `${base}${path}`;
+	}
 }
 
 /**
@@ -127,10 +154,13 @@ export async function unaryCall(opts: UnaryCallOptions): Promise<unknown> {
 	// nothing.
 	if (opts.requestId !== undefined) headers[RequestIDHeader] = opts.requestId();
 
-	if (opts.signer !== undefined) {
-		Object.assign(headers, await signCall(opts.op, url, body, opts.signer));
-	}
-
+	// The deadline COVERS the signature rather than starting after it. Signing may reach a
+	// custody backend, and a timer started afterwards would give the send a fresh full
+	// budget on top of whatever signing already spent — so "bounds one call" would mean
+	// something different depending on how slow custody was. It does not INTERRUPT signing:
+	// WebCrypto takes no signal, so what this bounds is the total, which is the property Go
+	// gets from passing one context through both. The content leg covers proof minting the
+	// same way, and Go pins that with a test of its own.
 	const controller = new AbortController();
 	const timer = setTimeout(
 		() => controller.abort(),
@@ -138,12 +168,16 @@ export async function unaryCall(opts: UnaryCallOptions): Promise<unknown> {
 	);
 	let response: UnaryResponse;
 	try {
+		if (opts.signer !== undefined) {
+			Object.assign(headers, await signCall(opts.op, url, body, opts.signer));
+		}
 		response = await opts.send({
 			url,
 			headers,
 			body,
 			signal: controller.signal,
 			maxBytes: opts.maxBytes ?? DEFAULT_MAX_RPC_READ_BYTES,
+			op: opts.op,
 		});
 	} catch (cause) {
 		throw asCallError(opts.op, cause);
@@ -220,10 +254,22 @@ function parseJSON(op: string, response: UnaryResponse): unknown {
 	try {
 		return JSON.parse(response.body === "" ? "{}" : response.body);
 	} catch (cause) {
-		// A body that is not JSON is not an answer this protocol defines, whatever the
-		// status said. Reported as malformed rather than as the status's own class,
-		// because the status is the peer's claim about a body that turned out not to
-		// exist.
+		// A non-2xx body that is not JSON did not come from the service: it is a gateway, a
+		// proxy or a load balancer answering for it. The STATUS is then the only thing that
+		// classifies it, which is what connect-go does with the same answer — and calling a
+		// momentary 502 malformed would put a retryable outage in the "this peer is broken"
+		// class. A 2xx that is not JSON is a different thing: the service claimed to answer
+		// and did not, which IS malformed.
+		if (response.status < 200 || response.status >= 300) {
+			const code = connectCodeFromStatus(response.status);
+			throw new RampCallError({
+				kind: kindOfConnectCode(code),
+				op,
+				status: response.status,
+				reason: code,
+				cause,
+			});
+		}
 		throw new RampCallError({
 			kind: "malformed",
 			op,
@@ -239,15 +285,20 @@ function connectEnvelopeError(
 	payload: unknown,
 ): RampCallError {
 	const envelope = isRecord(payload) ? payload : {};
-	const code = typeof envelope["code"] === "string" ? envelope["code"] : "";
+	// An envelope carrying no code is not a verdict the peer reached, so the STATUS decides
+	// the class — which is what connect-go does with the same answer. Reporting a draining
+	// gateway's 503 as a refusal tells a caller not to retry a usage report that would
+	// succeed a moment later.
+	const named = typeof envelope["code"] === "string" ? envelope["code"] : "";
+	const code = named === "" ? connectCodeFromStatus(status) : named;
 	const detail = errorDetailFrom(envelope);
 	return new RampCallError({
-		kind: code === "" ? "refused" : kindOfConnectCode(code),
+		kind: kindOfConnectCode(code),
 		op,
 		status,
 		// The peer's own token, which is the Connect code here. A caller that wants more
 		// than the class reads the typed detail.
-		...(code !== "" ? { reason: code } : {}),
+		reason: code,
 		...(detail !== null ? { detail } : {}),
 		cause:
 			typeof envelope["message"] === "string" ? envelope["message"] : undefined,

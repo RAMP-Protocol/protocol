@@ -178,6 +178,17 @@
       "mime_type": ""
     },
     {
+      "name": "refused_reason_trailing_newline",
+      "status": 403,
+      "body": "{\"reason\":\"url_expired\\n\"}",
+      "content_type": "application/json",
+      "ok": false,
+      "failure": "refused",
+      "reason": "",
+      "reason_of": "refused",
+      "mime_type": ""
+    },
+    {
       "name": "refused_body_not_json",
       "status": 403,
       "body": "\u003chtml\u003e403\u003c/html\u003e",
