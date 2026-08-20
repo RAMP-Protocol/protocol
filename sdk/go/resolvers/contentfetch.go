@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
@@ -363,15 +363,26 @@ func edgeReason(r io.Reader) string {
 // the SDK does own.
 var edgeReasonToken = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
+// mediaTypeShape is type "/" subtype over RFC 9110's token characters, lowercased.
+var mediaTypeShape = regexp.MustCompile(
+	"^[!#$%&'*+.^_`|~0-9a-z-]+/[!#$%&'*+.^_`|~0-9a-z-]+$")
+
 // mimeTypeOf reduces a Content-Type to its media type, dropping parameters such
 // as charset. The charset belongs to whoever decodes the bytes; the content
 // carries the media type alone.
+//
+// The parameters are DISCARDED WITHOUT BEING PARSED, and the media type's shape is
+// checked here rather than delegated, because the three SDKs must answer one thing for
+// one header and the obvious delegation does not give them that.
+// mime.ParseMediaType reports a malformed PARAMETER as an error beside a perfectly good
+// media type, so honouring its error answers "unknown" for `text/plain; ;` — discarding
+// the one thing the field carries because of the part this function is defined to ignore.
+// It also accepts a bare token with no slash, which is not a media type at all. Both are
+// artifacts of that parser rather than decisions, and neither is reproducible in another
+// language without reimplementing RFC 2045 parameter parsing to inherit its quirks.
 func mimeTypeOf(header string) string {
-	if header == "" {
-		return defaultContentMIMEType
-	}
-	mediaType, _, err := mime.ParseMediaType(header)
-	if err != nil || mediaType == "" {
+	mediaType := strings.ToLower(strings.TrimSpace(strings.SplitN(header, ";", 2)[0]))
+	if !mediaTypeShape.MatchString(mediaType) {
 		return defaultContentMIMEType
 	}
 	return mediaType

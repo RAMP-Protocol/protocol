@@ -65,6 +65,9 @@ _EDGE_REASON_TOKEN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 # tier that refused.
 _EDGE_ERROR_DOMAIN = "ramp.v1.Edge"
 
+# type "/" subtype over RFC 9110's token characters, lowercased.
+_MEDIA_TYPE_SHAPE = re.compile(r"^[!#$%&'*+.^_`|~0-9a-z-]+/[!#$%&'*+.^_`|~0-9a-z-]+$")
+
 _OP = "fetch content"
 
 
@@ -191,13 +194,24 @@ def _edge_reason(body: bytes) -> str:
 
 
 def mime_type_of(header: str | None) -> str:
-    """Reduce a Content-Type to its media type, dropping parameters such as charset. The
-    charset belongs to whoever decodes the bytes; the content carries the media type
-    alone."""
+    """Reduce a Content-Type to its media type, dropping parameters such as charset.
+
+    The charset belongs to whoever decodes the bytes; the content carries the media type
+    alone.
+
+    The parameters are DISCARDED WITHOUT BEING PARSED, and the media type's shape is checked
+    rather than delegated to a parser, because the three SDKs must answer one thing for one
+    header. Go's stdlib parser reports a malformed PARAMETER as an error beside a perfectly
+    good media type — honouring that answers "unknown" for `text/plain; ;`, discarding the one
+    thing the field carries because of the part this is defined to ignore — and it accepts a
+    bare token with no slash, which is not a media type at all. The rule is stated instead:
+    the text before the first `;`, trimmed and lowercased, must be token "/" token over RFC
+    9110's token characters.
+    """
     if not header:
         return _DEFAULT_CONTENT_MIME_TYPE
     media_type = header.split(";", 1)[0].strip().lower()
-    return media_type or _DEFAULT_CONTENT_MIME_TYPE
+    return media_type if _MEDIA_TYPE_SHAPE.match(media_type) else _DEFAULT_CONTENT_MIME_TYPE
 
 
 def _redact(exc: BaseException) -> str:

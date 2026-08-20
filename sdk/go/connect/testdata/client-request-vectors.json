@@ -1,0 +1,68 @@
+{
+  "note": "Where each client verb sends and what it stamps, captured from the real Go client. The body's BYTES are deliberately not pinned: Go serializes through protojson and the JSON clients build the object directly, so the same message legitimately renders differently.",
+  "vectors": [
+    {
+      "name": "discover",
+      "verb": "discover",
+      "path": "/ramp.v1.ExchangeService/DiscoverResources",
+      "ver": "1.0",
+      "idempotency_key": "",
+      "key_minted": false,
+      "requester_id": "agent-1"
+    },
+    {
+      "name": "discover_caller_ver_wins",
+      "verb": "discover",
+      "path": "/ramp.v1.ExchangeService/DiscoverResources",
+      "ver": "9.9",
+      "idempotency_key": "",
+      "key_minted": false,
+      "requester_id": "agent-1"
+    },
+    {
+      "name": "report_usage_key_minted",
+      "verb": "reportUsage",
+      "path": "/ramp.v1.ExchangeService/ReportUsage",
+      "ver": "1.0",
+      "idempotency_key": "",
+      "key_minted": true,
+      "requester_id": ""
+    },
+    {
+      "name": "report_usage_caller_key_wins",
+      "verb": "reportUsage",
+      "path": "/ramp.v1.ExchangeService/ReportUsage",
+      "ver": "1.0",
+      "idempotency_key": "idem-pinned-1",
+      "key_minted": false,
+      "requester_id": ""
+    },
+    {
+      "name": "dispute_key_pinned",
+      "verb": "dispute",
+      "path": "/ramp.v1.ExchangeService/DisputeTransaction",
+      "ver": "1.0",
+      "idempotency_key": "idem-pinned-1",
+      "key_minted": false,
+      "requester_id": ""
+    },
+    {
+      "name": "execute_key_pinned",
+      "verb": "execute",
+      "path": "/ramp.v1.ExchangeService/ExecuteTransaction",
+      "ver": "1.0",
+      "idempotency_key": "idem-pinned-1",
+      "key_minted": false,
+      "requester_id": "agent-1"
+    },
+    {
+      "name": "resolve",
+      "verb": "resolve",
+      "path": "/ramp.v1.BrokerService/Resolve",
+      "ver": "1.0",
+      "idempotency_key": "",
+      "key_minted": false,
+      "requester_id": "agent-1"
+    }
+  ]
+}

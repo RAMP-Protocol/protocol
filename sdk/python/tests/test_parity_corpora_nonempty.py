@@ -98,6 +98,16 @@ _CORPUS_SPECS: list[tuple[pathlib.Path, Callable[[Any], Any], str]] = [
         _vectors,
         "connect-error-envelope",
     ),
+    (
+        GO_CONNECT_TESTDATA / "client-request-vectors.json",
+        _vectors,
+        "client-request",
+    ),
+    (
+        GO_RESOLVERS_TESTDATA / "content-fetch-vectors.json",
+        _vectors,
+        "content-fetch",
+    ),
     (CONFORMANCE_CORPUS / "crossfield.json", _whole, "crossfield"),
 ]
 

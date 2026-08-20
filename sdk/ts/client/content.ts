@@ -55,6 +55,9 @@ const EDGE_REASON_TOKEN = /^[a-z][a-z0-9_]{0,63}$/;
  * the tier that refused. */
 const EDGE_ERROR_DOMAIN = "ramp.v1.Edge";
 
+/** type "/" subtype over RFC 9110's token characters, lowercased. */
+const MEDIA_TYPE_SHAPE = /^[!#$%&'*+.^_`|~0-9a-z-]+\/[!#$%&'*+.^_`|~0-9a-z-]+$/;
+
 /** One fetched resource. */
 export interface Content {
 	/** The signed delivery URL that was fetched, echoed back so a caller correlating a
@@ -322,11 +325,20 @@ async function readText(
  * mimeTypeOf reduces a Content-Type to its media type, dropping parameters such as
  * charset. The charset belongs to whoever decodes the bytes; the content carries the
  * media type alone.
+ *
+ * The parameters are DISCARDED WITHOUT BEING PARSED, and the media type's shape is checked
+ * rather than delegated to a parser, because the three SDKs must answer one thing for one
+ * header. Go's stdlib parser reports a malformed PARAMETER as an error beside a perfectly
+ * good media type — honouring that answers "unknown" for `text/plain; ;`, discarding the one
+ * thing the field carries because of the part this is defined to ignore — and it accepts a
+ * bare token with no slash, which is not a media type at all. The rule is stated instead:
+ * the text before the first `;`, trimmed and lowercased, must be token "/" token over RFC
+ * 9110's token characters.
  */
 export function mimeTypeOf(header: string | undefined): string {
 	if (header === undefined || header === "") return DEFAULT_CONTENT_MIME_TYPE;
 	const mediaType = header.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-	return mediaType === "" ? DEFAULT_CONTENT_MIME_TYPE : mediaType;
+	return MEDIA_TYPE_SHAPE.test(mediaType) ? mediaType : DEFAULT_CONTENT_MIME_TYPE;
 }
 
 function headerValue(
