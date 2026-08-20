@@ -63,7 +63,6 @@ def _config() -> ClientConfig:
         base_url="https://exchange.test",
         requester=_REQUESTER,
         signer=SigningTransport(signer_seed=_AGENT_SEED, keyid="agent.v1"),
-        agent_seed=_AGENT_SEED,
         endpoint_resolver=_Resolver(),
     )
 

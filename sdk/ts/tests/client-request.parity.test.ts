@@ -97,7 +97,7 @@ async function call(name: string): Promise<UnaryRequest> {
 	const options = {
 		requester: REQUESTER,
 		signer: { privKey: keys.privateKey, keyid: "agent.v1" },
-		agentKeyPair: keys,
+		agentPublicKey: keys.publicKey,
 		endpointResolver,
 		send,
 		guardedSend: send,

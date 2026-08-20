@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from ramp_sdk.errordetail import retrieval_auth_failure_detail
-from ramp_sdk.pop import AGENT_KEY_HEADER, sign_agent_binding
+from ramp_sdk.pop import AGENT_KEY_HEADER
 from ramp_sdk.wire import RequestIDHeader
 
 from .errors import CallError, CallErrorKind
@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
     import httpx
 
+    from ramp_sdk.signing_transport import SigningTransport
     from ramp_sdk.window import Window
 
 #: Bounds one content fetch, in seconds. An agent is blocked on the call that triggered
@@ -87,7 +88,7 @@ class Content:
 def proof_headers(
     signed_url: str,
     *,
-    signer_seed: bytes,
+    signer: SigningTransport,
     window: Window,
     request_id: Callable[[], str] | None = None,
 ) -> dict[str, str]:
@@ -95,11 +96,14 @@ def proof_headers(
 
     Composed over the shipped RFC 9421 signer rather than restating the covered-component
     set, so the bytes stay identical to what the edge's verifier reconstructs.
+
+    It takes the request SIGNER, not key bytes, because the delivery URL is bound to the
+    thumbprint of the agent's request-signing key: a proof minted under any other key
+    presents an identity the URL was not issued to. Custody stays in one place.
     """
-    created, expires = window()
     try:
-        agent_key, signature_input, signature = sign_agent_binding(
-            url=signed_url, signer_seed=signer_seed, created=created, expires=expires
+        agent_key, signature_input, signature = signer.sign_agent_binding(
+            url=signed_url, window=window
         )
     except Exception as exc:  # custody can fail any way it likes
         # The given URL is deliberately NOT echoed: this error reaches a log, and a

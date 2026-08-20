@@ -19,7 +19,7 @@
 
 import { Agent, type Dispatcher, request as undiciRequest } from "undici";
 
-import { requireScheme, ssrfGuard } from "../resolvers/http.ts";
+import { requireScheme, skipSSRF, ssrfGuard } from "../resolvers/http.ts";
 import { RampCallError } from "./errors.ts";
 import type { UnaryRequest, UnaryResponse, UnarySend } from "./transport.ts";
 
@@ -42,9 +42,11 @@ export interface SendOptions {
  * an ordinary response this tier can classify.
  */
 export function createUnarySend(opts: SendOptions): UnarySend {
-	const dispatcher: Dispatcher = opts.guarded
-		? new Agent({ connect: ssrfGuard() })
-		: new Agent();
+	// The address guard, unless the deployment turned it off — the same SKIP_SSRF switch
+	// Go reads in NewGuardedTransport and Python in guarded_client. The scheme gate below
+	// is separate and is NOT covered by that flag; ALLOW_INSECURE is its own decision.
+	const dispatcher: Dispatcher =
+		opts.guarded && !skipSSRF() ? new Agent({ connect: ssrfGuard() }) : new Agent();
 	return async (req: UnaryRequest): Promise<UnaryResponse> => {
 		// The scheme, before the dial. ssrfGuard above is the connector — it decides what
 		// a hostname may resolve to and never sees a scheme, because by then the URL is

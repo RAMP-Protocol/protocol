@@ -192,8 +192,13 @@ function envFlag(name: string): boolean {
 	return ["true", "1"].includes((process.env[name] ?? "").toLowerCase());
 }
 
-/** Whether the dial-time address guard is disabled (SKIP_SSRF). Default: off. */
-function skipSSRF(): boolean {
+/** Whether the dial-time address guard is disabled (SKIP_SSRF). Default: off.
+ *
+ * Exported because the client tier builds its own dispatchers and has to honour the same
+ * deployment flag this tier does — Go reads it in NewGuardedTransport and Python in
+ * guarded_client, so a TypeScript client that ignored it would be the one place the
+ * documented opt-out did nothing. */
+export function skipSSRF(): boolean {
 	return envFlag("SKIP_SSRF");
 }
 

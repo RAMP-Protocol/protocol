@@ -253,19 +253,19 @@ def _fetch_inputs(
     round trip alone would leave "bounds one content fetch" untrue against a degraded
     custody service. A batch pays that cost once per item.
     """
-    if config.agent_seed is None:
+    if config.signer is None:
         raise CallError(
             CallErrorKind.NOT_SIGNABLE,
             "fetch content",
             cause=(
-                "no agent signing seed configured; a bound fetch proves possession of "
-                "the agent key"
+                "no signer configured; a bound fetch proves possession of the agent key "
+                "— the same key the request is signed with"
             ),
         )
     window = config.proof_window or clock_window(_now, DEFAULT_PROOF_WINDOW_SEC)
     headers = proof_headers(
         signed_url,
-        signer_seed=config.agent_seed,
+        signer=config.signer,
         window=window,
         request_id=config.request_id,
     )

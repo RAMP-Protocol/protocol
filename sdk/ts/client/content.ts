@@ -12,7 +12,7 @@ import type { Window } from "../core/window.ts";
 import { AGENT_KEY_HEADER } from "../src/pop.ts";
 import { retrievalAuthFailureDetail } from "../src/errordetail.ts";
 import { RequestIDHeader } from "../src/wire.ts";
-import { requireScheme, ssrfGuard } from "../resolvers/http.ts";
+import { requireScheme, skipSSRF, ssrfGuard } from "../resolvers/http.ts";
 import { RampCallError } from "./errors.ts";
 import { concat } from "./send.ts";
 
@@ -388,6 +388,9 @@ function redact(cause: unknown): Error {
 let contentDispatcher: Agent | undefined;
 
 function sharedContentDispatcher(): Agent {
-	contentDispatcher ??= new Agent({ connect: ssrfGuard() });
+	// The address guard, unless the deployment turned it off — the same SKIP_SSRF switch
+	// Go reads in NewGuardedTransport and Python in guarded_client. The scheme gate in
+	// vetDialable is separate and is NOT covered by that flag.
+	contentDispatcher ??= skipSSRF() ? new Agent() : new Agent({ connect: ssrfGuard() });
 	return contentDispatcher;
 }

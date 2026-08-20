@@ -98,7 +98,6 @@ def _config(**overrides: Any) -> ClientConfig:
         "base_url": "https://exchange.test",
         "requester": REQUESTER,
         "signer": SigningTransport(signer_seed=AGENT_SEED, keyid="agent.v1"),
-        "agent_seed": AGENT_SEED,
     }
     base.update(overrides)
     return ClientConfig(**base)  # type: ignore[arg-type]
@@ -411,9 +410,11 @@ def test_execute_refuses_locally_without_a_requester_or_a_seed(face: Face) -> No
         face.run(no_requester.execute(verified))
     assert first.value.kind is CallErrorKind.MALFORMED
 
-    no_seed = face.client(_config(agent_seed=None), rec)
+    # One agent identity: the acceptance is signed with the request signer's own key, so
+    # there is no second key to be missing.
+    unsigned = face.client(_config(signer=None), rec)
     with pytest.raises(CallError) as second:
-        face.run(no_seed.execute(verified))
+        face.run(unsigned.execute(verified))
     assert second.value.kind is CallErrorKind.NOT_SIGNABLE
 
 
@@ -576,8 +577,10 @@ def test_validation_off_sends_it_anyway(face: Face) -> None:
 
 
 @pytest.mark.parametrize("face", FACES, ids=_IDS)
-def test_fetch_refuses_without_the_agent_seed_the_url_is_bound_to(face: Face) -> None:
-    client = face.client(_config(agent_seed=None), Recorder({}))
+def test_fetch_refuses_without_the_key_the_url_is_bound_to(face: Face) -> None:
+    # The delivery URL is bound to the thumbprint of the request-signing key, so the
+    # signer IS the key a bound fetch proves possession of.
+    client = face.client(_config(signer=None), Recorder({}))
     with pytest.raises(CallError) as excinfo:
         face.run(client.fetch("https://edge.test/x"))
     assert excinfo.value.kind is CallErrorKind.NOT_SIGNABLE
@@ -657,3 +660,30 @@ def test_an_untokenlike_edge_reason_falls_back_to_the_failure_class(face: Face) 
 
     assert excinfo.value.reason_of() == "refused"
     assert excinfo.value.detail is None
+
+
+# The protocol carries ONE agent identity: agent_identity_hash is the thumbprint of the
+# request-signing key and the delivery URL is bound to it, so a proof minted under any
+# other key presents an identity the URL was not issued to and the edge refuses it. This
+# asserts the key the client actually proves possession of.
+#
+# Mirrors sdk/ts/tests/client.test.ts "proves possession of the SIGNER's key".
+@pytest.mark.parametrize("face", FACES, ids=_IDS)
+def test_fetch_proves_possession_of_the_signers_key_not_a_second_one(face: Face) -> None:
+    import base64
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    expected = base64.urlsafe_b64encode(
+        Ed25519PrivateKey.from_private_bytes(AGENT_SEED).public_key().public_bytes_raw()
+    ).rstrip(b"=").decode()
+
+    recorder = Recorder({"https://edge.test/x": (200, "body", {"content-type": "text/plain"})})
+    client = face.client(_config(), recorder)
+    face.run(client.fetch("https://edge.test/x"))
+
+    presented = recorder.seen[0].headers.get("x-ramp-agent-key")
+    assert presented, "no proof header reached the edge"
+    assert presented == expected, (
+        "the delivery proof was minted under a key other than the request signer's"
+    )

@@ -26,6 +26,7 @@ import pytest
 
 from conftest import GO_RESOLVERS_TESTDATA, load_json
 from ramp_sdk.client import Client, ClientConfig
+from ramp_sdk.signing_transport import SigningTransport
 from ramp_sdk.client.errors import CallError, CallErrorKind
 
 _VECTORS = load_json(GO_RESOLVERS_TESTDATA / "content-fetch-vectors.json")["vectors"]
@@ -52,7 +53,10 @@ def _client(vector: dict[str, Any]) -> Client:
         )
 
     return Client(
-        ClientConfig(base_url="https://exchange.test", agent_seed=_AGENT_SEED),
+        ClientConfig(
+            base_url="https://exchange.test",
+            signer=SigningTransport(signer_seed=_AGENT_SEED, keyid="agent.v1"),
+        ),
         http=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
     )
 

@@ -65,9 +65,18 @@ export interface ClientOptions {
 	/** The RFC 9421 request signer. Custody stays with the application — the SDK receives
 	 * a non-extractable CryptoKey and the keyid it signs under, never key bytes. */
 	signer?: { privKey: CryptoKey; keyid: string };
-	/** The agent keypair a bound delivery fetch proves possession of. Without it the
-	 * client can buy but cannot fetch what it bought. */
-	agentKeyPair?: CryptoKeyPair;
+	/** The PUBLIC half of the key `signer` signs with. A bound delivery fetch presents it
+	 * in a header and derives the agent identity from it, and a non-extractable CryptoKey
+	 * cannot yield it — custody keeps the private half, so the public half is supplied
+	 * alongside. Without it the client can buy but cannot fetch what it bought.
+	 *
+	 * There is deliberately no option for a separate agent PRIVATE key. The protocol
+	 * carries one agent identity: agent_identity_hash is the thumbprint of the agent's
+	 * request-signing key, an Exchange verifies the detached acceptance against the key
+	 * registered for the caller its request signature identified, and the delivery URL is
+	 * bound to that same thumbprint. A second key would be refused at execute, and any URL
+	 * it did produce could never be fetched. */
+	agentPublicKey?: CryptoKey;
 	/** The agent's own identity, forwarded on discovery and required on a purchase: both
 	 * reference services resolve the calling agent from it and refuse a request naming
 	 * none. */
@@ -604,17 +613,30 @@ async function dispute(
  */
 async function fetchVerb(r: Resolved, signedURL: string): Promise<Content> {
 	const op = "fetch content";
-	if (r.opts.agentKeyPair === undefined) {
+	if (r.opts.signer === undefined) {
 		throw new RampCallError({
 			kind: "not_signable",
 			op,
 			cause: new Error(
-				"no agent keypair configured; a bound fetch proves possession of the agent key",
+				"no signer configured; a bound fetch proves possession of the agent key — " +
+					"the same key the request is signed with",
+			),
+		});
+	}
+	if (r.opts.agentPublicKey === undefined) {
+		throw new RampCallError({
+			kind: "not_signable",
+			op,
+			cause: new Error(
+				"no agent public key configured; a bound fetch presents it alongside the " +
+					"proof, and a non-extractable signing key cannot yield it",
 			),
 		});
 	}
 	return fetchContent(signedURL, {
-		keyPair: r.opts.agentKeyPair,
+		// One private key, held by the signer. The public half rides alongside because
+		// custody keeps the private one and a CryptoKey cannot be asked for its pair.
+		keyPair: { privateKey: r.opts.signer.privKey, publicKey: r.opts.agentPublicKey },
 		// The proof window is the client's, not the signer's. core/sign.ts defaults to the
 		// 10-minute TTL a server-side proof uses; a delivery proof is minted for one GET
 		// and wants the short window instead, so the default is set here rather than

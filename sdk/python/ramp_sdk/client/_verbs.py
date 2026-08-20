@@ -36,7 +36,6 @@ from ramp_sdk.core import (
     OfferGroupResult,
     VerifiedOffer,
     Verifier,
-    sign_offer_acceptance_jcs,
 )
 from ramp_sdk.idempotency import generate_idempotency_key
 from ramp_sdk.wire import ProtocolVersion
@@ -71,9 +70,6 @@ class ClientConfig:
     base_url: str
     #: The RFC 9421 request signer. Custody stays with the application.
     signer: SigningTransport | None = None
-    #: The agent signing seed a bound delivery fetch proves possession of. Without it the
-    #: client can buy but cannot fetch what it bought.
-    agent_seed: bytes | None = None
     #: The agent's own identity, forwarded on discovery and required on a purchase: both
     #: reference services resolve the calling agent from it and refuse a request that
     #: names none.
@@ -298,7 +294,7 @@ def plan_execute(
         raise malformed(
             op, "no requester configured; an Exchange resolves who is buying from it"
         )
-    if cfg.agent_seed is None:
+    if cfg.signer is None:
         # NOT_SIGNABLE, matching what fetch answers for the same missing holder: a caller
         # branching on the kind sees one condition under one class, whichever verb met it
         # first.
@@ -306,8 +302,8 @@ def plan_execute(
             CallErrorKind.NOT_SIGNABLE,
             op,
             cause=(
-                "no agent signing seed configured; a purchase carries a detached "
-                "acceptance signed with the agent's own key"
+                "no signer configured; a purchase carries a detached acceptance signed "
+                "with the agent's own key — the same key the request is signed with"
             ),
         )
     wire = offer.offer if isinstance(offer.offer, dict) else {}
@@ -322,8 +318,7 @@ def plan_execute(
     # that pins the same key reproduces byte-identical acceptance bytes. That is the
     # deliberate-replay semantic, not an accident.
     try:
-        signature, _algorithm = sign_offer_acceptance_jcs(
-            seed=cfg.agent_seed,
+        signature, _algorithm = cfg.signer.sign_offer_acceptance(
             offer_sig=offer_sig,
             requester_id=_str_field(cfg.requester, "id"),
             requester_domain=_str_field(cfg.requester, "domain"),
