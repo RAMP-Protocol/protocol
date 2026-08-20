@@ -125,21 +125,19 @@ def proof_headers(
 
 
 def read_content(
-    signed_url: str, response: httpx.Response, max_bytes: int
+    signed_url: str, response: httpx.Response, body: bytes
 ) -> Content:
-    """Turn one delivery answer into content, or raise the typed failure.
+    """Turn one delivery answer and the bytes already read from it into content, or raise
+    the typed failure.
 
-    Reads one byte past the cap so an oversized body is DETECTED rather than silently
-    truncated. Truncated content that looks whole is worse than a refusal: the caller has
-    paid for it and has no way to tell it is incomplete.
+    The BYTES are handed in rather than read here, because the cap has to bound the read
+    itself: the caller streams the body and stops one byte past the cap, so an oversized
+    answer is detected without ever being held. Truncated content that looks whole is
+    worse than a refusal — the caller has paid for it and has no way to tell it is
+    incomplete — so this face never truncates either.
     """
     if not response.is_success:
-        raise _edge_refusal(response)
-    body = response.content
-    if len(body) > max_bytes:
-        raise CallError(
-            CallErrorKind.TOO_LARGE, _OP, cause=f"body exceeds the {max_bytes} byte cap"
-        )
+        raise edge_refusal(response, body)
     return Content(
         url=signed_url,
         mime_type=mime_type_of(response.headers.get("content-type")),
@@ -147,7 +145,22 @@ def read_content(
     )
 
 
-def _edge_refusal(response: httpx.Response) -> CallError:
+def too_large(max_bytes: int, status: int | None = None) -> CallError:
+    """The refusal for a delivery body past its cap."""
+    return CallError(
+        CallErrorKind.TOO_LARGE,
+        _OP,
+        status=status,
+        cause=f"body exceeds the {max_bytes} byte cap",
+    )
+
+
+#: What a refusal body is read up to. An edge that says no answers a small JSON object;
+#: anything past this is not a reason and is not worth holding.
+MAX_ERROR_BODY_BYTES = _MAX_ERROR_BODY_BYTES
+
+
+def edge_refusal(response: httpx.Response, body: bytes) -> CallError:
     """The failure for an edge that answered and said no, promoting the edge's own refusal
     token to a typed protocol reason when the vocabularies line up.
 
@@ -158,7 +171,7 @@ def _edge_refusal(response: httpx.Response) -> CallError:
     google.rpc.ErrorInfo.domain so generic tooling can group errors, and a per-URL value
     has unbounded cardinality and groups nothing.
     """
-    token = _edge_reason(response.content[:_MAX_ERROR_BODY_BYTES])
+    token = _edge_reason(body[:_MAX_ERROR_BODY_BYTES])
     return CallError(
         CallErrorKind.REFUSED,
         _OP,

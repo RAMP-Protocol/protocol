@@ -19,10 +19,17 @@ import httpx
 
 from ramp_sdk.client import _fetch_inputs, _verbs
 from ramp_sdk.client._call import as_call_error
+from ramp_sdk.client._read import IDENTITY_ENCODING, bounded_chunks, rpc_headers
 from ramp_sdk.client._verbs import ClientConfig
-from ramp_sdk.client.content import Content, read_content, transport_failure
+from ramp_sdk.client.content import (
+    MAX_ERROR_BODY_BYTES,
+    Content,
+    edge_refusal,
+    read_content,
+    transport_failure,
+)
 from ramp_sdk.client.errors import CallError, CallErrorKind
-from ramp_sdk.resolvers import guarded_client
+from ramp_sdk.resolvers import _ssrf, guarded_client
 
 if TYPE_CHECKING:
     from wire.models import DisputeResponse, TransactionResponse, UsageReportResponse
@@ -32,12 +39,76 @@ if TYPE_CHECKING:
 __all__ = ["BrokerClient", "Client", "ClientConfig"]
 
 
-class Client:
+class _Face:
+    """What the blocking verbs share: the config, the two transports and the send.
+
+    The same split as the async face, for the same reason: the configured home Exchange
+    and the Broker over a plain transport, the offer-derived legs over an address-guarded
+    one. See :class:`ramp_sdk.client._Face`.
+    """
+
+    def __init__(
+        self,
+        config: ClientConfig,
+        http: httpx.Client | None,
+        guarded: httpx.Client | None = None,
+    ) -> None:
+        self._config = config
+        self._owns = http is None
+        self._http = http if http is not None else httpx.Client(
+            follow_redirects=False, trust_env=False
+        )
+        # An injected client carries BOTH legs: a caller that replaced the transport
+        # replaced it, and quietly routing half the calls somewhere else would make the
+        # injection a lie.
+        self._guarded = guarded if guarded is not None else (
+            self._http if not self._owns else guarded_client(follow_redirects=False)
+        )
+
+    def close(self) -> None:
+        """Close the transports this client built. An injected one is left alone."""
+        if not self._owns:
+            return
+        self._http.close()
+        if self._guarded is not self._http:
+            self._guarded.close()
+
+    def __enter__(self) -> _Face:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
+
+    def _send(self, plan: _verbs.Plan) -> tuple[int, str]:
+        """Send one RPC and read its answer under the cap. The async twin's own docstring
+        carries the reasoning; only the iteration differs."""
+        http = self._guarded if plan.guarded else self._http
+        try:
+            with http.stream(
+                "POST",
+                plan.url,
+                content=plan.body,
+                headers=rpc_headers(plan),
+                timeout=plan.timeout,
+                follow_redirects=False,
+            ) as response:
+                read = bounded_chunks(plan.op, plan.max_bytes, response.status_code)
+                for chunk in response.iter_bytes():
+                    read.add(chunk)
+                return response.status_code, read.text()
+        except httpx.HTTPError as exc:
+            raise as_call_error(plan.op, exc) from exc
+        except _ssrf.SsrfError as exc:
+            # The guard's refusal is an OSError, not an httpx error, so it would otherwise
+            # escape untyped. Nothing was sent, which is exactly what NOT_SENT means.
+            raise CallError(CallErrorKind.NOT_SENT, plan.op, cause=str(exc)) from exc
+
+
+class Client(_Face):
     """The blocking Exchange client. See :class:`ramp_sdk.client.Client` for the contract."""
 
     def __init__(self, config: ClientConfig, *, http: httpx.Client | None = None) -> None:
-        self._config = config
-        self._http = http or guarded_client(follow_redirects=False)
+        super().__init__(config, http)
 
     def discover(self, query: dict[str, Any]) -> DiscoveryResult:
         plan = _verbs.plan_discover(self._config, query)
@@ -67,63 +138,41 @@ class Client:
 
     def fetch(self, signed_url: str) -> Content:
         headers, timeout, max_bytes = _fetch_inputs(self._config, signed_url)
+        op = "fetch content"
         try:
-            # Redirects are REFUSED, for the reason the async face records: following one
-            # either replays a proof bound to the old URL or mints a fresh one for a host
-            # the first hop chose.
-            response = self._http.get(
-                signed_url, headers=headers, timeout=timeout, follow_redirects=False
-            )
+            # Redirects are REFUSED, and the body is STREAMED under the cap, for the
+            # reasons the async face records.
+            with self._guarded.stream(
+                "GET",
+                signed_url,
+                headers={**headers, **IDENTITY_ENCODING},
+                timeout=timeout,
+                follow_redirects=False,
+            ) as response:
+                if not response.is_success:
+                    refusal = b""
+                    for chunk in response.iter_bytes():
+                        refusal += chunk
+                        if len(refusal) >= MAX_ERROR_BODY_BYTES:
+                            break
+                    raise edge_refusal(response, refusal[:MAX_ERROR_BODY_BYTES])
+                read = bounded_chunks(op, max_bytes, response.status_code)
+                for chunk in response.iter_bytes():
+                    read.add(chunk)
+                return read_content(signed_url, response, read.body())
         except httpx.HTTPError as exc:
             raise transport_failure(exc) from exc
-        return read_content(signed_url, response, max_bytes)
-
-    def _send(self, plan: _verbs.Plan) -> tuple[int, str]:
-        try:
-            response = self._http.post(
-                plan.url,
-                content=plan.body,
-                headers=plan.headers,
-                timeout=plan.timeout,
-                follow_redirects=False,
-            )
-        except httpx.HTTPError as exc:
-            raise as_call_error(plan.op, exc) from exc
-        return _bounded(plan, response)
+        except _ssrf.SsrfError as exc:
+            raise CallError(CallErrorKind.NOT_SENT, op, cause=str(exc)) from exc
 
 
-class BrokerClient:
+class BrokerClient(_Face):
     """The blocking Broker client. See :class:`ramp_sdk.client.BrokerClient`."""
 
     def __init__(self, config: ClientConfig, *, http: httpx.Client | None = None) -> None:
-        self._config = config
-        self._http = http or guarded_client(follow_redirects=False)
+        super().__init__(config, http)
 
     def resolve(self, request: dict[str, Any]) -> DiscoveryResult:
         plan = _verbs.plan_resolve(self._config, request)
-        try:
-            response = self._http.post(
-                plan.url,
-                content=plan.body,
-                headers=plan.headers,
-                timeout=plan.timeout,
-                follow_redirects=False,
-            )
-        except httpx.HTTPError as exc:
-            raise as_call_error(plan.op, exc) from exc
-        status, body = _bounded(plan, response)
+        status, body = self._send(plan)
         return _verbs.finish_resolve(self._config, plan, status, body)
-
-
-def _bounded(plan: _verbs.Plan, response: httpx.Response) -> tuple[int, str]:
-    """Read one answer under the configured cap. The async twin's own copy carries the
-    reasoning; this is the same rule reached through the blocking client."""
-    raw = response.content
-    if len(raw) > plan.max_bytes:
-        raise CallError(
-            CallErrorKind.TOO_LARGE,
-            plan.op,
-            status=response.status_code,
-            cause=f"body exceeds the {plan.max_bytes} byte cap",
-        )
-    return response.status_code, raw.decode("utf-8", errors="replace")

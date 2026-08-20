@@ -121,6 +121,10 @@ class Plan:
     headers: dict[str, str]
     timeout: float
     max_bytes: int
+    #: Whether this leg dials a host another party named — an offer-derived Exchange —
+    #: and so goes over the address-guarded transport. Mirrors the Go client, which keeps
+    #: a second guarded client for exactly these two verbs.
+    guarded: bool = False
     #: The message as sent, kept so the finish step can read the query back (the flat
     #: fallback's attribution needs the URIs the caller asked about).
     sent: dict[str, Any] = field(default_factory=dict)
@@ -432,7 +436,13 @@ def _plan_offer_derived(
         cfg.endpoint_resolver, _str_field(sent, "exchange"), op
     )
     validate_request(op, sent, verb.model, cfg.validation)
-    return _plan(cfg, _Route(op, endpoint, EXCHANGE_SERVICE, verb.method), sent)
+    # The offer-derived leg, so the guarded transport: the caller named a domain, the
+    # manifest it serves named this endpoint, and a signed call now goes there. Discovery
+    # and execute keep the plain one, because their address is the operator's own
+    # configuration. The same split the Go client makes.
+    return _plan(
+        cfg, _Route(op, endpoint, EXCHANGE_SERVICE, verb.method), sent, guarded=True
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -504,7 +514,9 @@ class _Route:
     method: str
 
 
-def _plan(cfg: ClientConfig, route: _Route, sent: dict[str, Any]) -> Plan:
+def _plan(
+    cfg: ClientConfig, route: _Route, sent: dict[str, Any], *, guarded: bool = False
+) -> Plan:
     op = route.op
     url = rpc_url(route.base_url, route.service, route.method)
     body, headers = prepare(
@@ -517,6 +529,7 @@ def _plan(cfg: ClientConfig, route: _Route, sent: dict[str, Any]) -> Plan:
         headers=headers,
         timeout=cfg.call_timeout_sec,
         max_bytes=cfg.max_rpc_read_bytes,
+        guarded=guarded,
         sent=sent,
     )
 
