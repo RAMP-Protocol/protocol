@@ -17,6 +17,8 @@ import {
 	type VerifiedOffer,
 	type Verifier,
 } from "../core/verifier.ts";
+import type { z } from "zod";
+
 import { clockWindow, type Window } from "../core/window.ts";
 import { fromWireOffer } from "../core/wire-canon.ts";
 import { signOfferAcceptance, ACCEPTANCE_SIGNATURE_ALGORITHM } from "../src/acceptance.ts";
@@ -84,8 +86,9 @@ export interface ClientOptions {
 	/** Offer-verification strictness. Defaults to "strict" — fail-closed. */
 	verification?: Mode;
 	/** Whether an outbound request is checked against its generated schema first.
-	 * Defaults to "strict", mirroring the Go client. Orthogonal to `verification`: this
-	 * one is about the message going out, that one about the offers coming back. */
+	 * Defaults to "strict", which is deliberately stricter than Go — see the Validation
+	 * type for why. Orthogonal to `verification`: this one is about the message going
+	 * out, that one about the offers coming back. */
 	validation?: Validation;
 	/** Resolves an exchange identity to its raw 32-byte Ed25519 offer-signing key.
 	 * Injected: the client owns no key state. */
@@ -129,21 +132,30 @@ export interface CallOptions {
 	idempotencyKey?: string;
 }
 
+/**
+ * The response types, inferred from the generated schemas rather than restated.
+ *
+ * A verb returning `Record<string, unknown>` hands a caller no help exactly where it is
+ * needed: `transaction_id`, `report_id` and the retrieval endpoint are the links of the
+ * dispute chain, and every read of one was an unchecked index. Python's verbs return the
+ * generated models, so the two faces were the same verb names over materially different
+ * ergonomics.
+ */
+export type TransactionResponse = z.infer<typeof TransactionResponseSchema>;
+/** The answer to a usage report; carries the `report_id` a dispute is filed against. */
+export type UsageReportResponse = z.infer<typeof UsageReportResponseSchema>;
+/** The answer to a dispute. */
+export type DisputeResponse = z.infer<typeof DisputeResponseSchema>;
+
 /** The agent-facing Exchange client. */
 export interface Client {
 	discover(query: Record<string, unknown>): Promise<DiscoveryResult>;
-	execute(
-		offer: VerifiedOffer,
-		opts?: CallOptions,
-	): Promise<Record<string, unknown>>;
+	execute(offer: VerifiedOffer, opts?: CallOptions): Promise<TransactionResponse>;
 	reportUsage(
 		report: Record<string, unknown>,
 		opts?: CallOptions,
-	): Promise<Record<string, unknown>>;
-	dispute(
-		request: Record<string, unknown>,
-		opts?: CallOptions,
-	): Promise<Record<string, unknown>>;
+	): Promise<UsageReportResponse>;
+	dispute(request: Record<string, unknown>, opts?: CallOptions): Promise<DisputeResponse>;
 	fetch(signedURL: string): Promise<Content>;
 }
 
@@ -441,7 +453,7 @@ async function execute(
 	baseURL: string,
 	offer: VerifiedOffer,
 	opts: CallOptions,
-): Promise<Record<string, unknown>> {
+): Promise<TransactionResponse> {
 	const op = "execute";
 	if (r.opts.requester === undefined) {
 		throw malformed(
@@ -545,7 +557,7 @@ async function reportUsage(
 	r: Resolved,
 	report: Record<string, unknown>,
 	opts: CallOptions,
-): Promise<Record<string, unknown>> {
+): Promise<UsageReportResponse> {
 	const op = "report usage";
 	const sent = stampEnvelope(op, report, opts);
 	// The address is vetted BEFORE the schema: an unroutable recipient is a refusal to
@@ -585,7 +597,7 @@ async function dispute(
 	r: Resolved,
 	request: Record<string, unknown>,
 	opts: CallOptions,
-): Promise<Record<string, unknown>> {
+): Promise<DisputeResponse> {
 	const op = "dispute";
 	const sent = stampEnvelope(op, request, opts);
 	const endpoint = await vetExchangeEndpoint(

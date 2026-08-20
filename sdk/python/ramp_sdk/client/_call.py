@@ -115,8 +115,17 @@ def prepare(
 
 
 #: Whether a request is checked against its generated model before it is signed and sent.
-#: ``"strict"`` is the default, mirroring the Go client. A caller that means to probe a
-#: server with a deliberately invalid message turns it off.
+#: ``"strict"`` is the default; a caller that means to probe a server with a deliberately
+#: invalid message turns it off.
+#:
+#: DELIBERATELY STRICTER THAN GO, which defaults to ValidationOff. These two SDKs are the
+#: ones handed to external partners, so catching a missing recipient or idempotency key
+#: before anything is signed is worth more here than matching the oracle's default. It
+#: costs nothing in safety: the Exchange enforces the same rules whatever this says, and
+#: the answer coming back is validated either way.
+#:
+#: And it is a SMALLER check than the Go client's, not an equal one — see
+#: :func:`validate_request`, which says so about the same rule.
 Validation = Literal["strict", "off"]
 
 

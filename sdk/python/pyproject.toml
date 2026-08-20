@@ -6,8 +6,12 @@
 #        byte-parity-guarded against the sdk/go oracle. This tier's IMPORT surface
 #        (ramp_sdk.core and the signing primitives) pulls no third-party HTTP
 #        client — it is dependency-free at the import level.
-#   L2 — the fetching resolvers (ramp_sdk.resolvers), which DO take a maintained
-#        HTTP client (httpx/httpcore) for the WBA / well-known directory GETs.
+#   L2 — the two IO-bearing trees, which DO take a maintained HTTP client
+#        (httpx/httpcore): the fetching resolvers (ramp_sdk.resolvers) for the WBA /
+#        well-known directory GETs, and the client (ramp_sdk.client, with
+#        ramp_sdk.sync as its blocking facade) for the RAMP RPCs and the delivery
+#        fetch. The client refuses redirects where the resolvers follow them under a
+#        cap: every leg it dials carries a credential.
 # Because the two ship as one package, httpx/httpcore are HARD [project]
 # dependencies, not an optional extra: a pure-L1 consumer still installs them.
 # That is deliberate — keeping them non-optional means the SECURITY-relevant

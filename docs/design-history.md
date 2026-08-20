@@ -887,13 +887,29 @@ pure computation over bytes and dials nothing). The list is closed by review rat
 than by count: what the tier refuses is a DEPENDENCY THAT DIALS, not a dependency. It
 takes no HTTP client and does not dial the network: `sdk/go/helpers`
 never constructs an `http.Client`, `sdk/ts/core` imports neither `undici` nor a
-framework, and `ramp_sdk.core` imports no `httpx`. The I/O tier — `sdk/{go,ts,python}/resolvers`
-— is the *only* place a network fetch lives (well-known JWKS, WBA directory,
-`ramp.json` endpoint, offer-key resolution), and there the rule inverts: it runs on a
+framework, and `ramp_sdk.core` imports no `httpx`. The I/O tier is where a network fetch
+lives, and there the rule inverts: it runs on a
 **maintained HTTP client** (Go `net/http`, TS `undici`, Python `httpx`) rather than a
 hand-rolled transport, because the client owns the response state machine (status,
 redirects, 1xx, decompression) and the SDK should own only the SSRF check it injects
 as a connection-level hook.
+
+**The I/O tier is two trees per language, not one.** `sdk/{go,ts,python}/resolvers`
+came first and carries the pre-auth fetches — well-known JWKS, WBA directory, `ramp.json`
+endpoint, offer-key resolution. The client tree — `sdk/go/connect`, `sdk/ts/client`, and
+`ramp_sdk/client` with `ramp_sdk/sync` as its blocking facade — is the second, and it is
+IO-bearing for a different reason: it SENDS. Every leg it dials carries a credential, an
+RFC 9421 signature or a proof of possession bound to one URL, which is why it refuses
+redirects where the resolvers follow them under a cap, and why it splits its transport in
+two — a plain one for the operator-configured home Exchange, an address-guarded one for
+the legs whose host an offer named. The pure trees (`core`, `src`, the top-level
+`ramp_sdk` modules) may import neither, and a structural guard in each language enforces
+that: `sdk/ts/tests/resolvers-io-leaf.guard.test.ts`,
+`sdk/python/tests/test_guards_resolvers_io_leaf.py`.
+
+Worth stating here because this file is where it is stated. ADR-020, cited throughout this
+repo for the L0/L1/L2 layering, lives in the reference implementation's repository rather
+than this one, so a reader who has only this checkout has this document and nothing else.
 
 The reasoning is a threat boundary, not an aesthetic one. The host a resolver fetches
 is caller-supplied and reached **before** any signature is checked, so the fetch
@@ -1046,15 +1062,43 @@ no parameter a configured origin could be passed as. (`Dispute` is the exception
 only because `DisputeRequest` carries no `exchange` field to read — it takes the domain
 as an argument and runs the identical checks.)
 
-Five checks precede the send, in order: refuse anything that is not a plain hostname,
+Six checks precede the send, in order: refuse anything that is not a plain hostname,
 because the value is concatenated into a URL and a smuggled path would choose what gets
 fetched; resolve the endpoint from that host's own manifest, cached per host; require
 the endpoint to be that host or a subdomain of it, since the manifest is only as
 trustworthy as the host serving it and a dial-time address guard has no objection to an
-unrelated PUBLIC host; dial through the SSRF guard, applied to the report itself and
-not only to the manifest fetch; and refuse redirects. The per-origin client pool that
+unrelated PUBLIC host — and require it AGAIN of whatever the endpoint resolver handed
+back, because that resolver is an injectable seam and this tier cannot make a signed call
+conditional on a stranger's implementation having remembered the rule; gate the scheme, so
+a signature never rides plaintext; dial through the SSRF guard, applied to the report
+itself and not only to the manifest fetch; and refuse redirects. The per-origin client pool that
 follows is bounded and evicts least-recently-used, because which Exchanges appear is
 driven by incoming offers — an open-ended, caller-influenced key space.
+
+## Two client defaults where the ports differ from Go on purpose
+
+Go is the oracle and the ports mirror it, so a difference that survives review has to be
+written down or it reads as drift. Two survive, and neither is an API-surface divergence —
+both are behaviour, so they live here rather than in `sdk/parity/symbol-map.json`, whose
+allowlist is a shrink-only ratchet over SYMBOLS.
+
+**Outbound request validation defaults ON in TypeScript and Python, and OFF in Go.** These
+two SDKs are the ones handed to external partners; Go is what our own services run. A
+missing recipient or idempotency key caught before anything is signed is worth more to a
+partner than a matching default, and it costs nothing in safety — the Exchange enforces the
+same rules whatever the client says, and the answer coming back is validated either way.
+Worth knowing what "strict" buys, because it is not what it buys in Go: the generated
+schema carries FIELD-level rules only, while the cross-field CEL rules stay
+server-authoritative. The two checks share a name and not a scope.
+
+**The client's transport splits in two, and which leg is guarded is the same in all
+three.** A plain transport carries the configured home Exchange and the Broker — an
+operator that points the SDK at a private origin chose that address — and an
+address-guarded one carries the offer-derived legs and the delivery fetch, whose hosts
+another party named. Python briefly guarded everything, which looked safer and was not: it
+refused a home Exchange the other two reach, and a caller injecting a client to get that
+back disarmed the guard on the leg that needed it. An injected client now carries both
+legs, because a caller who replaced the transport replaced it.
 
 ## Host anchoring compares host and port, but not scheme
 

@@ -2,7 +2,7 @@
   "name": "@ramp-protocol/sdk-l1",
   "version": "0.0.0",
   "private": true,
-  "description": "RAMP L1 helpers (stateless, IO-free protocol mechanics): RFC 7638 thumbprint, Ed25519 signed-URL verify, RFC 9421 GET PoP verify, and cross-field Zod refinements over gen/ts schemas. Byte-parity-guarded against the sdk/go oracle via shared vectors + the conformance corpus.",
+  "description": "RAMP protocol SDK for TypeScript — the IO-free protocol mechanics (signing, verification, canonicalization) plus the IO tiers built on them: the key/endpoint resolvers and the Connect-unary JSON client. Exposed at the repo root so plain npm — which has no git-subdirectory support — can pin the TS SDK by commit as a whole-repo git dependency (parity with the Go/pip git+subdir+rev pins). Re-exports sdk/ts, which compiles the in-repo gen/ts by relative path. Self-contained packaging and npm publish are not yet implemented.",
   "type": "module",
   "exports": {
     "./base64url": "./src/base64url.ts",

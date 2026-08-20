@@ -435,8 +435,8 @@ The concrete implementations differ in persistence strategy (in-memory vs Redis)
 | Language | Source | Status | Dependencies |
 |---|---|---|---|
 | Go | [`gen/go/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/go/) (types) + [`sdk/go/`](https://github.com/RAMP-Protocol/protocol/tree/main/sdk/go/) (the shipped hand-written SDK: `helpers`, `resolvers`, `core`, `connect`, `connectserver`) | Shipped and CI-gated | `connectrpc.com/connect` + `google.golang.org/protobuf` + stdlib |
-| TypeScript | [`gen/ts/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/ts/) (types) + [`sdk/ts/`](https://github.com/RAMP-Protocol/protocol/tree/main/sdk/ts/) (hand-written SDK: `src`, `core`, `resolvers`, `hono`) | Shipped and CI-gated; npm package not yet published | `@connectrpc/connect` + `@bufbuild/protobuf` |
-| Python | [`gen/python/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/python/) (types) + [`sdk/python/`](https://github.com/RAMP-Protocol/protocol/tree/main/sdk/python/) (hand-written SDK: `ramp_sdk`, `ramp_sdk.core`, `ramp_sdk.resolvers`) | Shipped and CI-gated; PyPI package not yet published | `httpx` + `fastmcp` |
+| TypeScript | [`gen/ts/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/ts/) (types) + [`sdk/ts/`](https://github.com/RAMP-Protocol/protocol/tree/main/sdk/ts/) (hand-written SDK: `src`, `core`, `resolvers`, `client`, `hono`) | Shipped and CI-gated; npm package not yet published | `zod` + `undici` + `ajv` + `canonicalize` (`hono` optional) |
+| Python | [`gen/python/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/python/) (types) + [`sdk/python/`](https://github.com/RAMP-Protocol/protocol/tree/main/sdk/python/) (hand-written SDK: `ramp_sdk`, `ramp_sdk.core`, `ramp_sdk.resolvers`, `ramp_sdk.client`, `ramp_sdk.sync`) | Shipped and CI-gated; PyPI package not yet published | `pydantic` + `httpx` + `cryptography` |
 
 ### What Is Language-Specific vs Shared
 

@@ -323,8 +323,18 @@ export const NOT_CANONICAL_WIRE_NAMING = "not_canonical_wire_naming";
 
 /**
  * Whether a request is checked against its generated schema before it is signed and sent.
- * "strict" is the default, mirroring the Go client. A caller that means to probe a server
- * with a deliberately invalid message turns it off.
+ * "strict" is the default; a caller that means to probe a server with a deliberately
+ * invalid message turns it off.
+ *
+ * DELIBERATELY STRICTER THAN GO, which defaults to ValidationOff. These two SDKs are the
+ * ones handed to external partners, so catching a missing recipient or idempotency key
+ * before anything is signed is worth more here than matching the oracle's default. It
+ * costs nothing in safety: the Exchange enforces the same rules whatever this says, and
+ * the answer coming back is validated either way.
+ *
+ * And it is a SMALLER check than the Go client's, not an equal one: the generated schema
+ * carries field-level rules, while the cross-field CEL rules stay server-authoritative.
+ * "Strict" does not mean the same thing in the two places.
  */
 export type Validation = "strict" | "off";
 
