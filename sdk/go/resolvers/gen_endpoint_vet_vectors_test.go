@@ -18,12 +18,12 @@ package resolvers
 // emit); (re)writes under RAMP_UPDATE_VECTORS=1. TEST INFRASTRUCTURE.
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/RAMP-Protocol/protocol/sdk/go/internal/endpointrule"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/vectorio"
 )
 
 // endpointVetVector is one Vet case: the host that SERVED the manifest, the
@@ -131,22 +131,20 @@ func buildEndpointVetVectors(t *testing.T) []endpointVetVector {
 func TestGenerateEndpointVetVectors(t *testing.T) {
 	doc := map[string]any{"endpoint_vet": buildEndpointVetVectors(t)}
 	path := filepath.Join("testdata", "endpoint-vet-vectors.json")
-	want, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal %s: %v", path, err)
-	}
-	want = append(want, '\n')
+	// The byte semantics — indent, trailing newline, mode — are shared rather than
+	// restated. A corpus is committed, so an emitter that rendered it differently
+	// would rewrite the whole file and report the change as drift.
 	if os.Getenv("RAMP_UPDATE_VECTORS") == "1" {
-		if err := os.WriteFile(path, want, 0o644); err != nil { //nolint:gosec // committed test vector
+		if err := vectorio.Write(path, doc); err != nil {
 			t.Fatalf("write %s: %v", path, err)
 		}
 		return
 	}
-	got, err := os.ReadFile(path)
+	stale, err := vectorio.Stale(path, doc)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	if string(got) != string(want) {
+	if stale {
 		t.Fatalf("%s is stale; re-run with RAMP_UPDATE_VECTORS=1 to regenerate", path)
 	}
 }

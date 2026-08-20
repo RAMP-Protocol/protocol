@@ -208,8 +208,13 @@ class WellKnownEndpointResolver:
     def resolve_endpoint(self, host: str) -> str:
         """Return the endpoint ``host`` advertises in its well-known manifest.
 
-        Raises NoEndpointError (manifest reachable but inert) or
-        DirectoryUnavailableError (unreachable/undecodable) — distinct verdicts.
+        Four exits, and a caller classifying retryability needs all four. Three are
+        verdicts and FINAL: ``ValueError`` when ``host`` is not a bare host, raised
+        before anything is fetched; ``NoEndpointError`` when the manifest is
+        reachable but advertises nothing; ``EndpointRefusedError`` when it advertises
+        an endpoint the rule will not hand back. The fourth,
+        ``DirectoryUnavailableError``, is a transport failure — unreachable or
+        undecodable — and is the only one worth retrying.
         """
         # Checked BEFORE the allow overlay and before the cache. The fetch URL is
         # built by concatenation, so a value carrying a path or a query would

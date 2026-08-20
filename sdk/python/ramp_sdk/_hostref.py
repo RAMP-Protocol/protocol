@@ -202,11 +202,12 @@ def _vet_userinfo(ref: str, userinfo: str) -> None:
 def _parse_ref(ref: str) -> ParsedRef:
     """Read a bare domain, a host:port pair, or a full URL into its authority.
 
-    Returns ``(host, hostname, port, had_scheme, scheme)``: the authority with
-    userinfo removed and the port kept as written; the host alone with IPv6
-    brackets stripped and case preserved; the port as written, never a default
-    filled in; whether the caller actually WROTE a scheme; and the scheme, or
-    ``https`` for a reference that named none.
+    Returns ``(host, hostname, port, had_scheme, scheme, has_userinfo)``: the
+    authority with userinfo removed and the port kept as written; the host alone
+    with IPv6 brackets stripped and case preserved; the port as written, never a
+    default filled in; whether the caller actually WROTE a scheme; the scheme, or
+    ``https`` for a reference that named none; and whether an authority carried
+    userinfo, which is what the endpoint rule refuses on.
 
     A ref with no scheme is read as though it carried https, since a bare domain
     is otherwise indistinguishable from a path. One parse behind both host

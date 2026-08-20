@@ -178,7 +178,7 @@ def host_of(ref: str) -> str:
 
     Raises ``ValueError`` when the reference cannot be read as a host at all.
     """
-    return _parse_ref(ref)[0]
+    return _parse_ref(ref).host
 
 
 def is_bare_host(ref: str) -> bool:

@@ -41,10 +41,16 @@ import (
 // header the SDK never chose — on a leg that already carries the agent's own
 // signature.
 //
-// Both conditions are decided over the SAME reading of the reference. That is not
-// tidiness: a value naming no scheme is a URL to one parser and a path to another,
-// and the two answers put the credential on opposite sides of the check. Reading
-// it once, the way the anchor check reads it, is what keeps this one rule.
+// Both conditions apply the SAME normalization rule: a value naming no scheme is
+// read as https, exactly as the anchor check reads it. That is not tidiness — a
+// value naming no scheme is a URL to one parser and a path to another, and the two
+// answers put the credential on opposite sides of the check.
+//
+// The rule is stated twice, here and in helpers' own parse, and what holds the two
+// together is the endpoint-vet corpus rather than a shared reading. Reaching one
+// reading would mean exporting it, and the ports bind to the vectors rather than to
+// a Go symbol, so the export would buy nothing they can use. A divergence between
+// the two copies fails CI instead of shipping.
 //
 // The caller supplies the vocabulary: the errors here describe what was wrong, and
 // each call site wraps them in whatever sentinel its own tier classifies on.
