@@ -34,20 +34,22 @@ _FORBIDDEN = (
     re.compile(r"\bimport\s+httpx\b"),
     re.compile(r"\bfrom\s+httpx\b"),
     re.compile(r"\bimport\s+httpcore\b"),
-    # urllib.parse is the ONE exception, and it is narrow on purpose: it is pure
-    # string work (splitting URI references) with no socket in it, while
-    # urllib.request is a full HTTP client. Everything else under urllib stays
-    # banned, which is why this names the submodule rather than allowing
-    # "urllib" and hoping nobody reaches for .request.
+    # urllib is banned FLATLY, with no carve-out for .parse.
     #
-    # The carve-out is checked at every urllib on the import LINE, not only at
-    # the one straight after the keyword. Anchoring it to the keyword let
-    # "import urllib.parse, urllib.request" through: the lookahead saw .parse,
-    # was satisfied, and never looked at the second module. ruff E401 rejects a
-    # multi-module import line today so nothing could reach the hole, but this
-    # guard is defence in depth and has to hold on its own — that was the whole
-    # reason for narrowing it instead of deleting it.
-    re.compile(r"^[ \t]*(?:import|from)\s+.*\burllib\b(?!\.parse\b)", re.MULTILINE),
+    # There was one for a while, because hosts.py took a URI reference apart with
+    # urllib.parse.urlsplit. That import is gone: urlsplit deletes tabs and
+    # newlines anywhere in the string, so it answered a different path from the
+    # two other ports, and the module now reads the component as a substring the
+    # way Go and TypeScript do. With no user left, the exclusion goes too —
+    # exclusion lists in this repo only shrink.
+    #
+    # Restoring the flat ban also restores the guard's REACH. The carve-out had
+    # to anchor to the start of a line to inspect every module on a multi-module
+    # import, and anchoring stopped it seeing an import that is not the first
+    # statement on its line. These two match anywhere on the line, as the httpx
+    # entries above do.
+    re.compile(r"\bimport\s+urllib\b"),
+    re.compile(r"\bfrom\s+urllib\b"),
 )
 
 
@@ -84,18 +86,19 @@ class TestResolverIoLeaf:
         assert _imports_io("from urllib.request import urlopen")
         assert _imports_io("import urllib")
         assert _imports_io("import urllib.error")
-        # The carve-out must be checked at EVERY urllib on the line. This form
-        # slipped past a lookahead anchored to the import keyword.
+        # Every module on a multi-module import line, including .parse now that
+        # the carve-out is gone.
         assert _imports_io("import urllib.parse, urllib.request")
+        assert _imports_io("import urllib.parse")
+        assert _imports_io("from urllib.parse import urlsplit")
 
-    def test_meta_negative_allows_the_pure_url_parser(self) -> None:
-        # urllib.parse resolves a URI reference against a base. No socket, and no
-        # way to reach urllib.request through it.
-        assert not _imports_io("from urllib.parse import urljoin, urlsplit")
-        assert not _imports_io("import urllib.parse")
-        # ...and a line whose every urllib IS .parse stays allowed, so the fix
-        # above bans the second module rather than the comma.
-        assert not _imports_io("import urllib.parse, json")
+    def test_meta_positive_catches_an_import_that_is_not_first_on_its_line(self) -> None:
+        # The shapes the anchored carve-out pattern stopped seeing. A guard that
+        # only reads lines beginning with the keyword is a guard against tidy
+        # code, and tidy code was never the risk.
+        assert _imports_io("x = 1; import urllib.request")
+        assert _imports_io("if True: import urllib.request")
+        assert _imports_io("import urllib.parse, \\\n    urllib.request")
 
     def test_meta_negative_passes_pure_import(self) -> None:
         assert not _imports_io("from ramp_sdk.thumbprint import thumbprint")

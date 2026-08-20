@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import re
 from typing import Literal
-from urllib.parse import urlsplit
 
 from ramp_sdk._hostref import _parse_ref, anchored_parsed
 
@@ -323,6 +322,35 @@ def _merge_path(base_path: str, ref_path: str) -> str:
     return base_path[: base_path.rfind("/") + 1] + ref_path
 
 
+def _raw_path_of(s: str) -> str:
+    """The path component of a URI reference or URL, exactly as written.
+
+    The string with its fragment, query, scheme and authority removed. Matches
+    Go's ``rawPathOf`` and TypeScript's ``rawPathOf`` step for step.
+
+    Read as a SUBSTRING rather than through a URL library, for the same reason
+    as its two siblings below, plus one specific to this component. A URL
+    library is not a substring reader here: ``urllib``'s splitter DELETES every
+    tab, carriage return and line feed found anywhere in the string, so it
+    answers ``/ramp.json`` for a path that Go and TypeScript answer with the tab
+    still in it. The three ports agreed only because ``_untame_reason`` refuses
+    those bytes earlier in the call, which made a character-set check
+    load-bearing for a job it was never written to do.
+    """
+    s = s.split("#", 1)[0]
+    s = s.split("?", 1)[0]
+    # A scheme is a colon reached before any "/", so "/a:b" keeps its colon.
+    m = re.search(r"[:/]", s)
+    if m is not None and m.group() == ":":
+        s = s[m.end() :]
+    if s.startswith("//"):
+        j = s.find("/", 2)
+        if j < 0:
+            return ""
+        s = s[j:]
+    return s
+
+
 def _raw_query_of(s: str) -> tuple[str, bool]:
     """The query a reference or URL DEFINES, exactly as written, and whether it has one.
 
@@ -507,26 +535,30 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     # this line was the only thing that kept the result on a.example.
     #
     # The merge below is RFC 3986 5.2.2 and 5.2.3 written out rather than
-    # delegated to urljoin. urljoin routes through urlparse, which splits
-    # ";params" off the last path segment and then drops an EMPTY params — so it
-    # silently turns "/x;" into "/x", where Go and the WHATWG parser both keep
-    # the semicolon. urlsplit has no params concept, so parsing with it and
-    # merging by hand is what makes this port agree.
-    ref_parts = urlsplit(ref)
-    base_parts = urlsplit(manifest_url)
+    # delegated to urljoin, which returns an ABSOLUTE reference with its dot
+    # segments intact: joined against this base, "https://a.example/a/../x"
+    # comes back unchanged where all three ports answer "https://a.example/x".
+    # That reason holds across the whole supported Python range, which is why it
+    # is the one cited — an earlier note here argued from ";params" handling
+    # that CPython has since changed.
+    #
+    # The two paths are read as substrings, for the same reason as the query and
+    # the fragment. See _raw_path_of.
+    ref_path = _raw_path_of(ref)
+    base_path = _raw_path_of(manifest_url)
     if ref_auth_m is not None:
-        path = ref_parts.path
-    elif ref_parts.path == "":
+        path = ref_path
+    elif ref_path == "":
         # The base path is INHERITED, not copied: it goes through 5.2.4 below
         # like every other branch. A base of https://a.example/a/../ramp.json
         # with a query-only or fragment-only reference otherwise kept the dot
         # segments, and Go and TypeScript both remove them - same origin,
         # different document name.
-        path = base_parts.path
-    elif ref_parts.path.startswith("/"):
-        path = ref_parts.path
+        path = base_path
+    elif ref_path.startswith("/"):
+        path = ref_path
     else:
-        path = _merge_path(base_parts.path, ref_parts.path)
+        path = _merge_path(base_path, ref_path)
     # 5.2.4 runs ONCE, on whichever path the branches above produced. Calling it
     # inside each branch is how the inherited one came to be missed.
     path = _remove_dot_segments(path)
@@ -536,7 +568,7 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     # which in practice means a fragment-only reference. A reference carrying any
     # path drops the base's query even though it defines none.
     query, has_query = _raw_query_of(ref)
-    if not has_query and ref_auth_m is None and not ref_scheme and ref_parts.path == "":
+    if not has_query and ref_auth_m is None and not ref_scheme and ref_path == "":
         # The base cannot carry a fragment, refused above, so everything after
         # its first "?" is its query.
         query, has_query = _raw_query_of(manifest_url)

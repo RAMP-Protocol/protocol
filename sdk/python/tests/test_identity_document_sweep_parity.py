@@ -11,7 +11,9 @@ differently for an apostrophe in a query, a second hash in a fragment, a dot
 segment in the manifest URL, and a second colon in an authority.
 
 This file is what makes the sweep a permanent gate rather than a script someone
-has to remember to run after the next CPython upgrade changes ``urlsplit``.
+has to remember to run after the next toolchain upgrade moves a parser. The Go
+oracle still reads its scheme and authority through ``net/url``; this port and
+the TypeScript one read every component of the answer as substrings.
 
 ONE test rather than one per case, unlike the intent corpus beside it: the cases
 are positionally named because there is nothing to name, so a per-case test id
@@ -34,10 +36,11 @@ _REFUSAL_PREFIX = "identity document: "
 def _answer(manifest_url: str, ref: str) -> str | None:
     """Resolve one case, or report WHY it was refused rather than only THAT it was.
 
-    ``ValueError`` alone is too weak a pin: ``urlsplit`` raises it too, so a stray
-    one from inside the resolver would be counted as a correct refusal. A refusal
-    outside the documented family is returned as its own string, which makes it a
-    mismatch instead.
+    ``ValueError`` alone is too weak a pin: the resolver parses a port with
+    ``int()``, which raises the same class, so a stray one from inside the
+    resolver would be counted as a correct refusal. A refusal outside the
+    documented family is returned as its own string, which makes it a mismatch
+    instead.
     """
     try:
         return resolve_identity_document(manifest_url, ref)

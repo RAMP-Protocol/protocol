@@ -43,8 +43,9 @@ def test_accepted_references_resolve_as_the_oracle_does(vector: dict) -> None:
 @pytest.mark.parametrize("vector", _REFUSED, ids=[v["name"] for v in _REFUSED])
 def test_refused_references_are_refused(vector: dict) -> None:
     # The documented error family, not the wording. ``ValueError`` alone is too
-    # weak a pin: ``urlsplit`` raises it too, so a stray one from inside the
-    # resolver would pass here as a correct refusal.
+    # weak a pin: the resolver parses a port with ``int()``, which raises the
+    # same class, so a stray one from inside the resolver would pass here as a
+    # correct refusal.
     with pytest.raises(ValueError, match=r"^identity document: "):
         resolve_identity_document(vector["manifest_url"], vector["ref"])
 
