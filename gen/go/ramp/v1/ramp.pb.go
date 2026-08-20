@@ -6997,12 +6997,22 @@ func (x *AccountRegistration) GetDataSchema() *structpb.Struct {
 // at a segment boundary. A reference with no scheme MUST NOT carry a colon in
 // its FIRST path segment, the RFC 3986 path-noscheme rule, since that is
 // ambiguous with a scheme. An authority holds at most one colon: everything
-// after it is the port, and any port written out MUST be a number in 1-65535.
+// after it is the port, and a NON-EMPTY port MUST be a number in 1-65535. An
+// empty port — a bare `:` with no digits — and a port equal to the scheme
+// default are both ELIDED rather than refused, which RFC 3986 6.2.3 licenses:
+// it lists `http://example.com:/` and `http://example.com:80/` as equivalent to
+// `http://example.com/`, so `https://a.example:/x` resolves to
+// `https://a.example/x`.
 // A reference that names an authority MUST name a non-empty one. The manifest
 // URL MUST NOT carry a fragment, having been fetched; a reference MAY carry
 // one and it is kept, but never a second, because RFC 3986 gives a reference a
 // single fragment that runs to the end of the string. The resolved query and
-// fragment are the substrings the author wrote, not a re-serialization of them.
+// fragment are the substrings the author wrote, not a re-serialization of them,
+// and a component that is DEFINED BUT EMPTY KEEPS its delimiter: a reference of
+// `/x?` resolves to a URL ending in `?`, and one of `/x#` keeps the `#`. RFC
+// 3986 6.2.3 again, pointing the other way from the port: normalization "should
+// not remove delimiters when their associated component is empty", and two URIs
+// differing only by a trailing `#` are different regardless of the scheme.
 // Those are refusals, not repairs: this rule has to give the same verdict and
 // the same resolved string in every implementation, and the URL parsers
 // implementations reach for disagree about almost everything outside that

@@ -374,7 +374,12 @@ that:
   values this field carries, and a rule that applied only at segment boundaries
   would be harder to write identically in three languages — which is the whole
   point;
-- a port written out **MUST** be a number in `1`-`65535`;
+- a **non-empty** port **MUST** be a number in `1`-`65535`. An empty port — a bare
+  `:` with no digits — and a port equal to the scheme default are **elided**
+  rather than refused, so `https://a.example:/dir` resolves to
+  `https://a.example/dir`. RFC 3986 §6.2.3 licenses that: it lists
+  `http://example.com:/` and `http://example.com:80/` as equivalent to
+  `http://example.com/`;
 - an authority holds **at most one colon**. Everything after the first colon is
   the port, so `exchange.example:8443:9` is refused by the port rule above rather
   than read as a host named `exchange.example:8443`;
@@ -396,6 +401,14 @@ The resolved query and fragment are the **substrings the author wrote**, not a
 re-serialization of them. The path is resolved per RFC 3986 §5.2, but the query
 and the fragment are copied across, because the three URL libraries re-encode
 them differently inside the character set above.
+
+A query or a fragment that is **defined but empty keeps its delimiter**. A
+reference of `/dir?` resolves to `https://a.example/dir?`, and one of `/dir#`
+resolves to `https://a.example/dir#`. This is RFC 3986 §6.2.3 pointing the other
+way from the port rule above: normalization "should not remove delimiters when
+their associated component is empty", and two URIs that differ only by a trailing
+`#` are considered different regardless of the scheme. `/dir?` and `/dir` are
+different request targets on the wire, and a server may answer them differently.
 
 A control character, a space, a backslash and any non-ASCII byte all fall outside
 the character set, so one rule covers them.

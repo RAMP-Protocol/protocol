@@ -133,12 +133,10 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		// Accepted — the three canonical-output rules that used to split. Each
 		// row is a case where two SDKs agreed and the third did not.
 		//
-		//   A bare trailing "?" is Go's ForceQuery, not RFC 3986 semantics.
 		//   An empty path is "/" under RFC 3986 6.2.3, which is what WHATWG
 		//   already returned and what this oracle now returns.
 		//   Dot segments in an ABSOLUTE reference must still be removed; the
 		//   relative form is the one Python already got right, so both are here.
-		{"bare_trailing_question_mark", base, "/x?", "https://a.example/x"},
 		{"empty_path_is_root", base, "https://a.example", "https://a.example/"},
 		{"dot_segments_absolute_reference", base, "https://a.example/a/../b", "https://a.example/b"},
 		{"dot_segments_relative_reference", base, "/a/../b", "https://a.example/b"},
@@ -167,6 +165,17 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		// it survives into the output. It is accepted on purpose: the port rule
 		// bounds the VALUE, and reading it as text would flip this verdict.
 		{"padded_port_on_the_base", "https://a.example:0443/.well-known/ramp.json", "/x", "https://a.example:0443/x"},
+		// An EMPTY port — a bare colon with no digits — is elided, not refused,
+		// on both sides. RFC 3986 6.2.3 lists "http://example.com:/" as
+		// equivalent to "http://example.com/", so eliding it is licensed. Every
+		// other refusal in this rule exists because the three parsers DISAGREED
+		// about an input; here all three already agree with each other and with
+		// the RFC, so refusing would invent a restriction with nothing behind
+		// it. The doubled-colon case the port rule really guards —
+		// "a.example:8443:9" — is further down and still refused.
+		{"empty_port_on_the_base", "https://a.example:/.well-known/ramp.json", "/x", "https://a.example/x"},
+		{"empty_port_on_the_reference", base, "https://a.example:/x", "https://a.example/x"},
+		{"empty_port_on_both_sides", "https://a.example:/.well-known/ramp.json", "https://a.example:/x", "https://a.example/x"},
 
 		// Accepted — a colon and a semicolon that are ordinary path characters.
 		// A colon is legal in any segment but the first of a schemeless
@@ -194,8 +203,20 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		// DID document names one. It is inert for the fetch either way.
 		{"fragment_on_the_reference", base, "/doc#frag", "https://a.example/doc#frag"},
 		{"fragment_only_reference", base, "#frag", "https://a.example/.well-known/ramp.json#frag"},
-		// Defined but empty, on both components: no mark on the output.
-		{"bare_trailing_hash", base, "/doc#", "https://a.example/doc"},
+		// DEFINED BUT EMPTY, on both components: the delimiter is KEPT. RFC 3986
+		// 6.2.3 says normalization "should not remove delimiters when their
+		// associated component is empty", naming "http://example.com/?" as a URL
+		// that cannot be assumed equivalent to "http://example.com/", and says
+		// two URIs differing only by a trailing "#" "are considered different
+		// regardless of the scheme". These are different request targets on the
+		// wire. All three SDKs used to drop both marks, which was Python's
+		// answer — the one agreeing with neither the RFC nor WHATWG — recorded
+		// into the corpus and then read back as the contract.
+		{"bare_trailing_question_mark", base, "/x?", "https://a.example/x?"},
+		{"bare_trailing_hash", base, "/doc#", "https://a.example/doc#"},
+		{"bare_trailing_question_mark_and_hash", base, "/x?#", "https://a.example/x?#"},
+		{"empty_query_with_a_fragment", base, "/x?#f", "https://a.example/x?#f"},
+		{"empty_fragment_after_a_query", base, "/x?q#", "https://a.example/x?q#"},
 
 		// Accepted — a QUERY-BEARING manifest URL, the branch RFC 3986 5.2.2
 		// treats as a special case and which no vector reached. The base's query
@@ -207,7 +228,7 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		{"query_base_relative_reference_drops_it", "https://a.example/ramp.json?bq", "x", "https://a.example/x"},
 		{"query_base_fragment_reference_inherits_it", "https://a.example/ramp.json?bq", "#f", "https://a.example/ramp.json?bq#f"},
 		{"query_base_query_reference_replaces_it", "https://a.example/ramp.json?bq", "?rq", "https://a.example/ramp.json?rq"},
-		{"query_base_empty_query_reference", "https://a.example/ramp.json?bq", "?", "https://a.example/ramp.json"},
+		{"query_base_empty_query_reference", "https://a.example/ramp.json?bq", "?", "https://a.example/ramp.json?"},
 
 		// Refused — untame input. One row per class the three URL engines split
 		// on, each verified by running all three implementations. Without these

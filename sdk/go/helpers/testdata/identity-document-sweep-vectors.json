@@ -14369,21 +14369,21 @@
       "manifest_url": "https://a.example:443/ramp.json",
       "ref": "?",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json?"
     },
     {
       "name": "sweep_2053",
       "manifest_url": "https://a.example:443/ramp.json",
       "ref": "#",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json#"
     },
     {
       "name": "sweep_2054",
       "manifest_url": "https://a.example:443/ramp.json",
       "ref": "?#",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json?#"
     },
     {
       "name": "sweep_2055",
@@ -14397,21 +14397,21 @@
       "manifest_url": "https://a.example:443/ramp.json",
       "ref": "/x?",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?"
     },
     {
       "name": "sweep_2057",
       "manifest_url": "https://a.example:443/ramp.json",
       "ref": "/x#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x#"
     },
     {
       "name": "sweep_2058",
       "manifest_url": "https://a.example:443/ramp.json",
       "ref": "/x?#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?#"
     },
     {
       "name": "sweep_2059",
@@ -15167,21 +15167,21 @@
       "manifest_url": "https://a.example:/ramp.json",
       "ref": "?",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json?"
     },
     {
       "name": "sweep_2167",
       "manifest_url": "https://a.example:/ramp.json",
       "ref": "#",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json#"
     },
     {
       "name": "sweep_2168",
       "manifest_url": "https://a.example:/ramp.json",
       "ref": "?#",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json?#"
     },
     {
       "name": "sweep_2169",
@@ -15195,21 +15195,21 @@
       "manifest_url": "https://a.example:/ramp.json",
       "ref": "/x?",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?"
     },
     {
       "name": "sweep_2171",
       "manifest_url": "https://a.example:/ramp.json",
       "ref": "/x#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x#"
     },
     {
       "name": "sweep_2172",
       "manifest_url": "https://a.example:/ramp.json",
       "ref": "/x?#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?#"
     },
     {
       "name": "sweep_2173",
@@ -15566,21 +15566,21 @@
       "manifest_url": "https://A.Example/ramp.json",
       "ref": "?",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json?"
     },
     {
       "name": "sweep_2224",
       "manifest_url": "https://A.Example/ramp.json",
       "ref": "#",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json#"
     },
     {
       "name": "sweep_2225",
       "manifest_url": "https://A.Example/ramp.json",
       "ref": "?#",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json?#"
     },
     {
       "name": "sweep_2226",
@@ -15594,21 +15594,21 @@
       "manifest_url": "https://A.Example/ramp.json",
       "ref": "/x?",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?"
     },
     {
       "name": "sweep_2228",
       "manifest_url": "https://A.Example/ramp.json",
       "ref": "/x#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x#"
     },
     {
       "name": "sweep_2229",
       "manifest_url": "https://A.Example/ramp.json",
       "ref": "/x?#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?#"
     },
     {
       "name": "sweep_2230",
@@ -15965,21 +15965,21 @@
       "manifest_url": "https://a.example/a/./ramp.json",
       "ref": "?",
       "accepted": true,
-      "resolved": "https://a.example/a/ramp.json"
+      "resolved": "https://a.example/a/ramp.json?"
     },
     {
       "name": "sweep_2281",
       "manifest_url": "https://a.example/a/./ramp.json",
       "ref": "#",
       "accepted": true,
-      "resolved": "https://a.example/a/ramp.json"
+      "resolved": "https://a.example/a/ramp.json#"
     },
     {
       "name": "sweep_2282",
       "manifest_url": "https://a.example/a/./ramp.json",
       "ref": "?#",
       "accepted": true,
-      "resolved": "https://a.example/a/ramp.json"
+      "resolved": "https://a.example/a/ramp.json?#"
     },
     {
       "name": "sweep_2283",
@@ -15993,21 +15993,21 @@
       "manifest_url": "https://a.example/a/./ramp.json",
       "ref": "/x?",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?"
     },
     {
       "name": "sweep_2285",
       "manifest_url": "https://a.example/a/./ramp.json",
       "ref": "/x#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x#"
     },
     {
       "name": "sweep_2286",
       "manifest_url": "https://a.example/a/./ramp.json",
       "ref": "/x?#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?#"
     },
     {
       "name": "sweep_2287",
@@ -17960,21 +17960,21 @@
       "manifest_url": "https://a.example/.well-known/ramp.json",
       "ref": "?",
       "accepted": true,
-      "resolved": "https://a.example/.well-known/ramp.json"
+      "resolved": "https://a.example/.well-known/ramp.json?"
     },
     {
       "name": "sweep_2566",
       "manifest_url": "https://a.example/.well-known/ramp.json",
       "ref": "#",
       "accepted": true,
-      "resolved": "https://a.example/.well-known/ramp.json"
+      "resolved": "https://a.example/.well-known/ramp.json#"
     },
     {
       "name": "sweep_2567",
       "manifest_url": "https://a.example/.well-known/ramp.json",
       "ref": "?#",
       "accepted": true,
-      "resolved": "https://a.example/.well-known/ramp.json"
+      "resolved": "https://a.example/.well-known/ramp.json?#"
     },
     {
       "name": "sweep_2568",
@@ -17988,21 +17988,21 @@
       "manifest_url": "https://a.example/.well-known/ramp.json",
       "ref": "/x?",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?"
     },
     {
       "name": "sweep_2570",
       "manifest_url": "https://a.example/.well-known/ramp.json",
       "ref": "/x#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x#"
     },
     {
       "name": "sweep_2571",
       "manifest_url": "https://a.example/.well-known/ramp.json",
       "ref": "/x?#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?#"
     },
     {
       "name": "sweep_2572",
@@ -18359,21 +18359,21 @@
       "manifest_url": "https://a.example/ramp.json?bq",
       "ref": "?",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json?"
     },
     {
       "name": "sweep_2623",
       "manifest_url": "https://a.example/ramp.json?bq",
       "ref": "#",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json?bq"
+      "resolved": "https://a.example/ramp.json?bq#"
     },
     {
       "name": "sweep_2624",
       "manifest_url": "https://a.example/ramp.json?bq",
       "ref": "?#",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json?#"
     },
     {
       "name": "sweep_2625",
@@ -18387,21 +18387,21 @@
       "manifest_url": "https://a.example/ramp.json?bq",
       "ref": "/x?",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?"
     },
     {
       "name": "sweep_2627",
       "manifest_url": "https://a.example/ramp.json?bq",
       "ref": "/x#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x#"
     },
     {
       "name": "sweep_2628",
       "manifest_url": "https://a.example/ramp.json?bq",
       "ref": "/x?#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?#"
     },
     {
       "name": "sweep_2629",
@@ -18758,21 +18758,21 @@
       "manifest_url": "https://a.example/a/../ramp.json",
       "ref": "?",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json?"
     },
     {
       "name": "sweep_2680",
       "manifest_url": "https://a.example/a/../ramp.json",
       "ref": "#",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json#"
     },
     {
       "name": "sweep_2681",
       "manifest_url": "https://a.example/a/../ramp.json",
       "ref": "?#",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json?#"
     },
     {
       "name": "sweep_2682",
@@ -18786,21 +18786,21 @@
       "manifest_url": "https://a.example/a/../ramp.json",
       "ref": "/x?",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?"
     },
     {
       "name": "sweep_2684",
       "manifest_url": "https://a.example/a/../ramp.json",
       "ref": "/x#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x#"
     },
     {
       "name": "sweep_2685",
       "manifest_url": "https://a.example/a/../ramp.json",
       "ref": "/x?#",
       "accepted": true,
-      "resolved": "https://a.example/x"
+      "resolved": "https://a.example/x?#"
     },
     {
       "name": "sweep_2686",
@@ -19157,21 +19157,21 @@
       "manifest_url": "https://a.example:8443/.well-known/ramp.json",
       "ref": "?",
       "accepted": true,
-      "resolved": "https://a.example:8443/.well-known/ramp.json"
+      "resolved": "https://a.example:8443/.well-known/ramp.json?"
     },
     {
       "name": "sweep_2737",
       "manifest_url": "https://a.example:8443/.well-known/ramp.json",
       "ref": "#",
       "accepted": true,
-      "resolved": "https://a.example:8443/.well-known/ramp.json"
+      "resolved": "https://a.example:8443/.well-known/ramp.json#"
     },
     {
       "name": "sweep_2738",
       "manifest_url": "https://a.example:8443/.well-known/ramp.json",
       "ref": "?#",
       "accepted": true,
-      "resolved": "https://a.example:8443/.well-known/ramp.json"
+      "resolved": "https://a.example:8443/.well-known/ramp.json?#"
     },
     {
       "name": "sweep_2739",
@@ -19185,21 +19185,21 @@
       "manifest_url": "https://a.example:8443/.well-known/ramp.json",
       "ref": "/x?",
       "accepted": true,
-      "resolved": "https://a.example:8443/x"
+      "resolved": "https://a.example:8443/x?"
     },
     {
       "name": "sweep_2741",
       "manifest_url": "https://a.example:8443/.well-known/ramp.json",
       "ref": "/x#",
       "accepted": true,
-      "resolved": "https://a.example:8443/x"
+      "resolved": "https://a.example:8443/x#"
     },
     {
       "name": "sweep_2742",
       "manifest_url": "https://a.example:8443/.well-known/ramp.json",
       "ref": "/x?#",
       "accepted": true,
-      "resolved": "https://a.example:8443/x"
+      "resolved": "https://a.example:8443/x?#"
     },
     {
       "name": "sweep_2743",

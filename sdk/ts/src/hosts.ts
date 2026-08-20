@@ -400,11 +400,13 @@ function rawQueryOf(s: string): [string, boolean] {
 	return q < 0 ? ["", false] : [head.slice(q + 1), true];
 }
 
-// rawFragmentOf returns the fragment a reference DEFINES, exactly as written;
-// RFC 3986 §3.5.
-function rawFragmentOf(s: string): string {
+// rawFragmentOf returns the fragment a reference DEFINES, exactly as written,
+// and whether it defines one at all. RFC 3986 §3.5. PRESENCE is returned
+// alongside the text because a defined but empty fragment keeps its "#" — see
+// the output tail below. Matches Go's rawFragmentOf.
+function rawFragmentOf(s: string): [string, boolean] {
 	const i = s.indexOf("#");
-	return i < 0 ? "" : s.slice(i + 1);
+	return i < 0 ? ["", false] : [s.slice(i + 1), true];
 }
 
 // vetAuthority checks one authority and returns its host and its folded port.
@@ -557,12 +559,16 @@ export function resolveIdentityDocument(manifestUrl: string, ref: string): strin
 		// first "?" is its query.
 		[query, hasQuery] = rawQueryOf(manifestUrl);
 	}
-	// A query or a fragment that is DEFINED BUT EMPTY leaves no mark on the
-	// output: "/x?" and "/x#" both answer "/x".
-	const queryPart = hasQuery && query !== "" ? `?${query}` : "";
+	// A query or a fragment that is DEFINED BUT EMPTY keeps its delimiter: "/x?"
+	// answers "/x?" and "/x#" answers "/x#". RFC 3986 §6.2.3 says normalization
+	// "should not remove delimiters when their associated component is empty",
+	// and two URIs differing only by a trailing "#" "are considered different
+	// regardless of the scheme". They are different request targets on the wire.
+	// So PRESENCE decides the delimiter and the contents decide nothing.
+	const queryPart = hasQuery ? `?${query}` : "";
 	// The fragment is never inherited: RFC 3986 5.2.2 takes it from the reference
 	// on every branch, and the base has none in any case.
-	const fragment = rawFragmentOf(ref);
-	const fragmentPart = fragment === "" ? "" : `#${fragment}`;
+	const [fragment, hasFragment] = rawFragmentOf(ref);
+	const fragmentPart = hasFragment ? `#${fragment}` : "";
 	return `https://${authority}${path}${queryPart}${fragmentPart}`;
 }

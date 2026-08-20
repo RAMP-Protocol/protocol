@@ -18,14 +18,21 @@ follows in place, so an empty segment there survives and `..//dir` against a bas
 Both the reference AND the manifest URL must also be written in the RFC 3986 character set
 — the unreserved characters, the gen-delims, the sub-delims and `%` — with every
 percent-escape valid, no percent-encoded dot anywhere in the string (`%2e`, `%2E`,
-mid-segment included, so `card%2ejson` is refused too), any written-out port a number in
+mid-segment included, so `card%2ejson` is refused too), a non-empty port a number in
 1-65535, at most one colon in an authority, a non-empty authority whenever one is named,
-and no colon in the first segment of a schemeless reference. A reference MAY carry a
+and no colon in the first segment of a schemeless reference. An empty port — a bare `:`
+with no digits — and a port equal to the scheme default are elided rather than refused,
+which RFC 3986 6.2.3 licenses by listing `http://example.com:/` and `http://example.com:80/`
+as equivalent to `http://example.com/`. A reference MAY carry a
 fragment and it is kept, but never a second one: RFC 3986 gives a reference a single
 fragment running to the end of the string, so a hash inside a fragment is written `%23`.
 The manifest URL MUST NOT carry a fragment at all, which a URL a document was fetched from
 cannot meaningfully have. The resolved query and fragment are the substrings the author
-wrote, not a re-serialization of them. A control character, a space, a backslash and every
+wrote, not a re-serialization of them, and a component that is defined but empty keeps its
+delimiter: `/dir?` resolves to a URL ending in `?` and `/dir#` keeps the `#`. That is RFC
+3986 6.2.3 pointing the other way from the port — normalization "should not remove
+delimiters when their associated component is empty", and two URIs differing only by a
+trailing `#` are considered different regardless of the scheme. A control character, a space, a backslash and every
 non-ASCII byte fall outside the character set, so one rule covers them all. These are
 refusals rather than repairs: the rule has to produce the same verdict and the same
 resolved string in every implementation, and the URL parsers implementations reach for

@@ -218,13 +218,6 @@
       "resolved": "https://a.example/a%41b"
     },
     {
-      "name": "bare_trailing_question_mark",
-      "manifest_url": "https://a.example/.well-known/ramp.json",
-      "ref": "/x?",
-      "accepted": true,
-      "resolved": "https://a.example/x"
-    },
-    {
       "name": "empty_path_is_root",
       "manifest_url": "https://a.example/.well-known/ramp.json",
       "ref": "https://a.example",
@@ -302,6 +295,27 @@
       "resolved": "https://a.example:0443/x"
     },
     {
+      "name": "empty_port_on_the_base",
+      "manifest_url": "https://a.example:/.well-known/ramp.json",
+      "ref": "/x",
+      "accepted": true,
+      "resolved": "https://a.example/x"
+    },
+    {
+      "name": "empty_port_on_the_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "https://a.example:/x",
+      "accepted": true,
+      "resolved": "https://a.example/x"
+    },
+    {
+      "name": "empty_port_on_both_sides",
+      "manifest_url": "https://a.example:/.well-known/ramp.json",
+      "ref": "https://a.example:/x",
+      "accepted": true,
+      "resolved": "https://a.example/x"
+    },
+    {
       "name": "colon_in_a_later_segment",
       "manifest_url": "https://a.example/.well-known/ramp.json",
       "ref": "/a:b",
@@ -351,11 +365,39 @@
       "resolved": "https://a.example/.well-known/ramp.json#frag"
     },
     {
+      "name": "bare_trailing_question_mark",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/x?",
+      "accepted": true,
+      "resolved": "https://a.example/x?"
+    },
+    {
       "name": "bare_trailing_hash",
       "manifest_url": "https://a.example/.well-known/ramp.json",
       "ref": "/doc#",
       "accepted": true,
-      "resolved": "https://a.example/doc"
+      "resolved": "https://a.example/doc#"
+    },
+    {
+      "name": "bare_trailing_question_mark_and_hash",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/x?#",
+      "accepted": true,
+      "resolved": "https://a.example/x?#"
+    },
+    {
+      "name": "empty_query_with_a_fragment",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/x?#f",
+      "accepted": true,
+      "resolved": "https://a.example/x?#f"
+    },
+    {
+      "name": "empty_fragment_after_a_query",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "/x?q#",
+      "accepted": true,
+      "resolved": "https://a.example/x?q#"
     },
     {
       "name": "query_base_path_reference_drops_it",
@@ -390,7 +432,7 @@
       "manifest_url": "https://a.example/ramp.json?bq",
       "ref": "?",
       "accepted": true,
-      "resolved": "https://a.example/ramp.json"
+      "resolved": "https://a.example/ramp.json?"
     },
     {
       "name": "control_character_in_the_reference",

@@ -221,17 +221,22 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 		// its first "?" is its query.
 		query, hasQuery = rawQueryOf(manifestURL)
 	}
-	// A query or a fragment that is DEFINED BUT EMPTY leaves no mark on the
-	// output: "/x?" and "/x#" both answer "/x". Go remembers the bare "?" as
-	// url.URL.ForceQuery, which is not RFC 3986 semantics and which both other
-	// SDKs drop, so this drops it too and treats the hash the same way.
-	if hasQuery && query != "" {
+	// A query or a fragment that is DEFINED BUT EMPTY keeps its delimiter:
+	// "/x?" answers "/x?" and "/x#" answers "/x#". RFC 3986 6.2.3 says
+	// normalization "should not remove delimiters when their associated
+	// component is empty", and names "http://example.com/?" as a URL that
+	// cannot be assumed equivalent to "http://example.com/"; on the fragment it
+	// says two URIs differing only by a trailing "#" "are considered different
+	// regardless of the scheme". They are different request targets on the
+	// wire, and this field names a document a verifier fetches. So PRESENCE
+	// decides the delimiter and the contents decide nothing.
+	if hasQuery {
 		out.WriteString("?")
 		out.WriteString(query)
 	}
 	// The fragment is never inherited: RFC 3986 5.2.2 takes it from the
 	// reference on every branch. The base has none in any case.
-	if fragment, _ := rawFragmentOf(ref); fragment != "" {
+	if fragment, hasFragment := rawFragmentOf(ref); hasFragment {
 		out.WriteString("#")
 		out.WriteString(fragment)
 	}

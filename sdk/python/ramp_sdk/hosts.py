@@ -326,9 +326,15 @@ def _raw_query_of(s: str) -> tuple[str, bool]:
     return query, bool(sep)
 
 
-def _raw_fragment_of(s: str) -> str:
-    """The fragment a reference DEFINES, exactly as written; RFC 3986 §3.5."""
-    return s.split("#", 1)[1] if "#" in s else ""
+def _raw_fragment_of(s: str) -> tuple[str, bool]:
+    """The fragment a reference DEFINES, exactly as written, and whether it has one.
+
+    RFC 3986 §3.5. PRESENCE is returned alongside the text because a defined but
+    empty fragment keeps its "#" — see the output tail of
+    ``resolve_identity_document``. Matches Go's ``rawFragmentOf``.
+    """
+    _, sep, fragment = s.partition("#")
+    return fragment, bool(sep)
 
 
 def _remove_dot_segments(path: str) -> str:
@@ -516,11 +522,11 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     # empty path, no authority and no scheme, and defines no query of its own —
     # which in practice means a fragment-only reference. A reference carrying any
     # path drops the base's query even though it defines none.
-    query, ref_has_query = _raw_query_of(ref)
-    if not ref_has_query and ref_auth_m is None and not ref_scheme and ref_parts.path == "":
+    query, has_query = _raw_query_of(ref)
+    if not has_query and ref_auth_m is None and not ref_scheme and ref_parts.path == "":
         # The base cannot carry a fragment, refused above, so everything after
         # its first "?" is its query.
-        query, _ = _raw_query_of(manifest_url)
+        query, has_query = _raw_query_of(manifest_url)
 
     out = "https://" + base_host.lower()
     if base_port:
@@ -528,12 +534,17 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     # RFC 3986 6.2.3: under a hierarchical scheme an empty path is equivalent to
     # "/", and "/" is the normalized form.
     out += path or "/"
-    # A query or a fragment that is DEFINED BUT EMPTY leaves no mark on the
-    # output: "/x?" and "/x#" both answer "/x".
-    if query:
+    # A query or a fragment that is DEFINED BUT EMPTY keeps its delimiter: "/x?"
+    # answers "/x?" and "/x#" answers "/x#". RFC 3986 6.2.3 says normalization
+    # "should not remove delimiters when their associated component is empty",
+    # and two URIs differing only by a trailing "#" "are considered different
+    # regardless of the scheme". They are different request targets on the wire.
+    # So PRESENCE decides the delimiter and the contents decide nothing.
+    if has_query:
         out += "?" + query
     # The fragment is never inherited: RFC 3986 5.2.2 takes it from the reference
     # on every branch, and the base has none in any case.
-    if fragment := _raw_fragment_of(ref):
+    fragment, has_fragment = _raw_fragment_of(ref)
+    if has_fragment:
         out += "#" + fragment
     return out
