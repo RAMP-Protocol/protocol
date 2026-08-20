@@ -12,7 +12,7 @@ import type { Window } from "../core/window.ts";
 import { AGENT_KEY_HEADER } from "../src/pop.ts";
 import { retrievalAuthFailureDetail } from "../src/errordetail.ts";
 import { RequestIDHeader } from "../src/wire.ts";
-import { ssrfGuard } from "../resolvers/http.ts";
+import { requireScheme, ssrfGuard } from "../resolvers/http.ts";
 import { RampCallError } from "./errors.ts";
 import { concat } from "./send.ts";
 
@@ -119,6 +119,7 @@ export async function fetchContent(
 		opts.timeoutMs ?? DEFAULT_CONTENT_TIMEOUT_MS,
 	);
 	try {
+		vetDialable(op, signedURL);
 		const proof = await mintProof(op, signedURL, opts);
 		const headers: Record<string, string> = {
 			[AGENT_KEY_HEADER]: proof.agentKey,
@@ -157,6 +158,28 @@ export async function fetchContent(
 		};
 	} finally {
 		clearTimeout(timer);
+	}
+}
+
+/**
+ * vetDialable refuses a delivery URL this SDK will not dial, before anything is spent on
+ * it — which is what makes mintProof's "after the URL has been accepted as dialable" true.
+ *
+ * The dispatcher's guard is the CONNECTOR: it decides what a hostname may resolve to and
+ * never sees a scheme, because by then the URL is already a host and a port. A delivery URL
+ * names a host another party chose, carries a live credential in its query and presents a
+ * proof of possession of the agent's key in a header, so plaintext here hands both to
+ * anyone on the path.
+ *
+ * Reported as unreachable, matching Go: there the same refusal comes out of the transport,
+ * where Fetch reads it as a dial that did not happen.
+ */
+function vetDialable(op: string, signedURL: string): void {
+	try {
+		requireScheme(signedURL);
+	} catch (cause) {
+		// The URL is not echoed: it carries a live credential in its query.
+		throw new RampCallError({ kind: "unreachable", op, cause: redact(cause) });
 	}
 }
 

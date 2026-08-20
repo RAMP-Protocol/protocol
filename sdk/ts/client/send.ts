@@ -19,7 +19,7 @@
 
 import { Agent, type Dispatcher, request as undiciRequest } from "undici";
 
-import { ssrfGuard } from "../resolvers/http.ts";
+import { requireScheme, ssrfGuard } from "../resolvers/http.ts";
 import { RampCallError } from "./errors.ts";
 import type { UnaryRequest, UnaryResponse, UnarySend } from "./transport.ts";
 
@@ -46,6 +46,11 @@ export function createUnarySend(opts: SendOptions): UnarySend {
 		? new Agent({ connect: ssrfGuard() })
 		: new Agent();
 	return async (req: UnaryRequest): Promise<UnaryResponse> => {
+		// The scheme, before the dial. ssrfGuard above is the connector — it decides what
+		// a hostname may resolve to and never sees a scheme, because by then the URL is
+		// already a host and a port. Without this the guarded legs, whose host another
+		// party named, would carry the RFC 9421 signature over plaintext http.
+		if (opts.guarded) requireScheme(req.url);
 		const response = await undiciRequest(req.url, {
 			method: "POST",
 			headers: req.headers,
