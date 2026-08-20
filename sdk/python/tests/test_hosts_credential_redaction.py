@@ -24,8 +24,7 @@ import httpx
 import pytest
 
 from ramp_sdk.hosts import host_anchored, host_of
-from ramp_sdk.resolvers import WellKnownEndpointResolver
-from ramp_sdk.resolvers.wellknown import _endpoint_refusal
+from ramp_sdk.resolvers import EndpointRefusedError, WellKnownEndpointResolver
 
 _SECRET = "s3cr3t"  # noqa: S105 - a test fixture, not a credential
 
@@ -55,11 +54,26 @@ _CREDENTIAL_REFS = [
 ]
 
 
+def _serving(endpoint: str) -> httpx.Client:
+    """A manifest server that always answers with the endpoint under test."""
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"role": "ROLE_EXCHANGE", "endpoint": endpoint})
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+# Driven through resolve_endpoint, not through the private refusal builder it calls.
+# The property belongs to what a CONSUMER catches: asserting on the builder's return
+# leaves the raise site free to append the endpoint again, and every test here would
+# still pass while the credential re-leaked. That is the regression this file exists
+# to prevent, so it is asserted where it would happen.
 @pytest.mark.parametrize("ref", _CREDENTIAL_REFS)
 def test_the_endpoint_rule_never_echoes_a_credential(ref: str) -> None:
-    refusal = _endpoint_refusal("exchange.example", ref)
-    assert refusal is not None, "a credential-bearing endpoint must be refused"
-    assert _SECRET not in refusal
+    r = WellKnownEndpointResolver(http=_serving(ref))
+    with pytest.raises(EndpointRefusedError) as caught:
+        r.resolve_endpoint("exchange.example")
+    assert _SECRET not in str(caught.value)
 
 
 @pytest.mark.parametrize("ref", _CREDENTIAL_REFS)
@@ -79,8 +93,12 @@ def test_a_well_formed_credential_still_gets_the_rules_own_message() -> None:
     names the reason rather than the reference — which is what it did before, and
     what the parse-failure path was quietly bypassing.
     """
-    refusal = _endpoint_refusal("exchange.example", f"https://u:{_SECRET}@exchange.example/v1")
-    assert refusal == "host='exchange.example' advertises an endpoint carrying userinfo"
+    r = WellKnownEndpointResolver(http=_serving(f"https://u:{_SECRET}@exchange.example/v1"))
+    with pytest.raises(EndpointRefusedError) as caught:
+        r.resolve_endpoint("exchange.example")
+    assert str(caught.value) == (
+        "host='exchange.example' advertises an endpoint carrying userinfo"
+    )
 
 
 # The SERVING HOST, not the advertised endpoint. Every case above feeds the
@@ -106,6 +124,5 @@ def test_a_credential_in_the_serving_host_is_not_echoed(host: str) -> None:
 
 def test_an_at_sign_outside_the_authority_is_not_redacted() -> None:
     """The redaction is conservative, not indiscriminate: a path is not a credential."""
-    refusal = _endpoint_refusal("exchange.example", "https://exchange.example/p%zz@x")
-    assert refusal is not None
-    assert "p%zz@x" in refusal
+    with pytest.raises(ValueError, match=r"p%zz@x"):
+        host_of("https://exchange.example/p%zz@x")

@@ -17,11 +17,8 @@
 // a manifest carrying the vector's endpoint, so each case exercises the bare-host
 // check, the decode and the vet, and nothing else.
 import { describe, expect, it } from "vitest";
-import {
-	createWellKnownEndpointResolver,
-	DirectoryUnavailable,
-	NoEndpoint,
-} from "../resolvers/index.ts";
+import { createWellKnownEndpointResolver, EndpointRefused } from "../resolvers/index.ts";
+import { isBareHost } from "../src/hosts.ts";
 import type { FetchLike } from "../resolvers/http.ts";
 import vectorsFile from "../../go/resolvers/testdata/endpoint-vet-vectors.json";
 
@@ -41,10 +38,34 @@ function servingManifest(endpoint: string): FetchLike {
 const refused = doc.endpoint_vet.filter((v) => v.refused);
 const accepted = doc.endpoint_vet.filter((v) => !v.refused);
 
+/** Whether a vector's SERVING host is a value a caller could legitimately pass. */
+function servingHostIsUsable(host: string): boolean {
+	try {
+		return isBareHost(host);
+	} catch {
+		return false;
+	}
+}
+
+// The two faults a refused vector can carry, split by DATA rather than by name. An
+// unusable serving host is the caller's own argument, refused before any fetch; every
+// other refusal is a verdict on what the Exchange advertised.
+const refusedByTheRule = refused.filter((v) => servingHostIsUsable(v.host));
+const refusedBeforeTheFetch = refused.filter((v) => !servingHostIsUsable(v.host));
+
 describe("sdk/ts endpoint rule matches the sdk/go oracle vectors", () => {
 	it("both partitions of the corpus are non-empty", () => {
 		expect(refused.length).toBeGreaterThan(0);
 		expect(accepted.length).toBeGreaterThan(0);
+	});
+
+	// One vector carries an unusable serving host, and the split below is only honest
+	// while that stays true. A second one arriving silently would move a verdict on
+	// the Exchange's answer into the branch that does not require EndpointRefused,
+	// which is the assertion this file exists to make.
+	it("the caller-fault partition stays the exception it is written as", () => {
+		expect(refusedBeforeTheFetch).toHaveLength(1);
+		expect(refusedByTheRule).toHaveLength(refused.length - 1);
 	});
 
 	for (const v of accepted) {
@@ -54,23 +75,37 @@ describe("sdk/ts endpoint rule matches the sdk/go oracle vectors", () => {
 		});
 	}
 
-	// The exact class is not pinned, because two different faults legitimately reach
-	// a refusal: an unusable serving host is the caller's own value (an invalid-host
-	// throw, before any fetch), while an unusable advertised endpoint is a verdict on
-	// the Exchange's answer (EndpointRefused). What IS pinned is the pair that must
-	// never appear — a case refused by "no endpoint advertised" or by a transport
-	// failure never reached the rule at all, and asserting a bare throw let exactly
-	// that pass.
-	for (const v of refused) {
+	// The exact class IS pinned, positively. Excluding two wrong classes cannot
+	// preserve the verdict this branch adds: EndpointRefused is FINAL, distinct from
+	// "no endpoint advertised" and from a transport failure precisely so a caller
+	// classifying retryability reads it as a decision. A test that accepts anything
+	// else would stay green while that distinction was erased — and, here, would
+	// count a TypeError from a crash as a refusal.
+	for (const v of refusedByTheRule) {
 		it(`endpointVet ${v.name} is refused by the rule`, async () => {
 			const r = createWellKnownEndpointResolver({ fetch: servingManifest(v.endpoint) });
 			const err = await r.resolveEndpoint(v.host).then(
 				() => undefined,
 				(e: unknown) => e,
 			);
-			expect(err).toBeDefined();
-			expect(err).not.toBeInstanceOf(NoEndpoint);
-			expect(err).not.toBeInstanceOf(DirectoryUnavailable);
+			expect(err).toBeInstanceOf(EndpointRefused);
+		});
+	}
+
+	// The one fault that is NOT a verdict on the Exchange: the caller's own argument
+	// is not a host, so nothing was fetched and there is nothing to have a verdict
+	// on. It is the plain invalid-host throw isBareHost itself raises, and it must
+	// not be dressed up as a refusal of the manifest.
+	for (const v of refusedBeforeTheFetch) {
+		it(`endpointVet ${v.name} is the caller's fault, not the Exchange's`, async () => {
+			const r = createWellKnownEndpointResolver({ fetch: servingManifest(v.endpoint) });
+			const err = await r.resolveEndpoint(v.host).then(
+				() => undefined,
+				(e: unknown) => e,
+			);
+			expect(err).toBeInstanceOf(Error);
+			expect(err).not.toBeInstanceOf(EndpointRefused);
+			expect((err as Error).message).toMatch(/not a usable host/);
 		});
 	}
 });

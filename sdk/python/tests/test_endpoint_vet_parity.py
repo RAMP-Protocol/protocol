@@ -24,16 +24,27 @@ import httpx
 import pytest
 
 from conftest import GO_RESOLVERS_TESTDATA, load_json
-from ramp_sdk.resolvers import (
-    DirectoryUnavailableError,
-    NoEndpointError,
-    ResolverError,
-    WellKnownEndpointResolver,
-)
+from ramp_sdk.hosts import is_bare_host
+from ramp_sdk.resolvers import EndpointRefusedError, WellKnownEndpointResolver
 
 _DOC = load_json(GO_RESOLVERS_TESTDATA / "endpoint-vet-vectors.json")
 _REFUSED = [v for v in _DOC["endpoint_vet"] if v["refused"]]
 _ACCEPTED = [v for v in _DOC["endpoint_vet"] if not v["refused"]]
+
+
+def _serving_host_is_usable(host: str) -> bool:
+    """Whether a vector's SERVING host is a value a caller could legitimately pass."""
+    try:
+        return is_bare_host(host)
+    except ValueError:
+        return False
+
+
+# The two faults a refused vector can carry, split by DATA rather than by name. An
+# unusable serving host is the caller's own argument, refused before any fetch; every
+# other refusal is a verdict on what the Exchange advertised.
+_REFUSED_BY_THE_RULE = [v for v in _REFUSED if _serving_host_is_usable(v["host"])]
+_REFUSED_BEFORE_THE_FETCH = [v for v in _REFUSED if not _serving_host_is_usable(v["host"])]
 
 
 def _serving_manifest(endpoint: str) -> httpx.Client:
@@ -50,21 +61,44 @@ def test_both_partitions_of_the_corpus_are_nonempty() -> None:
     assert len(_ACCEPTED) > 0
 
 
+def test_the_caller_fault_partition_stays_the_exception_it_is_written_as() -> None:
+    """One vector carries an unusable serving host, and the split below is only
+    honest while that stays true. A second one arriving silently would move a
+    verdict on the Exchange's answer into the branch that does not require
+    EndpointRefusedError, which is the assertion this file exists to make."""
+    assert len(_REFUSED_BEFORE_THE_FETCH) == 1
+    assert len(_REFUSED_BY_THE_RULE) == len(_REFUSED) - 1
+
+
 @pytest.mark.parametrize("vector", _ACCEPTED, ids=[v["name"] for v in _ACCEPTED])
 def test_an_accepted_endpoint_is_handed_back(vector: dict) -> None:
     r = WellKnownEndpointResolver(http=_serving_manifest(vector["endpoint"]))
     assert r.resolve_endpoint(vector["host"]) == vector["endpoint"]
 
 
-# The exact class is not pinned, because two different faults legitimately reach a
-# refusal: an unusable serving host is the caller's own value (a ValueError, raised
-# before any fetch), while an unusable advertised endpoint is a verdict on the
-# Exchange's answer (EndpointRefusedError). What IS pinned is the pair that must never
-# appear — a case refused by "no endpoint advertised" or by a transport failure never
-# reached the rule at all, and asserting a bare raise let exactly that pass.
-@pytest.mark.parametrize("vector", _REFUSED, ids=[v["name"] for v in _REFUSED])
+# The exact class IS pinned, positively. Excluding two wrong classes cannot preserve
+# the verdict this branch adds: EndpointRefusedError is FINAL, distinct from "no
+# endpoint advertised" and from a transport failure precisely so a caller classifying
+# retryability reads it as a decision. A test that accepts anything else would stay
+# green while that distinction was erased — and would count a crash as a refusal.
+@pytest.mark.parametrize(
+    "vector", _REFUSED_BY_THE_RULE, ids=[v["name"] for v in _REFUSED_BY_THE_RULE]
+)
 def test_a_refused_endpoint_is_refused_by_the_rule(vector: dict) -> None:
     r = WellKnownEndpointResolver(http=_serving_manifest(vector["endpoint"]))
-    with pytest.raises((ValueError, ResolverError)) as caught:
+    with pytest.raises(EndpointRefusedError):
         r.resolve_endpoint(vector["host"])
-    assert not isinstance(caught.value, NoEndpointError | DirectoryUnavailableError)
+
+
+# The one fault that is NOT a verdict on the Exchange: the caller's own argument is
+# not a host, so nothing was fetched and there is nothing to have a verdict on. It is
+# the plain ValueError is_bare_host itself raises, and it must not be dressed up as a
+# refusal of the manifest.
+@pytest.mark.parametrize(
+    "vector", _REFUSED_BEFORE_THE_FETCH, ids=[v["name"] for v in _REFUSED_BEFORE_THE_FETCH]
+)
+def test_an_unusable_serving_host_is_the_callers_fault(vector: dict) -> None:
+    r = WellKnownEndpointResolver(http=_serving_manifest(vector["endpoint"]))
+    with pytest.raises(ValueError) as caught:  # noqa: PT011 - the class IS the assertion
+        r.resolve_endpoint(vector["host"])
+    assert not isinstance(caught.value, EndpointRefusedError)
