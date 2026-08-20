@@ -22,6 +22,7 @@ from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+import httpx
 import pytest
 from resolvers_harness import (
     ANCHOR,
@@ -42,6 +43,7 @@ from ramp_sdk.keyresolver import StaticKeyResolver
 # classes and the fetching faces are the ported public surface.
 from ramp_sdk.resolvers import (  # type: ignore[import-not-found]
     DirectoryUnavailableError,
+    EndpointRefusedError,
     NoEndpointError,
     WellKnownEndpointResolver,
     WellKnownKeyResolver,
@@ -133,11 +135,17 @@ def test_wellknown_key_skips_malformed_entries_resolves_survivors() -> None:
         origin.close()
 
 
+# Every endpoint below is LATE-BOUND to the origin that serves it: an Exchange
+# advertises ITSELF, so the value is not known until its server has an address.
+# That is not test bookkeeping — it is the endpoint rule. An endpoint on any other
+# host is one the resolver refuses to hand back, so a fixed exchange.example string
+# served from a loopback port would exercise the refusal path rather than the
+# behaviour each of these tests is about.
 def test_endpoint_per_host_isolation() -> None:
-    ep_a = "https://exchange-a.example/ramp.v1.ExchangeService"
-    ep_b = "https://exchange-b.example/ramp.v1.ExchangeService"
     a = Origin()
     b = Origin()
+    ep_a = f"http://{a.host}/ramp.v1.ExchangeService"
+    ep_b = f"http://{b.host}/ramp.v1.ExchangeService"
     a.set_manifest(manifest_json(ep_a))
     b.set_manifest(manifest_json(ep_b))
     try:
@@ -153,8 +161,8 @@ def test_endpoint_per_host_isolation() -> None:
 
 
 def test_endpoint_cache_hit() -> None:
-    ep = "https://exchange.example/ramp.v1.ExchangeService"
     origin = Origin()
+    ep = f"http://{origin.host}/ramp.v1.ExchangeService"
     origin.set_manifest(manifest_json(ep))
     try:
         r = WellKnownEndpointResolver(ttl=HOUR, scheme="http")
@@ -166,8 +174,8 @@ def test_endpoint_cache_hit() -> None:
 
 
 def test_endpoint_ttl_refresh() -> None:
-    ep = "https://exchange.example/ramp.v1.ExchangeService"
     origin = Origin()
+    ep = f"http://{origin.host}/ramp.v1.ExchangeService"
     origin.set_manifest(manifest_json(ep))
     try:
         clock = MutableClock(ANCHOR)
@@ -317,3 +325,100 @@ def test_wellknown_key_concurrent_refresh_singleflight() -> None:
         assert origin.hits() == 1
     finally:
         origin.close()
+
+
+# The WIRING half of the endpoint rule. Which endpoints the rule refuses is settled
+# by the shared vectors (test_host_rule_parity.py and test_endpoint_vet_parity.py);
+# what these cases pin is that the resolver actually asks — before it hands
+# anything back, and before it caches.
+def test_endpoint_on_an_unrelated_host_is_refused() -> None:
+    origin = Origin()
+    origin.set_manifest(manifest_json("https://cdn.other.example/ramp.v1.ExchangeService"))
+    try:
+        r = WellKnownEndpointResolver(ttl=HOUR, scheme="http")
+        # A VERDICT, not a transport failure: the Exchange answered and the answer
+        # is unusable, so a caller classifying retryability reads this as final.
+        with pytest.raises(EndpointRefusedError):
+            r.resolve_endpoint(origin.host)
+    finally:
+        origin.close()
+
+
+def test_endpoint_carrying_credentials_is_refused_with_or_without_a_scheme() -> None:
+    origin = Origin()
+    try:
+        r = WellKnownEndpointResolver(scheme="http")
+        for ep in (
+            f"http://user:pass@{origin.host}/ramp.v1.ExchangeService",
+            # Schemeless. A plain URL parse reads "user" as the scheme and finds no
+            # userinfo at all, while the anchor check recovers the host and matches
+            # it — so this is the shape a rule that reads the reference twice lets
+            # through.
+            f"user:pass@{origin.host}/ramp.v1.ExchangeService",
+        ):
+            origin.set_manifest(manifest_json(ep))
+            with pytest.raises(EndpointRefusedError):
+                r.resolve_endpoint(origin.host)
+    finally:
+        origin.close()
+
+
+def test_a_refused_endpoint_is_not_cached() -> None:
+    origin = Origin()
+    origin.set_manifest(manifest_json("https://cdn.other.example/ramp.v1.ExchangeService"))
+    try:
+        r = WellKnownEndpointResolver(ttl=HOUR, scheme="http")
+        with pytest.raises(EndpointRefusedError):
+            r.resolve_endpoint(origin.host)
+        # The Exchange fixes its manifest. A resolver that had cached the refused
+        # value would keep refusing for the whole TTL.
+        ep = f"http://{origin.host}/ramp.v1.ExchangeService"
+        origin.set_manifest(manifest_json(ep))
+        assert r.resolve_endpoint(origin.host) == ep
+    finally:
+        origin.close()
+
+
+def test_a_host_that_is_not_bare_never_reaches_the_network() -> None:
+    origin = Origin()
+    origin.set_manifest(manifest_json(f"http://{origin.host}/ramp.v1.ExchangeService"))
+    try:
+        r = WellKnownEndpointResolver(scheme="http")
+        # The fetch URL is built by concatenation, so a smuggled path would choose
+        # WHAT gets fetched. Refused before the network, so the origin is never hit.
+        #
+        # The refusal is the invalid-host fault, NOT EndpointRefusedError: the bad
+        # value is the caller's argument, and no manifest was read to have a verdict
+        # on.
+        for bad in (f"{origin.host}/.well-known/evil.json", f"http://{origin.host}", ""):
+            with pytest.raises(ValueError, match="not a usable host"):
+                r.resolve_endpoint(bad)
+        assert origin.manifest_hits() == 0
+    finally:
+        origin.close()
+
+
+# The bare-host check is documented as running BEFORE the allow overlay and before
+# the network. Three comments say so and nothing tested it: a resolver that ran the
+# overlay first, or built the URL and dialled, would satisfy every other case here.
+def test_a_host_that_is_not_bare_is_refused_before_the_overlay_and_the_network() -> None:
+    asked: list[str] = []
+    fetched: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        fetched.append(str(request.url))
+        return httpx.Response(200, json={"endpoint": "http://a.example/v1"})
+
+    def allow(host: str) -> bool:
+        asked.append(host)
+        return True
+
+    r = WellKnownEndpointResolver(
+        scheme="http",
+        allow=allow,
+        http=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(ValueError, match="not a usable host"):
+        r.resolve_endpoint("a.example/.well-known/evil.json")
+    assert asked == []
+    assert fetched == []

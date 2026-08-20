@@ -8,6 +8,7 @@
 
 export {
 	DirectoryUnavailable,
+	EndpointRefused,
 	KeyExpired,
 	KeyRevoked,
 	NoEndpoint,

@@ -1,5 +1,12 @@
-"""Audience check and bare-domain shape — Python port of the sdk/go oracle
-(helpers/hosts.go, helpers/audience.go).
+"""Host predicates, the audience check and the bare-domain shape — Python port of
+the sdk/go oracle (helpers/hosts.go, helpers/audience.go).
+
+Two kinds of predicate live here and keeping them apart is the point. The ROUTING
+predicates — :func:`is_bare_host` and :func:`host_anchored` — precede a signed
+call to an address a network party named: a value that arrives inside an offer, or
+inside a manifest that offer pointed at, is about to be concatenated into a URL or
+dialled directly. The SHAPE predicate — :func:`is_bare_domain` — answers a
+different question: whether a value is the form the wire contract admits at all.
 
 Addressed requests carry the recipient's bare domain in a body field. The RFC 9421
 signature does not already establish the recipient: it proves the sender signed
@@ -22,6 +29,8 @@ from __future__ import annotations
 import re
 from typing import Literal
 from urllib.parse import urlsplit
+
+from ramp_sdk._hostref import _parse_ref, anchored_parsed
 
 # BARE_DOMAIN_PATTERN is the wire shape of a domain-valued field: a bare domain
 # with an optional ":port", never a URL. It carries the same bytes as the Go
@@ -183,9 +192,10 @@ def _normalize_domain(v: str) -> str:
 
 # Identity-document resolution (Python side of sdk/go/helpers/identitydocs.go).
 #
-# Deliberately NOT built on the ``_host_anchored`` helper in
-# ``ramp_sdk.resolvers.wba``: that one implements the endpoint rule, host or
-# subdomain, and this field refuses a subdomain. Whoever takes over the host an
+# Deliberately NOT built on :func:`host_anchored` further down this file, nor on
+# the ``_wba_host_anchored`` wrapper in ``ramp_sdk.resolvers.wba``: those
+# implement the endpoint rule, host or subdomain, and this field refuses a
+# subdomain. Whoever takes over the host an
 # endpoint names misdirects calls they still cannot sign for; whoever takes over
 # the host an identity document names publishes their own keys and BECOMES the
 # participant.
@@ -551,3 +561,87 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     if has_fragment:
         out += "#" + fragment
     return out
+
+
+# ---------------------------------------------------------------------------
+# Routing predicates
+# ---------------------------------------------------------------------------
+
+
+def host_of(ref: str) -> str:
+    """Extract the host (including any port) from a bare domain, a host:port pair,
+    or a full URL.
+
+    A ref with no scheme is read as though it carried https, since a bare domain
+    is otherwise indistinguishable from a path.
+
+    Raises ``ValueError`` when the reference cannot be read as a host at all.
+    """
+    return _parse_ref(ref).host
+
+
+def is_bare_host(ref: str) -> bool:
+    """Report whether ``ref`` is EXACTLY a host — nothing a URL could carry besides
+    the authority.
+
+    Answers False for a ref with a scheme, userinfo, a path, a query or a
+    fragment, because :func:`host_of` had to strip something to reach the host. A
+    port is NOT a strip: ``exchange.example:8443`` is a bare host, and the
+    well-known resolver concatenates host-with-port unchanged.
+
+    It exists for the callers that hand a network-supplied domain to code which
+    builds a URL by concatenation. There, narrowing a rich reference to its host
+    is the wrong repair: the value was never a domain, and accepting it silently
+    means the far side chose the path that gets fetched, not just the host it is
+    fetched from. Comparing against the extracted host is what makes the rejection
+    structural rather than a blocklist of the separators anyone thought to name.
+
+    This is NOT :func:`is_bare_domain`. A trailing root dot, a leading or trailing
+    hyphen, an underscore, an empty label and a bracketed IPv6 literal are all
+    usable hosts and none of them is a value the wire rule accepts. A caller
+    vetting a value it is about to dial wants this one; a caller vetting a value
+    that arrived in a message wants :func:`is_bare_domain`.
+    """
+    host = host_of(ref)
+    # A trailing colon parses as a host with an empty port and would otherwise
+    # compare equal to itself. It is not a domain anyone meant to write, and the
+    # callers here concatenate the value into a URL, so it is refused rather than
+    # quietly normalized away.
+    if host.endswith(":"):
+        return False
+    return host == ref
+
+
+def host_anchored(anchor: str, candidate: str) -> bool:
+    """Report whether ``candidate`` is anchored to ``anchor`` — the same host and
+    port, or a subdomain of that host on that port.
+
+    Either side may be a bare domain, a host:port pair or a full URL; a reference
+    that does not parse raises ``ValueError``, which callers treat as "not
+    anchored".
+
+    The use is checking a value a remote document supplied against the host that
+    served that document: it may point at itself or at one of its own subdomains,
+    and nothing else. Without it, a host could redirect a signed request — or a
+    revocation poll — to an unrelated third-party address that a dial-time address
+    guard would happily allow, because the address is perfectly public.
+
+    The PORT is part of the comparison. What is being anchored is a place a signed
+    call is sent, and a different port is a different service — one the party that
+    published the anchor need not control. A DEFAULT port and its omission are the
+    same port, so ``https://x``, ``https://x:443`` and ``x`` all anchor to one
+    another; refusing an operator who merely wrote ``:443`` out in full would be a
+    spelling check wearing a security check's clothes.
+
+    The SCHEME is still not compared. Whether a leg may run in the clear is the
+    guarded transport's decision, made in one place from one flag. Its only job
+    here is choosing which port counts as the default — and a side that NAMED no
+    scheme borrows the other's for that purpose, rather than being assumed to mean
+    https. Both anchors in this SDK arrive schemeless: a WBA directory's authority
+    and an ``Offer.exchange`` host are bare ``host[:port]`` values. Assuming https
+    for them meant an anchor of ``a.example:80`` kept its port (80 is not https's
+    default) while the candidate ``http://a.example:80`` folded it away — the same
+    authority reaching two answers, which silently un-anchored every plaintext
+    directory that spelled ``:80`` in full.
+    """
+    return anchored_parsed(_parse_ref(anchor), _parse_ref(candidate))

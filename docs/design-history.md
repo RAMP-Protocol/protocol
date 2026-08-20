@@ -1078,13 +1078,41 @@ name whatever endpoint it liked and validate itself. For a conformant Exchange t
 two agree, which is exactly why the distinction only shows against a document
 worth refusing.
 
-One SDK enforces it. Python and TypeScript ship endpoint resolvers that do not,
-and the predicate they would need does not exist there — only private
-near-namesakes in their WBA modules, and neither is a counterpart. TypeScript's
-compares `URL.host`, which folds a default port away as this rule now requires,
-but it is not exported; Python's compares `netloc`, which keeps an explicit `:443`
-verbatim and carries any userinfo along with it. Closing that is tracked
-separately.
+All three SDKs enforce it now, and closing that gap is where the rule stopped
+being a Go behaviour and became a contract. For a while one SDK enforced it while
+Python and TypeScript shipped endpoint resolvers that did not, and the predicate
+they would have needed did not exist in either — only private near-namesakes in
+their WBA modules, neither of them a counterpart. TypeScript's compared
+`URL.host`; Python's compared `netloc`, which keeps an explicit `:443` verbatim
+and carries any userinfo along with it. The predicate is exported in all three
+languages today, the private copies collapsed into it, and the rule is
+corpus-locked rather than written down three times.
+
+Neither near-namesake could simply be promoted, and the reason generalises past
+this rule: **a platform URL parser answers a question adjacent to the one being
+asked.** WHATWG's `URL` folds a scheme's default port away at PARSE time, which is
+earlier than this rule decides which scheme is even in play, so a TypeScript port
+built on it reports `x:443` and `http://x:80` as the same place. Python's
+`urlsplit` strips tabs and newlines that Go refuses outright, lowercases its
+`hostname` accessor, and keeps userinfo inside `netloc`. Each of those is one
+value where two conformant-looking implementations disagree, so the ports parse
+the authority themselves and the shared vectors carry every crossing.
+
+Closing the gap also surfaced a hole in the rule that had been open the whole
+time. The endpoint check refused userinfo by reading `url.Parse(endpoint).User`,
+while the anchor half re-read the same string through the predicate's own parse —
+and the two disagreed on exactly the shape the refusal exists to stop.
+`u:p@exchange.example` names no scheme, so a plain URL parse takes `u` for one and
+reports no userinfo and no host at all, while the anchor parse reads the value as
+https, recovers `exchange.example` and matches it. A credential-bearing endpoint
+was therefore accepted, and only the spelled-out `https://u:p@host` form was
+refused — a spelling check where a credential check was intended. Both halves now
+read the reference once, the same way, in all three languages: the ports keep that
+single reading in a module of their own, because the alternative — the rule half
+scanning the authority itself while the anchor half handed the whole string back to
+be parsed again — is the same two-readings shape wearing different clothes. The lesson is the smaller half of the same
+one above: a rule checked on one parse and enforced on another is two rules, and
+the value that separates them is the value it was written for.
 
 The comparison includes the PORT. An earlier version of this rule ignored it, on
 the reasoning that TLS binds hostnames rather than ports, so a service on another

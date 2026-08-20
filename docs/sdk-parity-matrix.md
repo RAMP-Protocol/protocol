@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 100 symbols at cross-language parity · 14 documented divergences · 144 Go-idiomatic exclusions · 27 conformance corpora, each tri-replayed.
+**At a glance:** 104 symbols at cross-language parity · 14 documented divergences · 140 Go-idiomatic exclusions · 29 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -47,7 +47,10 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `ErrUnknownKey` | `UnknownKeyError` | `UnknownKey` |
 | `FormatMoney` | `format_money` | `formatMoney` |
 | `HashURL` | `hash_url` | `hashUrl` |
+| `HostAnchored` | `host_anchored` | `hostAnchored` |
+| `HostOf` | `host_of` | `hostOf` |
 | `IsBareDomain` | `is_bare_domain` | `isBareDomain` |
+| `IsBareHost` | `is_bare_host` | `isBareHost` |
 | `IsSafeSchemaPattern` | `is_safe_schema_pattern` | `isSafeSchemaPattern` |
 | `KeyResolver` | `KeyResolver` | `RequestKeyResolver` |
 | `MaxBareDomainLen` | `MAX_BARE_DOMAIN_LEN` | `maxBareDomainLen` |
@@ -103,6 +106,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `ActiveEd25519KeyWithExpiryScreened` | `active_ed25519_key_with_expiry_screened` | `activeEd25519KeyWithExpiryScreened` |
 | `CachedOfferKeyResolver` | `CachedOfferKeyResolver` | `CachedOfferKeyResolver` |
 | `ErrDirectoryUnavailable` | `DirectoryUnavailableError` | `DirectoryUnavailable` |
+| `ErrEndpointRefused` | `EndpointRefusedError` | `EndpointRefused` |
 | `ErrKeyExpired` | `KeyExpiredError` | `KeyExpired` |
 | `ErrKeyRevoked` | `KeyRevokedError` | `KeyRevoked` |
 | `ErrNoEndpoint` | `NoEndpointError` | `NoEndpoint` |
@@ -283,9 +287,6 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.ErrUnknownFields` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrUnsupportedAlgorithm` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.FromContext` | Go context.Context accessor; py/ts thread verified-request state explicitly. |
-| `helpers.HostAnchored` | Go label-boundary same-host-and-port predicate, folding a scheme's default port into an omitted one. Python and TS carry a PRIVATE near-namesake in their WBA modules, neither of which is a counterpart: TS's compares URL.host, which normalizes the default port but is not exported; Python's compares netloc, which keeps an explicit :443 AND includes userinfo. Exporting an aligned predicate in all three is tracked separately. |
-| `helpers.HostOf` | Go host-extraction helper behind the two routing predicates. No Python or TS equivalent exists today, private or otherwise; it is a prerequisite of the tracked cross-language endpoint-rule work. |
-| `helpers.IsBareHost` | Go plain-hostname predicate for the report leg's first check. No Python or TS equivalent exists today; exporting the pair in both is part of the tracked cross-language endpoint-rule work. |
 | `helpers.NewContext` | Go context.Context accessor; py/ts thread verified-request state explicitly. |
 | `helpers.NewEd25519Signer` | Go Ed25519 Signer constructor; py/ts inject a sign function rather than constructing a named signer. |
 | `helpers.NewEd25519SignerFromSeed` | Go Ed25519 Signer-from-seed constructor; py/ts inject a sign function rather than constructing a named signer. |
@@ -316,7 +317,6 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `resolvers.ContentFetcher` | Part of the Go content-download leg; the TS/Python download verbs are tracked with their unary client work. |
 | `resolvers.DefaultContentTimeout` | Go default bound for one content fetch. Neither Python nor TS ships a content fetcher, so no counterpart holds this default today; it arrives with the download verbs tracked alongside their unary client work. |
 | `resolvers.DefaultMaxContentBytes` | Go default body cap for one content fetch. Neither Python nor TS ships a content fetcher, so no counterpart holds this cap today; it arrives with the download verbs tracked alongside their unary client work. |
-| `resolvers.ErrEndpointRefused` | Go errors.Is sentinel for a manifest-advertised endpoint the resolver will not return (wrong host, or userinfo). Python and TS DO ship endpoint resolvers, and neither enforces this rule yet; closing that gap is tracked separately and will bring a mapped counterpart. |
 | `resolvers.FetchError` | Go typed error for the content leg; py/ts raise/throw a runtime-native error carrying the same class and reason. |
 | `resolvers.FetchFailure` | Go failure-class enum for the content leg; py/ts express the same classes as string literals. |
 | `resolvers.NewContentFetcher` | Go constructor for the content-download leg; py/ts fold construction into their client. |
@@ -334,6 +334,7 @@ Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness
 | `helpers/testdata/audience-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/error-detail-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/hashurl-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/host-rule-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/idempotency-validate-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/identity-document-sweep-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/identity-document-vectors.json` | ✅ | ✅ | ✅ |
@@ -350,6 +351,7 @@ Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness
 | `helpers/testdata/wire-canonical-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/wire-constants-vectors.json` | ✅ | ✅ | ✅ |
 | `resolvers/testdata/active-ed25519-key-vectors.json` | ✅ | ✅ | ✅ |
+| `resolvers/testdata/endpoint-vet-vectors.json` | ✅ | ✅ | ✅ |
 | `resolvers/testdata/offer-key-clamp-vectors.json` | ✅ | ✅ | ✅ |
 | `resolvers/testdata/revocation-membership-vectors.json` | ✅ | ✅ | ✅ |
 | `resolvers/testdata/ssrf-address-vectors.json` | ✅ | ✅ | ✅ |

@@ -21,15 +21,69 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from ramp_sdk._hostref import _invalid_host, _parse_ref, anchored_parsed
 from ramp_sdk.b64 import b64url_decode_strict
+from ramp_sdk.hosts import is_bare_host
 from ramp_sdk.resolvers._http import default_client, fetch_strict
-from ramp_sdk.resolvers.errors import DirectoryUnavailableError, NoEndpointError
+from ramp_sdk.resolvers.errors import (
+    DirectoryUnavailableError,
+    EndpointRefusedError,
+    NoEndpointError,
+)
 
 if TYPE_CHECKING:
     import httpx
 
 _ED25519_PUBLIC_KEY_BYTES = 32
 _DEFAULT_TTL = timedelta(minutes=5)
+
+
+def _endpoint_refusal(host: str, endpoint: str) -> str | None:
+    """Why an endpoint a manifest advertises may not be handed back, or None when
+    it may.
+
+    The manifest that named this endpoint is served by the very host the call is
+    bound for, so the endpoint is only as trustworthy as that host. An Exchange may
+    advertise itself or a subdomain of itself, on the same port, and nothing else —
+    a dial-time address guard has no objection to an unrelated PUBLIC host, so
+    nothing below this catches one.
+
+    Userinfo is refused for a different reason with the same shape: the host
+    comparison reads the authority's host and ignores any ``user:password`` before
+    it, so an endpoint carrying credentials would pass the host check and then have
+    the HTTP client stamp an Authorization header the SDK never chose, on a leg that
+    already carries the caller's own signature.
+
+    It runs HERE, in the resolver, rather than in each caller: the check is a
+    property of reading an endpoint out of a manifest, not of any one caller's plans
+    for it. (The Go oracle keeps the same rule in a shared internal package because
+    it has a second call site — a typed client that re-checks an injected resolver's
+    answer. This SDK has only the one, so the rule lives with it.)
+
+    Both halves are decided over ONE reading of the reference, by the shared parse
+    in :mod:`ramp_sdk._hostref`. That is not tidiness: a value naming no scheme is a
+    URL to one parser and a path to another, and the two answers put a credential on
+    opposite sides of the check — ``u:p@exchange.example`` is where they part.
+    """
+    try:
+        advertised = _parse_ref(endpoint)
+    except ValueError as exc:
+        # The error already names the reference, with any credential redacted.
+        # Echoing the raw endpoint alongside it would put the credential straight
+        # back — which is what happened when this branch moved ahead of the userinfo
+        # refusal below.
+        return f"host={host!r}: {exc}"
+    if advertised.has_userinfo:
+        # Deliberately does not echo the endpoint: it carries the credential.
+        return f"host={host!r} advertises an endpoint carrying userinfo"
+    try:
+        served = _parse_ref(host)
+    except ValueError as exc:
+        return f"the serving host is unusable: {exc}"
+    if not anchored_parsed(served, advertised):
+        return f"host={host!r} advertises endpoint {endpoint!r} on a different host"
+    return None
+
 
 NowFn = Callable[[], datetime]
 AllowFn = Callable[[str], bool]
@@ -154,9 +208,32 @@ class WellKnownEndpointResolver:
     def resolve_endpoint(self, host: str) -> str:
         """Return the endpoint ``host`` advertises in its well-known manifest.
 
-        Raises NoEndpointError (manifest reachable but inert) or
-        DirectoryUnavailableError (unreachable/undecodable) — distinct verdicts.
+        Four exits, and a caller classifying retryability needs all four. Three are
+        verdicts and FINAL: ``ValueError`` when ``host`` is not a bare host, raised
+        before anything is fetched; ``NoEndpointError`` when the manifest is
+        reachable but advertises nothing; ``EndpointRefusedError`` when it advertises
+        an endpoint the rule will not hand back. The fourth,
+        ``DirectoryUnavailableError``, is a transport failure — unreachable or
+        undecodable — and is the only one worth retrying.
         """
+        # Checked BEFORE the allow overlay and before the cache. The fetch URL is
+        # built by concatenation, so a value carrying a path or a query would
+        # choose WHAT gets fetched rather than merely where from — and the raw
+        # string is the cache key, so admitting one would also put it in a shared
+        # map.
+        #
+        # A fault in the CALLER's value, not a verdict on the Exchange's answer, so
+        # it is the same ValueError is_bare_host itself raises for a reference it
+        # cannot read at all — the oracle uses one sentinel across both branches
+        # here for the same reason. EndpointRefusedError stays what it says: the
+        # manifest was read and its answer is unusable.
+        #
+        # Built by the shared constructor rather than by hand. A value that PARSES
+        # and carries a credential — user:pass@exchange.example — reaches this
+        # branch rather than the raising one, so a message written out here is the
+        # one path into these refusals that would name the credential.
+        if not is_bare_host(host):
+            raise _invalid_host(host, "not a bare host")
         if self._allow is not None and not self._allow(host):
             raise NoEndpointError(f"host {host} not allowed")
         cached = self._cached(host)
@@ -178,6 +255,11 @@ class WellKnownEndpointResolver:
         endpoint = doc.get("endpoint") if isinstance(doc, dict) else None
         if not isinstance(endpoint, str) or endpoint == "":
             raise NoEndpointError(f"host={host}")
+        # Vetted BEFORE it is cached, so a refused endpoint is not held for the TTL
+        # and then served to every later caller out of memory.
+        refusal = _endpoint_refusal(host, endpoint)
+        if refusal is not None:
+            raise EndpointRefusedError(refusal)
         self._store(host, endpoint)
         return endpoint
 

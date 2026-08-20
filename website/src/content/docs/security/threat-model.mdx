@@ -138,6 +138,14 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 **Attack**: Flood DiscoverResources to exhaust Exchange resources.
 **Countermeasure (protocol)**: Per-partner rate limiting keyed on the **verified requester identity** (RFC 9421 request signature — domain/key). Anonymous queries rejected.
 
+### T-EP-1: Manifest-advertised endpoint redirection
+**Attack**: A party that answers for `{domain}/.well-known/ramp.json` — the domain's operator, or anyone who can influence what a consumer reads there — advertises an `endpoint` on a host it controls, or on another port of the named host, or one carrying `user:password@` credentials. Every consumer that resolves that domain then sends signed calls (usage reports, disputes, execute) to the attacker's address, or stamps an `Authorization` header the SDK never chose. A dial-time SSRF guard raises no objection: the destination is an ordinary public host.
+**Countermeasure (protocol)**: `WellKnownManifest.endpoint` states the binding as a **MUST** — the endpoint must be on the host **and port** that served the manifest, or a subdomain of that host on that port, and must not carry userinfo. The anchor is the host the consumer **fetched the document from**, never the self-asserted `domain` member inside it, since anchoring to a value the document supplies would let a hostile manifest validate itself. The host match is on a full dot-delimited label boundary, so `evil-a.com` is not under `a.com`.
+
+**Enforced below the caller, in all three SDKs.** The check runs inside the shared endpoint resolver, before the value is returned and before it is cached, so every consumer of that resolver inherits it rather than being trusted to remember. A refused endpoint surfaces as its own verdict, distinct from "no endpoint advertised" and from a transport failure, so a caller classifying retryability reads it as final. The rule is corpus-locked to shared conformance vectors the three SDKs replay, and a conformance guard holds the vectors to the normative text above — the two cannot drift apart silently.
+
+**Bounded, not eliminated.** The manifest fetch follows redirects, so the party that answers *for the document* may be one a redirect chose. What that party cannot do is change where the signed call lands: whatever the manifest says, the endpoint it advertises must still anchor to the domain the offer named.
+
 ## 6. Systemic / Arbitrage Threats
 
 ### T27: Content arbitrage (buy low, resell high)

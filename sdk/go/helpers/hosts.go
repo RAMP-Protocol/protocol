@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/hostredact"
 )
 
 // Host and domain predicates: what a network party's value is allowed to be
@@ -58,10 +60,52 @@ func parseRef(ref string) (parsed *url.URL, hadScheme bool, err error) {
 	}
 	parsed, err = url.Parse(toParse)
 	if err != nil {
-		return nil, false, fmt.Errorf("%w: %q: %w", ErrInvalidHost, ref, err)
+		// url.Parse wraps its cause in a *url.Error carrying the reference it was
+		// given — so the wrapper echoes the credential even once the message above
+		// is redacted. Only the cause is kept: unlike the transport errors the
+		// resolvers tier rebuilds, where the URL is the sole place the value
+		// appears, here it is already named a few characters to the left.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
+		return nil, false, fmt.Errorf("%w: %q: %w", ErrInvalidHost, hostredact.Userinfo(ref), err)
 	}
 	if parsed.Host == "" {
-		return nil, false, fmt.Errorf("%w: %q has no host", ErrInvalidHost, ref)
+		return nil, false, fmt.Errorf("%w: %q has no host", ErrInvalidHost, hostredact.Userinfo(ref))
+	}
+	// One colon separates a host from its port, and a second one means the value is
+	// not a host[:port] at all. Decided HERE rather than left to net/url, because
+	// there it is a GODEBUG — urlstrictcolons — and a GODEBUG is something the
+	// consumer sets, not this module. With urlstrictcolons=0, from the environment
+	// or a //go:debug line, url.Parse accepts "exchange.example::443",
+	// "a.example:44:3" and five near relatives that the corpus this module publishes
+	// records refused.
+	//
+	// That is not a hypothetical misuse: GODEBUG exists so an operator can back out
+	// of a behaviour change, and one set for an unrelated URL reason would silently
+	// loosen a predicate that stands in front of a signed call. A rule that answers
+	// differently depending on how the consumer is configured is not the rule.
+	//
+	// The DEFAULT is not the reachable path, whatever the setting's documentation
+	// suggests: it derives from the main module's go directive, and a main module
+	// cannot declare below this one's 1.26 — the build is refused before any of this
+	// runs.
+	//
+	// Counted after the closing bracket when there is one, since the colons inside
+	// an IPv6 literal are the address, not separators.
+	//
+	// Deliberately narrower than resolvers.wellFormedHost, which re-assembles the
+	// authority and additionally requires a registered name and a 16-bit port. That
+	// one is a fuller rule and lives a tier up; adopting it here would change far
+	// more than the colon.
+	authority := parsed.Host
+	if bracket := strings.LastIndex(authority, "]"); bracket >= 0 {
+		authority = authority[bracket+1:]
+	}
+	if strings.Count(authority, ":") > 1 {
+		return nil, false, fmt.Errorf(
+			"%w: %q: more than one colon after the host", ErrInvalidHost, hostredact.Userinfo(ref))
 	}
 	return parsed, hadScheme, nil
 }
