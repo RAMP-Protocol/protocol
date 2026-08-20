@@ -36,8 +36,10 @@ package helpers
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -137,10 +139,89 @@ var sweepDottedSuffixes = []string{
 func buildIdentityDocumentSweepVectors(t *testing.T) []identityDocumentVector {
 	t.Helper()
 	var out []identityDocumentVector
+	// The safety floor this emitter needs and its sibling does not.
+	//
+	// The intent emitter beside this one carries a declared verdict per case and
+	// refuses to write a file the real face disagrees with. This one has nothing
+	// to disagree with, by design: it records the face. That is the right shape
+	// for detecting drift and the wrong shape for stopping a regression, because
+	// a loosened oracle would simply be written down as the new contract. Both
+	// ports would then replay it in unison and report success — the one outcome
+	// a cross-language oracle exists to prevent.
+	//
+	// CHECKED AGAINST THE INPUTS, NOT THE ANSWER, and that distinction is the
+	// whole design. The obvious floor is to re-read the resolved URL and assert
+	// the four MUST rules on it: https, the manifest's host, the manifest's
+	// effective port, no userinfo. Three of those four cannot fail. The resolver
+	// assembles its output by hand from values it has already accepted — it
+	// writes the literal "https://", it writes the base's port, and it never
+	// writes userinfo at all — so an answer-side check restates the assembly
+	// code instead of testing it. Measured, not assumed: loosening the scheme
+	// check to admit http left every answer-side assertion green, because an
+	// accepted http reference still comes back spelled https.
+	//
+	// So the floor reads the manifest URL and the reference on their own, decides
+	// what the origin rule permits, and refuses an acceptance that contradicts
+	// it. Then it ties the answer to that same authority, which is the one
+	// answer-side property the hand assembly does not already guarantee.
+	assertAcceptedIsSafe := func(manifest, ref, resolved string) {
+		fail := func(why string) {
+			t.Fatalf("sweep accepted %q + %q -> %q, but %s", manifest, ref, resolved, why)
+		}
+		base, err := url.Parse(manifest)
+		if err != nil {
+			fail("the manifest URL does not parse")
+			return
+		}
+		if base.Scheme != "https" {
+			fail("the manifest URL is not https")
+		}
+		if base.User != nil {
+			fail("the manifest URL carries userinfo")
+		}
+		host := strings.ToLower(base.Hostname())
+		port := canonicalPort(base.Scheme, base.Port())
+
+		// The reference on its own. A relative reference states none of this and
+		// inherits the base's authority, which the prefix check below covers.
+		refURL, err := url.Parse(ref)
+		if err != nil {
+			fail("the reference does not parse")
+			return
+		}
+		if refURL.Scheme != "" && !strings.EqualFold(refURL.Scheme, "https") {
+			fail("the reference names a non-https scheme")
+		}
+		if refURL.User != nil {
+			fail("the reference carries userinfo")
+		}
+		if refURL.Host != "" {
+			if !strings.EqualFold(refURL.Hostname(), host) {
+				fail("the reference names another host")
+			}
+			if canonicalPort("https", refURL.Port()) != port {
+				fail("the reference names another port")
+			}
+		}
+
+		// And the answer sits on exactly that authority. A bare equality would
+		// reject the ordinary case, since every answer carries at least a "/"
+		// path; a prefix that stops at the "/" is what distinguishes the host
+		// from a longer host that merely starts with it.
+		want := "https://" + host
+		if port != "" {
+			want += ":" + port
+		}
+		if !strings.HasPrefix(resolved, want+"/") {
+			fail("the answer does not sit on the manifest's authority")
+		}
+	}
 	record := func(manifest, ref string) {
 		resolved, err := ResolveIdentityDocument(manifest, ref)
 		if err != nil {
 			resolved = ""
+		} else {
+			assertAcceptedIsSafe(manifest, ref, resolved)
 		}
 		out = append(out, identityDocumentVector{
 			// Positional, because there is nothing to name: the manifest URL
