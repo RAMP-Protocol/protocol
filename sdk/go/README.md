@@ -248,10 +248,12 @@ host is reserved. The address/scheme decisions are corpus-locked
 - **Cross-field CEL is pinned** to `conformance/corpus/crossfield.json`, generated
   by the same protovalidate oracle the rest of the conformance suite uses.
 - Covered by the repo gate: `go build/vet/test ./...` via `scripts/ci-local.sh`.
-- **Requires a `go` directive of 1.26 or later**, and that is part of the contract
-  rather than a build detail. `net/url`'s host-colon strictness is the
-  `urlstrictcolons` GODEBUG, which defaults on only for modules declaring 1.26; under
-  an older directive `helpers.IsBareHost` admits references the shared conformance
-  vectors — and the Python and TypeScript ports — refuse. A guard in the package
-  asserts the behaviour rather than the setting, so a build that would answer
-  differently fails rather than drifting.
+- **The host rule does not depend on who builds it.** `net/url`'s host-colon
+  strictness is the `urlstrictcolons` GODEBUG, which defaults on only for modules
+  declaring `go` 1.26 — and that default is read from the **main** module, so it is
+  the consumer's directive that decides, never this one's. `helpers.parseRef`
+  therefore refuses a second colon after the host itself rather than leaving it to
+  the parser, and a guard asserts the refusal through the predicate rather than
+  through `url.Parse`, so it means the same thing under either setting. The
+  committed conformance vectors are true for every consumer, not only for this
+  repo's CI.

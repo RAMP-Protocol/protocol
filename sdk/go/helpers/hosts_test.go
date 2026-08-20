@@ -1,35 +1,45 @@
 package helpers_test
 
 import (
-	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
-// TestHostRuleRunsUnderStrictHostColons pins the toolchain property the corpus is
-// generated under, because the predicates' answers depend on it.
+// TestHostRuleRefusesDoubledColonsWhoeverBuildsIt pins that the doubled-colon
+// refusal is the RULE's, not the toolchain's.
 //
 // net/url's host-colon strictness is a GODEBUG, urlstrictcolons, and it defaults on
-// only for modules declaring go >= 1.26. Under an older directive
-// url.Parse("https://exchange.example::443") SUCCEEDS, so IsBareHost answers true
-// where the committed vector — and both ports — say the reference is not a host.
+// only for modules declaring go >= 1.26 — read from the MAIN module, so a consumer
+// on an older directive built these predicates with url.Parse accepting
+// "https://exchange.example::443" and got a looser rule than the corpus publishes.
+// parseRef decides the colon itself now, which is why the assertion below is on the
+// predicate rather than on url.Parse: it holds under either setting, and a test that
+// asked url.Parse could only ever report on the toolchain that ran it.
 //
-// This module declares 1.26, so there is no live divergence. The guard is here for
-// the two ways one could arrive: a consumer building sdk/go/helpers from a module on
-// an older directive gets a different rule than the corpus publishes, and a
-// RAMP_UPDATE_VECTORS=1 run under such a module would quietly rewrite the goldens to
-// the looser answer rather than fail. It is asserted behaviourally rather than by
-// reading the GODEBUG, because the behaviour is the thing that matters and
-// internal/godebug is not importable.
-func TestHostRuleRunsUnderStrictHostColons(t *testing.T) {
-	const doubled = "https://exchange.example::443"
-	if _, err := url.Parse(doubled); err == nil {
-		t.Fatalf("url.Parse(%q) succeeded: this toolchain is running with "+
-			"godebug urlstrictcolons=0, under which the host predicates admit references "+
-			"the committed vectors and both ports refuse. Build with a go directive of "+
-			"1.26 or later, and do not regenerate the corpora from here.", doubled)
+// The second half is the part a strictness check cannot state. Every relative here
+// must keep its committed answer, or "refuse a doubled colon" quietly becomes
+// "refuse a port".
+func TestHostRuleRefusesDoubledColonsWhoeverBuildsIt(t *testing.T) {
+	for _, ref := range []string{
+		"https://exchange.example::443", "exchange.example::443",
+		"exchange.example:44:3", "exchange.example::", "exchange.example:1:2:3",
+		"exchange.example:443:", "https://a:b@exchange.example::443",
+		"https://exchange.example::443/p?q#f", "[::1]:44:3",
+	} {
+		if _, err := helpers.HostOf(ref); err == nil {
+			t.Errorf("HostOf(%q) succeeded; the doubled colon must be refused by the "+
+				"rule, whatever godebug urlstrictcolons the builder is running", ref)
+		}
+	}
+	for _, ref := range []string{
+		"exchange.example:8443", "exchange.example:", "[::1]:443", "[::1]", "[::]",
+	} {
+		if _, err := helpers.HostOf(ref); err != nil {
+			t.Errorf("HostOf(%q) = %v; one colon separates a host from its port and "+
+				"the colons inside an IPv6 literal are the address", ref, err)
+		}
 	}
 }
 

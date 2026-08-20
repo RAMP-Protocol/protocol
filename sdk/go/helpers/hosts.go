@@ -63,6 +63,31 @@ func parseRef(ref string) (parsed *url.URL, hadScheme bool, err error) {
 	if parsed.Host == "" {
 		return nil, false, fmt.Errorf("%w: %q has no host", ErrInvalidHost, ref)
 	}
+	// One colon separates a host from its port, and a second one means the value is
+	// not a host[:port] at all. Decided HERE rather than left to net/url, because
+	// there it is a GODEBUG: urlstrictcolons defaults on only for modules declaring
+	// go 1.26, and the default is read from the MAIN module — so a consumer on an
+	// older directive got "exchange.example::443", "a.example:44:3" and five near
+	// relatives accepted, while the corpus this module publishes records them
+	// refused. A rule that answers differently depending on who builds it is not the
+	// rule; stating it in the code makes the committed vectors true for every
+	// consumer rather than only for this repo's CI.
+	//
+	// Counted after the closing bracket when there is one, since the colons inside
+	// an IPv6 literal are the address, not separators.
+	//
+	// Deliberately narrower than resolvers.wellFormedHost, which re-assembles the
+	// authority and additionally requires a registered name and a 16-bit port. That
+	// one is a fuller rule and lives a tier up; adopting it here would change far
+	// more than the colon.
+	authority := parsed.Host
+	if bracket := strings.LastIndex(authority, "]"); bracket >= 0 {
+		authority = authority[bracket+1:]
+	}
+	if strings.Count(authority, ":") > 1 {
+		return nil, false, fmt.Errorf(
+			"%w: %q: more than one colon after the host", ErrInvalidHost, ref)
+	}
 	return parsed, hadScheme, nil
 }
 
