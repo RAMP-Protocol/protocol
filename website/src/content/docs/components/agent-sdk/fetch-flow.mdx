@@ -289,6 +289,7 @@ type ExchangeTimeoutError struct {
 | `TransactionDeniedError` (other) | None -- terminal | Caller handles denial |
 | `ContentFetchError` | Retry once (signed URL may be CDN-transient) | Transparent if retry succeeds |
 | `ExchangeTimeoutError` | Retry with longer deadline | Caller may increase timeout |
+| `EndpointRefused` (`EndpointRefusedError`, `ErrEndpointRefused`) | **None -- terminal.** The Exchange answered and the answer is unusable: it advertises an endpoint on a host or port that did not serve its manifest, or one carrying userinfo. Retrying re-reads the same manifest | Content not available via this Exchange until its operator fixes `ramp.json` |
 
 ## State Management
 

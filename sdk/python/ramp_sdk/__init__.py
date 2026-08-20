@@ -55,7 +55,10 @@ from .hosts import (
     MAX_BARE_DOMAIN_LEN,
     AudienceVerdict,
     check_audience,
+    host_anchored,
+    host_of,
     is_bare_domain,
+    is_bare_host,
 )
 from .httpsig import (
     MultisigVerdict,
@@ -94,6 +97,7 @@ from .regschema import (
 from .resolvers import (
     WBA_DIRECTORY_PATH,
     DirectoryUnavailableError,
+    EndpointRefusedError,
     KeyExpiredError,
     KeyRevokedError,
     NoEndpointError,
@@ -145,6 +149,7 @@ __all__ = [
     "ContentTypeJSON",
     "ContentTypeProto",
     "DirectoryUnavailableError",
+    "EndpointRefusedError",
     "KeyExpiredError",
     "KeyResolver",
     "KeyRevokedError",
@@ -192,7 +197,10 @@ __all__ = [
     "format_money",
     "generate_idempotency_key",
     "hash_url",
+    "host_anchored",
+    "host_of",
     "is_bare_domain",
+    "is_bare_host",
     "is_safe_schema_pattern",
     "jcs_acceptance_payload",
     "monotonic_window",

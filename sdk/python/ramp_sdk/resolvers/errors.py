@@ -52,3 +52,15 @@ class DirectoryUnavailableError(ResolverError):
 
 class NoEndpointError(ResolverError):
     """A manifest was fetched and decoded but advertises no endpoint."""
+
+
+class EndpointRefusedError(ResolverError):
+    """A manifest was read and advertises an endpoint this resolver will not hand
+    back: one on a host or port unrelated to the domain that served the manifest,
+    or one carrying userinfo.
+
+    DISTINCT from :class:`NoEndpointError` and from
+    :class:`DirectoryUnavailableError` because it is a VERDICT — the Exchange
+    answered, and the answer is not usable. A caller that classifies retryability
+    reads this as final rather than as something to try again in a moment.
+    """

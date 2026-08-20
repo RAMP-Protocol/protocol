@@ -36,6 +36,7 @@ import (
 	"time"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/vectorio"
 	"github.com/gowebpki/jcs"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -1089,12 +1090,7 @@ func verifySignedURLVector(t *testing.T, v signedURLVector) {
 
 func writeJSON(t *testing.T, path string, v any) {
 	t.Helper()
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal %s: %v", path, err)
-	}
-	b = append(b, '\n')
-	if err := os.WriteFile(path, b, 0o644); err != nil {
+	if err := vectorio.Write(path, v); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }
@@ -1172,13 +1168,11 @@ func TestGenerateVectors(t *testing.T) {
 
 func assertMatches(t *testing.T, path string, v any) {
 	t.Helper()
-	want, err := json.MarshalIndent(v, "", "  ")
+	stale, err := vectorio.Stale(path, v)
 	if err != nil {
-		t.Fatalf("marshal %s: %v", path, err)
+		t.Fatalf("read %s: %v", path, err)
 	}
-	want = append(want, '\n')
-	got := readFile(t, path)
-	if string(got) != string(want) {
+	if stale {
 		t.Fatalf("%s is stale; re-run with RAMP_UPDATE_VECTORS=1 to regenerate", path)
 	}
 }

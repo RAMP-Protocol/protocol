@@ -71,3 +71,18 @@ export class NoEndpoint extends ResolverError {
     this.name = "NoEndpoint";
   }
 }
+
+/** A well-known manifest was read and advertises an endpoint this resolver will
+ * not hand back: one on a host or port unrelated to the domain that served the
+ * manifest, or one carrying userinfo.
+ *
+ * DISTINCT from NoEndpoint and from DirectoryUnavailable because it is a VERDICT
+ * — the Exchange answered, and the answer is not usable. A caller that classifies
+ * retryability reads this as final rather than as something to try again in a
+ * moment. */
+export class EndpointRefused extends ResolverError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "EndpointRefused";
+  }
+}

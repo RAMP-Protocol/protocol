@@ -1,0 +1,184 @@
+{
+  "endpoint_vet": [
+    {
+      "name": "self",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1",
+      "refused": false
+    },
+    {
+      "name": "subdomain",
+      "host": "exchange.example",
+      "endpoint": "https://api.exchange.example/v1",
+      "refused": false
+    },
+    {
+      "name": "default_port_written_out",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example:443/v1",
+      "refused": false
+    },
+    {
+      "name": "non_default_port_on_both_sides",
+      "host": "exchange.example:8443",
+      "endpoint": "https://exchange.example:8443/v1",
+      "refused": false
+    },
+    {
+      "name": "schemeless_endpoint",
+      "host": "exchange.example",
+      "endpoint": "exchange.example/v1",
+      "refused": false
+    },
+    {
+      "name": "plaintext_on_a_plaintext_anchor",
+      "host": "exchange.example:80",
+      "endpoint": "http://exchange.example:80/v1",
+      "refused": false
+    },
+    {
+      "name": "unrelated_host",
+      "host": "exchange.example",
+      "endpoint": "https://cdn.other.example/v1",
+      "refused": true
+    },
+    {
+      "name": "label_boundary_trick",
+      "host": "exchange.example",
+      "endpoint": "https://evil-exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "parent_of_the_serving_host",
+      "host": "api.exchange.example",
+      "endpoint": "https://exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "another_port",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example:8443/v1",
+      "refused": true
+    },
+    {
+      "name": "subdomain_on_another_port",
+      "host": "exchange.example",
+      "endpoint": "https://api.exchange.example:8443/v1",
+      "refused": true
+    },
+    {
+      "name": "userinfo",
+      "host": "exchange.example",
+      "endpoint": "https://user:pass@exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "userinfo_without_a_password",
+      "host": "exchange.example",
+      "endpoint": "https://user@exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "schemeless_userinfo",
+      "host": "exchange.example",
+      "endpoint": "user:pass@exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "schemeless_userinfo_no_path",
+      "host": "exchange.example",
+      "endpoint": "user:pass@exchange.example",
+      "refused": true
+    },
+    {
+      "name": "userinfo_on_a_subdomain",
+      "host": "exchange.example",
+      "endpoint": "https://user:pass@api.exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "no_authority",
+      "host": "exchange.example",
+      "endpoint": "/v1",
+      "refused": true
+    },
+    {
+      "name": "control_character",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example\n/v1",
+      "refused": true
+    },
+    {
+      "name": "unusable_serving_host",
+      "host": "",
+      "endpoint": "https://exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "escape_in_query",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1?q=a%20b",
+      "refused": false
+    },
+    {
+      "name": "escape_in_path",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/p%41th",
+      "refused": false
+    },
+    {
+      "name": "malformed_escape_in_query",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1?q=%zz",
+      "refused": false
+    },
+    {
+      "name": "at_sign_in_the_path",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1@x",
+      "refused": false
+    },
+    {
+      "name": "malformed_escape_in_path",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/p%zzth",
+      "refused": true
+    },
+    {
+      "name": "backslash_in_userinfo",
+      "host": "exchange.example",
+      "endpoint": "http://evil.example\\@exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "separator_in_a_path_segment",
+      "host": "exchange.example",
+      "endpoint": "evil.example/x://exchange.example",
+      "refused": true
+    },
+    {
+      "name": "scheme_starting_with_a_digit",
+      "host": "exchange.example",
+      "endpoint": "1https://exchange.example/",
+      "refused": true
+    },
+    {
+      "name": "malformed_escape_in_fragment",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1#%zz",
+      "refused": true
+    },
+    {
+      "name": "query_inside_a_fragment_is_still_a_fragment",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1#a?b=%zz",
+      "refused": true
+    },
+    {
+      "name": "escape_in_fragment",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1#%25",
+      "refused": false
+    }
+  ]
+}

@@ -7,6 +7,42 @@ import (
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
+// TestHostRuleRefusesDoubledColonsWhoeverBuildsIt pins that the doubled-colon
+// refusal is the RULE's, not the toolchain's.
+//
+// net/url's host-colon strictness is a GODEBUG, urlstrictcolons, and a GODEBUG is
+// the consumer's to set: with urlstrictcolons=0 — from the environment or a
+// //go:debug line — url.Parse accepts "https://exchange.example::443" and these
+// predicates would answer looser than the corpus publishes. parseRef decides the
+// colon itself now, which is why the assertion below is on the predicate rather than
+// on url.Parse: it holds under either setting, where a test that asked url.Parse
+// could only ever report on the configuration that ran it.
+//
+// The second half is the part a strictness check cannot state. Every relative here
+// must keep its committed answer, or "refuse a doubled colon" quietly becomes
+// "refuse a port".
+func TestHostRuleRefusesDoubledColonsWhoeverBuildsIt(t *testing.T) {
+	for _, ref := range []string{
+		"https://exchange.example::443", "exchange.example::443",
+		"exchange.example:44:3", "exchange.example::", "exchange.example:1:2:3",
+		"exchange.example:443:", "https://a:b@exchange.example::443",
+		"https://exchange.example::443/p?q#f", "[::1]:44:3",
+	} {
+		if _, err := helpers.HostOf(ref); err == nil {
+			t.Errorf("HostOf(%q) succeeded; the doubled colon must be refused by the "+
+				"rule, whatever godebug urlstrictcolons the builder is running", ref)
+		}
+	}
+	for _, ref := range []string{
+		"exchange.example:8443", "exchange.example:", "[::1]:443", "[::1]", "[::]",
+	} {
+		if _, err := helpers.HostOf(ref); err != nil {
+			t.Errorf("HostOf(%q) = %v; one colon separates a host from its port and "+
+				"the colons inside an IPv6 literal are the address", ref, err)
+		}
+	}
+}
+
 func TestIsBareHost(t *testing.T) {
 	tests := map[string]struct {
 		ref     string

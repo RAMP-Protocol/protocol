@@ -1,0 +1,1101 @@
+{
+  "host_anchored": [
+    {
+      "name": "same_host",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "subdomain",
+      "anchor": "exchange.example",
+      "candidate": "https://api.exchange.example/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "both_bare",
+      "anchor": "exchange.example",
+      "candidate": "exchange.example",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "unrelated_host",
+      "anchor": "exchange.example",
+      "candidate": "https://cdn.other.example/v1",
+      "anchored": false,
+      "error": false
+    },
+    {
+      "name": "parent_is_not_anchored_to_child",
+      "anchor": "api.exchange.example",
+      "candidate": "https://exchange.example/v1",
+      "anchored": false,
+      "error": false
+    },
+    {
+      "name": "label_boundary_trick",
+      "anchor": "a.com",
+      "candidate": "https://evil-a.com/v1",
+      "anchored": false,
+      "error": false
+    },
+    {
+      "name": "suffix_without_a_label_boundary",
+      "anchor": "a.com",
+      "candidate": "https://xa.com/v1",
+      "anchored": false,
+      "error": false
+    },
+    {
+      "name": "case_is_folded",
+      "anchor": "Exchange.Example",
+      "candidate": "https://EXCHANGE.example/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "trailing_root_dot_on_the_anchor",
+      "anchor": "exchange.example.",
+      "candidate": "https://exchange.example/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "trailing_root_dot_on_the_candidate",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example./v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "doubled_root_dot_is_not_the_same_name",
+      "anchor": "exchange.example..",
+      "candidate": "https://exchange.example/v1",
+      "anchored": false,
+      "error": false
+    },
+    {
+      "name": "doubled_root_dot_on_both_sides",
+      "anchor": "exchange.example..",
+      "candidate": "https://exchange.example../v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "default_port_written_out_on_the_candidate",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example:443/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "default_port_written_out_on_the_anchor",
+      "anchor": "exchange.example:443",
+      "candidate": "https://exchange.example/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "scheme_is_not_compared",
+      "anchor": "http://x.example",
+      "candidate": "https://x.example",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "each_scheme_folds_its_own_default",
+      "anchor": "http://x.example:80",
+      "candidate": "https://x.example:443",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "schemeless_anchor_borrows_plaintext",
+      "anchor": "a.example:80",
+      "candidate": "http://a.example:80/rev",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "schemeless_anchor_does_not_assume_https",
+      "anchor": "a.example:80",
+      "candidate": "https://a.example/v1",
+      "anchored": false,
+      "error": false
+    },
+    {
+      "name": "borrowing_decides_the_default_not_equality",
+      "anchor": "x.example:443",
+      "candidate": "http://x.example:80/v1",
+      "anchored": false,
+      "error": false
+    },
+    {
+      "name": "default_of_the_other_scheme_is_not_folded",
+      "anchor": "https://x.example:80",
+      "candidate": "http://x.example:80",
+      "anchored": false,
+      "error": false
+    },
+    {
+      "name": "different_port",
+      "anchor": "exchange.example:8443",
+      "candidate": "https://exchange.example:9443/v1",
+      "anchored": false,
+      "error": false
+    },
+    {
+      "name": "subdomain_on_the_same_port",
+      "anchor": "exchange.example:8443",
+      "candidate": "https://api.exchange.example:8443/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "subdomain_on_another_port",
+      "anchor": "exchange.example",
+      "candidate": "https://api.exchange.example:8443/v1",
+      "anchored": false,
+      "error": false
+    },
+    {
+      "name": "case_folded_with_a_non_default_port",
+      "anchor": "Exchange.Example:8443",
+      "candidate": "https://EXCHANGE.example:8443/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "unknown_scheme_keeps_its_port",
+      "anchor": "x.example:443",
+      "candidate": "ftp://x.example:443/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "candidate_userinfo_is_ignored",
+      "anchor": "exchange.example",
+      "candidate": "https://user:pass@exchange.example/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "schemeless_candidate_userinfo_is_ignored",
+      "anchor": "exchange.example",
+      "candidate": "user:pass@exchange.example",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_same_host_and_port",
+      "anchor": "[::1]:8443",
+      "candidate": "https://[::1]:8443/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_default_port_folds",
+      "anchor": "[::1]",
+      "candidate": "https://[::1]:443/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_v4_mapped_same_host",
+      "anchor": "[::ffff:127.0.0.1]",
+      "candidate": "https://[::ffff:127.0.0.1]/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_anchor_is_not_an_address",
+      "anchor": "[not-an-ip]",
+      "candidate": "https://[::1]/v1",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "ipv6_candidate_is_not_an_address",
+      "anchor": "[::1]",
+      "candidate": "https://[not-an-ip]/v1",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "ipv6_candidate_is_ipv4_bracketed",
+      "anchor": "[::1]",
+      "candidate": "https://[127.0.0.1]/v1",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "empty_anchor",
+      "anchor": "",
+      "candidate": "https://exchange.example",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "empty_candidate",
+      "anchor": "exchange.example",
+      "candidate": "",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_has_no_authority",
+      "anchor": "exchange.example",
+      "candidate": "/v1",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_control_character",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example\n/v1",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "anchor_control_character",
+      "anchor": "exchange.example\n",
+      "candidate": "https://exchange.example",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_backslash_in_userinfo",
+      "anchor": "exchange.example",
+      "candidate": "http://evil.example\\@exchange.example/rev",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_separator_in_a_path_segment",
+      "anchor": "exchange.example",
+      "candidate": "evil.example/x://exchange.example",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_scheme_starting_with_a_digit",
+      "anchor": "exchange.example",
+      "candidate": "1https://exchange.example/",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_doubled_colon_after_the_scheme",
+      "anchor": "exchange.example",
+      "candidate": "http:://exchange.example/",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_escape_in_query",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/v1?q=a%20b",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "candidate_escape_in_path",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/p%41th",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "candidate_malformed_escape_in_path",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/p%zzth",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_at_sign_in_the_path",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/v1@x",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "candidate_malformed_escape_in_fragment",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/#%zz",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_query_inside_a_fragment",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/#a?b=%zz",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_escape_in_fragment",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/#%25",
+      "anchored": true,
+      "error": false
+    }
+  ],
+  "host_of": [
+    {
+      "name": "plain_domain",
+      "ref": "exchange.example",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "host_with_port",
+      "ref": "exchange.example:8443",
+      "host": "exchange.example:8443",
+      "error": false
+    },
+    {
+      "name": "absolute_url",
+      "ref": "https://exchange.example/v1",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "absolute_url_with_port",
+      "ref": "https://exchange.example:8443/v1",
+      "host": "exchange.example:8443",
+      "error": false
+    },
+    {
+      "name": "plaintext_url",
+      "ref": "http://exchange.example/v1",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "userinfo_is_not_part_of_the_host",
+      "ref": "https://user:pass@exchange.example",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "schemeless_userinfo",
+      "ref": "user:pass@exchange.example",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "case_is_preserved",
+      "ref": "Exchange.Example",
+      "host": "Exchange.Example",
+      "error": false
+    },
+    {
+      "name": "trailing_root_dot",
+      "ref": "exchange.example.",
+      "host": "exchange.example.",
+      "error": false
+    },
+    {
+      "name": "ipv6_literal",
+      "ref": "[::1]:443",
+      "host": "[::1]:443",
+      "error": false
+    },
+    {
+      "name": "trailing_colon",
+      "ref": "exchange.example:",
+      "host": "exchange.example:",
+      "error": false
+    },
+    {
+      "name": "path_is_stripped",
+      "ref": "exchange.example/v1",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "query_is_stripped",
+      "ref": "exchange.example?a=1",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "fragment_is_stripped",
+      "ref": "exchange.example#frag",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "empty",
+      "ref": "",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "whitespace_only",
+      "ref": "   ",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "no_authority",
+      "ref": "/v1",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "scheme_with_no_host",
+      "ref": "https://",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "control_character",
+      "ref": "exchange.example\n",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "tab_inside_the_host",
+      "ref": "exchange.\texample",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "non_numeric_port",
+      "ref": "exchange.example:abc",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "double_colon_before_the_port",
+      "ref": "exchange.example::443",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "two_ports",
+      "ref": "exchange.example:44:3",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "signed_port",
+      "ref": "exchange.example:-1",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "colon_inside_the_name",
+      "ref": "ex:change.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "trailing_colon_is_an_empty_port",
+      "ref": "exchange.example:",
+      "host": "exchange.example:",
+      "error": false
+    },
+    {
+      "name": "leading_zero_port",
+      "ref": "exchange.example:080",
+      "host": "exchange.example:080",
+      "error": false
+    },
+    {
+      "name": "out_of_range_port",
+      "ref": "exchange.example:99999999",
+      "host": "exchange.example:99999999",
+      "error": false
+    },
+    {
+      "name": "ipv6_without_a_port",
+      "ref": "[::1]",
+      "host": "[::1]",
+      "error": false
+    },
+    {
+      "name": "ipv6_unclosed",
+      "ref": "[::1",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "ipv6_trailing_garbage",
+      "ref": "[::1]x",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "bracket_inside_the_name",
+      "ref": "a[b.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "ipv6_all_zeroes",
+      "ref": "[::]",
+      "host": "[::]",
+      "error": false
+    },
+    {
+      "name": "ipv6_v4_mapped",
+      "ref": "[::ffff:127.0.0.1]",
+      "host": "[::ffff:127.0.0.1]",
+      "error": false
+    },
+    {
+      "name": "ipv6_v4_translated",
+      "ref": "[::ffff:0:127.0.0.1]",
+      "host": "[::ffff:0:127.0.0.1]",
+      "error": false
+    },
+    {
+      "name": "ipv6_nat64_prefix",
+      "ref": "[64:ff9b::192.0.2.1]",
+      "host": "[64:ff9b::192.0.2.1]",
+      "error": false
+    },
+    {
+      "name": "ipv6_trailing_v4_form",
+      "ref": "[::1.2.3.4]",
+      "host": "[::1.2.3.4]",
+      "error": false
+    },
+    {
+      "name": "brackets_around_a_name",
+      "ref": "[not-an-ip]",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "brackets_around_ipv4",
+      "ref": "[127.0.0.1]",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "brackets_around_nothing",
+      "ref": "[]",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "brackets_around_too_few_groups",
+      "ref": "[1:2]",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "brackets_around_two_elisions",
+      "ref": "[1::2::3]",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "brackets_around_an_oversized_group",
+      "ref": "[12345::1]",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "space_in_the_host",
+      "ref": "ex ample.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "backslash_in_the_host",
+      "ref": "a\\b.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "caret_in_the_host",
+      "ref": "a^b.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "brace_in_the_host",
+      "ref": "a{b.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "pipe_in_the_host",
+      "ref": "a|b.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "underscore_in_the_host",
+      "ref": "a_b.example",
+      "host": "a_b.example",
+      "error": false
+    },
+    {
+      "name": "tilde_in_the_host",
+      "ref": "a~b.example",
+      "host": "a~b.example",
+      "error": false
+    },
+    {
+      "name": "empty_label",
+      "ref": "a..example",
+      "host": "a..example",
+      "error": false
+    },
+    {
+      "name": "non_ascii_host",
+      "ref": "дом.example",
+      "host": "дом.example",
+      "error": false
+    },
+    {
+      "name": "percent_escape",
+      "ref": "%41.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "invalid_percent_escape",
+      "ref": "a%zz.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "percent_encoded_nul",
+      "ref": "a.example%00",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "userinfo_containing_an_at",
+      "ref": "user@pass@exchange.example",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "scheme_with_plus",
+      "ref": "ht+tp://exchange.example/v1",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "scheme_with_hyphen",
+      "ref": "ht-tp://exchange.example/v1",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "scheme_with_dot",
+      "ref": "ht.tp://exchange.example/v1",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "scheme_uppercase",
+      "ref": "HTTPS://exchange.example/v1",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "separator_in_a_path_segment",
+      "ref": "evil.example/x://exchange.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "scheme_starting_with_a_digit",
+      "ref": "1https://exchange.example/",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "doubled_colon_after_the_scheme",
+      "ref": "http:://exchange.example/",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "separator_with_no_scheme",
+      "ref": "://exchange.example/",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "backslash_in_userinfo",
+      "ref": "http://evil.example\\@exchange.example/rev",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "quote_in_userinfo",
+      "ref": "https://u\"x@exchange.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "angle_bracket_in_userinfo",
+      "ref": "https://u\u003cx@exchange.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "close_bracket_in_userinfo",
+      "ref": "https://u]x@exchange.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "escape_in_query",
+      "ref": "https://exchange.example/v1?q=a%20b",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "escape_in_path",
+      "ref": "https://exchange.example/p%41th",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "malformed_escape_in_path",
+      "ref": "https://exchange.example/p%zzth",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "malformed_escape_in_query",
+      "ref": "https://exchange.example/?q=%zz",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "escape_in_userinfo",
+      "ref": "https://u%41x@exchange.example",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "malformed_escape_in_userinfo",
+      "ref": "https://u%zzx@exchange.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "at_sign_in_the_path",
+      "ref": "https://exchange.example/v1@x",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "malformed_escape_in_fragment",
+      "ref": "https://exchange.example/#%zz",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "malformed_escape_in_fragment_after_a_path",
+      "ref": "https://exchange.example/x#f%zz",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "malformed_escape_in_fragment_after_a_query",
+      "ref": "https://exchange.example/?a=1#%GG",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "malformed_escape_in_fragment_on_the_authority",
+      "ref": "exchange.example#%zz",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "query_inside_a_fragment_is_still_a_fragment",
+      "ref": "https://exchange.example/#a?b=%zz",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "escape_in_fragment",
+      "ref": "https://exchange.example/#%25",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "empty_fragment",
+      "ref": "https://exchange.example/#",
+      "host": "exchange.example",
+      "error": false
+    }
+  ],
+  "is_bare_host": [
+    {
+      "name": "plain_domain",
+      "ref": "exchange.example",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "host_with_port",
+      "ref": "exchange.example:8443",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "case_is_not_a_strip",
+      "ref": "Exchange.Example",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "trailing_root_dot",
+      "ref": "exchange.example.",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "leading_hyphen",
+      "ref": "-x.example",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "trailing_hyphen",
+      "ref": "x-.example",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "underscore_label",
+      "ref": "_acme.example",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_literal",
+      "ref": "[::1]:443",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "scheme",
+      "ref": "https://exchange.example",
+      "bare": false,
+      "error": false
+    },
+    {
+      "name": "path",
+      "ref": "exchange.example/v1",
+      "bare": false,
+      "error": false
+    },
+    {
+      "name": "query",
+      "ref": "exchange.example?a=1",
+      "bare": false,
+      "error": false
+    },
+    {
+      "name": "fragment",
+      "ref": "exchange.example#frag",
+      "bare": false,
+      "error": false
+    },
+    {
+      "name": "userinfo",
+      "ref": "user:pass@exchange.example",
+      "bare": false,
+      "error": false
+    },
+    {
+      "name": "scheme_and_path",
+      "ref": "https://exchange.example/v1",
+      "bare": false,
+      "error": false
+    },
+    {
+      "name": "trailing_colon",
+      "ref": "exchange.example:",
+      "bare": false,
+      "error": false
+    },
+    {
+      "name": "non_ascii_host",
+      "ref": "дом.example",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "empty_label",
+      "ref": "a..example",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "leading_zero_port",
+      "ref": "exchange.example:080",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_without_a_port",
+      "ref": "[::1]",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_all_zeroes",
+      "ref": "[::]",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_v4_mapped",
+      "ref": "[::ffff:127.0.0.1]",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_v4_translated",
+      "ref": "[::ffff:0:127.0.0.1]",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_trailing_v4_form",
+      "ref": "[::1.2.3.4]",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "empty",
+      "ref": "",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "whitespace_only",
+      "ref": "   ",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "control_character",
+      "ref": "exchange.example\n",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "non_numeric_port",
+      "ref": "exchange.example:abc",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "double_colon_before_the_port",
+      "ref": "exchange.example::443",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "no_authority",
+      "ref": "/v1",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "space_in_the_host",
+      "ref": "ex ample.example",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "backslash_in_the_host",
+      "ref": "a\\b.example",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "percent_escape",
+      "ref": "%41.example",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "ipv6_unclosed",
+      "ref": "[::1",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "brackets_around_a_name",
+      "ref": "[not-an-ip]",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "brackets_around_ipv4",
+      "ref": "[127.0.0.1]",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "brackets_around_nothing",
+      "ref": "[]",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "brackets_around_too_few_groups",
+      "ref": "[1:2]",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "separator_in_a_path_segment",
+      "ref": "evil.example/x://exchange.example",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "scheme_starting_with_a_digit",
+      "ref": "1https://exchange.example/",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "backslash_in_userinfo",
+      "ref": "http://evil.example\\@exchange.example/rev",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "malformed_escape_in_path",
+      "ref": "https://exchange.example/p%zzth",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "malformed_escape_in_fragment",
+      "ref": "https://exchange.example/#%zz",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "query_inside_a_fragment_is_still_a_fragment",
+      "ref": "https://exchange.example/#a?b=%zz",
+      "bare": false,
+      "error": true
+    }
+  ]
+}

@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     import httpx
 
 from ramp_sdk.b64 import b64url_decode_strict
+from ramp_sdk.hosts import host_anchored
 from ramp_sdk.resolvers._http import fetch_soft, fetch_strict, guarded_client
 from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
@@ -335,7 +336,7 @@ class WBAKeyResolver:
         rev_url = file.revocation_url
         # Anchor the revocation_url to the directory host (SSRF guard): a
         # cross-host revocation_url is skipped, leaving the prior snapshot.
-        if not rev_url or not _host_anchored(host, rev_url):
+        if not rev_url or not _wba_host_anchored(host, rev_url):
             return
         body = fetch_soft(self._http, rev_url)  # best-effort: a blip keeps prior
         if body is None:
@@ -583,17 +584,33 @@ def _directory_base(ref: str, scheme: str) -> tuple[str, str] | None:
     return f"{parts.scheme}://{parts.netloc}", parts.netloc
 
 
-def _host_anchored(anchor: str, candidate: str) -> bool:
-    """Whether ``candidate``'s host is anchored to ``anchor`` — equal or a
-    subdomain (case-insensitive, full-label boundary)."""
-    parts = urllib.parse.urlsplit(candidate)
-    if not parts.netloc:
+def _wba_host_anchored(anchor: str, candidate: str) -> bool:
+    """Whether ``candidate`` is anchored to ``anchor`` — the same host and port, or
+    a subdomain of that host on that port. An SSRF guard: a cross-host
+    ``revocation_url`` is skipped, and the key stays valid.
+
+    The predicate itself is the shared :func:`~ramp_sdk.hosts.host_anchored`, which
+    is the ONE place the rule is written; this wrapper exists for the two things
+    that are local to WBA. It answers a bool rather than raising, because a
+    directory that names an unparseable ``revocation_url`` is simply not anchored
+    and its caller logs a skip. And it requires an ABSOLUTE reference: the shared
+    predicate reads a schemeless value as https, which is right for an exchange
+    domain and wrong here, where the value is a URL a directory published rather
+    than a domain it named.
+
+    This used to be a private near-namesake that compared ``urlsplit().netloc``. It
+    agreed on ordinary hosts and diverged on the ones that matter: ``netloc`` keeps
+    an explicit ``:443`` that the rule folds away, and carries any userinfo along
+    with the host, so a directory that spelled its port out — or an operator who
+    wrote credentials into a URL — stopped anchoring its own revocation URL. A
+    skipped revocation poll leaves a revoked key resolving.
+    """
+    if "://" not in candidate:
         return False
-    a = anchor.lower().rstrip(".")
-    c = parts.netloc.lower().rstrip(".")
-    if a == "":
+    try:
+        return host_anchored(anchor, candidate)
+    except ValueError:
         return False
-    return c == a or c.endswith(f".{a}")
 
 
 def _key_by_thumbprint(file: WBAFile, keyid: str) -> JsonWebKey | None:

@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+**The endpoint rule is enforced in all three SDKs, and it now refuses a credential
+it used to accept (no wire change; conformance-affecting).** `WellKnownManifest.endpoint`
+has stated its rule as a MUST since the previous revision — the advertised endpoint must
+be on the host and port that served the manifest, or a subdomain of that host on that
+port, and must not carry userinfo — but only the Go SDK enforced it. Python and
+TypeScript shipped endpoint resolvers that returned whatever the manifest said, and
+neither language exported the predicate the rule is built from; each carried a private
+near-namesake in its WBA module that answered a slightly different question. Both
+resolvers now vet the advertised endpoint before returning or caching it, both refuse a
+`host` argument that is not a plain hostname before building the fetch URL from it, and
+`hostOf`/`isBareHost`/`hostAnchored` (`host_of`/`is_bare_host`/`host_anchored`) are
+public in both. The private copies collapsed into the shared predicate, so the WBA
+revocation poll compares its candidate by the same rule as the endpoint. The value
+it anchors AGAINST is still derived by each platform's own URL parser, so a
+directory that spells out a default port is read differently in TypeScript than in
+Go and Python; aligning that is the port of the fetchable-directory policy, tracked
+separately.
+
+The refusal itself also got one shape wider, in all three. It was decided over a plain
+URL parse of the advertised value while the anchoring half re-read the same string
+through its own parse, and the two disagreed on exactly the shape the refusal exists to
+stop: `u:p@exchange.example` names no scheme, so a plain parse takes `u` for one and
+reports no userinfo, while the anchor check reads the value as https and matches the
+host. An endpoint carrying credentials without a scheme was therefore accepted; it is
+refused now. Both halves read the reference once, the same way.
+
+Two consequences for anyone re-pinning. Resolution can fail with a new verdict —
+`EndpointRefusedError` in Python, `EndpointRefused` in TypeScript, joining Go's
+`ErrEndpointRefused` — which is FINAL, not something to retry; and a deployment whose
+manifest advertises an endpoint on an unrelated host, on another port, or with
+credentials in the URL will now be refused by a Python or TypeScript consumer that
+previously accepted it. `buf breaking` reports nothing: no field, message or encoding
+moves. The rule is corpus-locked to two new shared vector files
+(`helpers/testdata/host-rule-vectors.json`, `resolvers/testdata/endpoint-vet-vectors.json`)
+that all three SDKs replay. What that buys is narrower than "the three now agree
+about everything", and worth stating precisely: a divergence on a rule the corpus
+covers fails CI instead of shipping, and the corpus covers the rule's boundaries
+rather than every string a caller can construct. Per-language surface:
+`docs/sdk-parity-matrix.md`.
+
+One consequence for Go consumers who set a GODEBUG. `net/url`'s host-colon strictness
+is the `urlstrictcolons` setting, and a GODEBUG belongs to whoever builds the program:
+under `urlstrictcolons=0`, from the environment or a `//go:debug` line,
+`helpers.IsBareHost` was reading `exchange.example::443`, `exchange.example:44:3` and
+five near relatives through a parser that accepts them, while the vectors this repo
+publishes record every one of them refused. GODEBUG exists so an operator can back out
+of a behaviour change, so one set for an unrelated URL reason would quietly loosen a
+predicate standing in front of a signed call. The second colon is refused by the
+predicate itself now. A consumer running the default posture sees no change, and no
+committed vector moves.
+
 **The registration schema's rules become checkable, and two of them were wrong
 (comment-only, no wire change).** The previous revision stated a rule set for
 `AccountRegistration.data_schema` and shipped an SDK to enforce it. Reviewing what
