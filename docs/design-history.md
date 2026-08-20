@@ -1328,10 +1328,13 @@ names `/` as the normalized form under a hierarchical scheme, so the WHATWG port
 returning `https://a.example/` was right and the Go oracle was the deviant; the
 oracle changed.
 
-Python stopped using `urljoin` altogether. It routes through `urlparse`, which
-splits `;params` off the last path segment and then drops an empty one, silently
-turning `/x;` into `/x`. RFC 3986 §5.2.2, §5.2.3 and §5.2.4 are written out in
-that port instead.
+Python stopped using `urljoin` altogether: it returns an ABSOLUTE reference with
+its dot segments intact, so `https://a.example/a/../x` joined against this base
+comes back unchanged where all three ports answer `https://a.example/x`. RFC 3986
+§5.2.2, §5.2.3 and §5.2.4 are written out in that port instead. An earlier note
+here argued from `urlparse` splitting `;params` off the last path segment and
+dropping an empty one — that behaviour has since changed in CPython, inside the
+range this SDK supports, so the reason above is the one that holds across it.
 
 Two rounds later the other two followed, and the reason is worth recording
 because each looked like the safe one at the time. Go's `net/url` drops the empty
@@ -1349,8 +1352,35 @@ So all three now compute every component of the answer — path, query, fragment
 and authority — from the strings the author wrote. No URL library decides any
 part of the output. That is the rule, and it is worth stating as a rule rather
 than as three fixes: a library parser is written to be useful to a browser, not
-to agree with two other languages, and each of these three was found only after
-a corpus said the three agreed.
+to agree with two other languages, and each of these was found only after a
+corpus said the three agreed.
+
+Two of them were found after the rule was written down, which is the part worth
+keeping. Python still took the resolved PATH from `urlsplit`, which is not a
+substring reader: it deletes every tab, carriage return and line feed anywhere in
+the string, so it answered `/ramp.json` for a path the other two answer with the
+tab still in it. The three agreed only because the tame character-set check
+refuses those bytes earlier in the call — a check written to keep three parsers
+in agreement, quietly load-bearing for a second job that no test named.
+
+The AUTHORITY was the last component to follow, and it shows why the rule is
+worth stating as a rule. Go read it with `net/url`'s `Hostname()` and `Port()`,
+which split on the LAST colon. `a.example:8443:9` therefore put `a.example:8443`
+in the host half, and `IsBareDomain` accepts that — its pattern admits an
+optional port, so it cannot tell a host from a host that already carries one.
+Every origin check downstream then ran against a hostname that was not one.
+
+Nothing caught it, because the input was refused anyway: `url.Parse` itself
+returns an error for a doubled colon. That error is new in Go 1.26, it is gated
+by the `urlstrictcolons` GODEBUG setting, and the default for that setting comes
+from the `go` directive in the MAIN module of the consuming program. A consumer
+on `go 1.25` gets the lenient parse and an accepting answer, out of the same
+source that refuses it here — while the two ports, reading the authority off the
+raw string, refuse it either way. An oracle that emits the corpus two other
+languages replay cannot hold a verdict that depends on the consumer's toolchain.
+Go now reads the authority off the raw string too, splitting on the FIRST colon,
+with the four checks in one function called once per side, as both ports already
+did.
 
 The durable lesson is not about URLs. A parity corpus proves parity only over the
 inputs it contains, and a corpus assembled from realistic values will contain

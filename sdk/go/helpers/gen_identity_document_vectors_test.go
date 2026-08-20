@@ -294,6 +294,12 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		{"two_colons_in_the_base_authority", "https://a.example:8443:9/.well-known/ramp.json", "/x", ""},
 		{"two_default_ports_in_the_base_authority", "https://a.example:443:443/.well-known/ramp.json", "/x", ""},
 		{"two_colons_in_the_reference_authority", base, "https://a.example:8443:9/x", ""},
+		// The NETWORK-PATH spelling, which the corpus otherwise never reached in
+		// this shape. It matters because it is the one that borrows the base's
+		// scheme: the absolute case above is refused for its authority whichever
+		// way the scheme check falls, while this one has nothing but the
+		// authority to be refused for.
+		{"two_colons_in_a_network_path_reference", base, "//a.example:8443:9/x", ""},
 
 		// Refused — the BASE is not usable, checked before the reference is even
 		// looked at. Nothing downstream catches these: the first two resolve to a

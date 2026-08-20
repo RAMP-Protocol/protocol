@@ -603,6 +603,13 @@
       "resolved": ""
     },
     {
+      "name": "two_colons_in_a_network_path_reference",
+      "manifest_url": "https://a.example/.well-known/ramp.json",
+      "ref": "//a.example:8443:9/x",
+      "accepted": false,
+      "resolved": ""
+    },
+    {
       "name": "base_is_http",
       "manifest_url": "http://a.example/ramp.json",
       "ref": "/doc",

@@ -3,7 +3,6 @@ package helpers
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 )
@@ -71,20 +70,22 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 		// question to disagree about.
 		return "", errors.New("identity document: manifest URL carries a fragment")
 	}
-	base, err := url.Parse(manifestURL)
-	if err != nil {
-		return "", errors.New("identity document: manifest URL is not a URL")
-	}
-	if base.User != nil {
-		return "", errors.New("identity document: manifest URL carries userinfo")
-	}
-	// url.Parse lowercases the scheme, so this compares the scheme itself and
-	// not how it was spelled.
-	if base.Scheme != "https" {
+	// THE MANIFEST URL IS VETTED FIRST, on its own and to completion. That is
+	// what the IdentityDocuments proto comment promises and what both ports do,
+	// and this oracle used to contradict it: the base's host shape and port
+	// range were checked only after the reference had been parsed, so a base
+	// with an underscore in its host was reported as "the reference does not
+	// resolve to an https URL".
+	if uriSchemeOf(manifestURL) != "https" {
 		return "", errors.New("identity document: manifest URL is not https")
 	}
-	if base.Host == "" {
-		return "", errors.New("identity document: manifest URL names no host")
+	baseAuthority, baseHasAuthority := uriAuthorityOf(manifestURL)
+	if !baseHasAuthority {
+		return "", errors.New("identity document: manifest URL names no authority")
+	}
+	baseHost, basePort, err := vetAuthority(baseAuthority, "manifest URL")
+	if err != nil {
+		return "", err
 	}
 
 	if strings.TrimSpace(ref) == "" {
@@ -93,126 +94,71 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 	if why := untameReason(ref); why != "" {
 		return "", fmt.Errorf("identity document: reference %s", why)
 	}
-	// A network-path reference is "//" followed by an AUTHORITY, and an empty
-	// authority is no host. Spelled out because Go is the odd one here:
-	// url.Parse declines to read a leading "//" as an authority marker when the
-	// authority is empty and no scheme was written, so it hands back either a
-	// plain path ("///x") or an entirely empty reference ("//"), and both then
-	// inherit the base's host. Both other SDKs read the authority off the raw
-	// string and refuse, and they are the ones matching RFC 3986.
-	if strings.HasPrefix(ref, "//") {
-		authority := ref[2:]
-		if i := strings.IndexAny(authority, "/?#"); i >= 0 {
-			authority = authority[:i]
-		}
-		if authority == "" {
-			return "", errors.New("identity document: reference names an empty authority")
-		}
-	}
 	// One hash at most. RFC 3986 3.5 gives a reference a single fragment that
 	// runs to the end of the string, so a second hash is not a URI reference at
 	// all — it is a fragment with a hash inside it, which has to be written
-	// %23. The three parsers disagree about it: this one re-encodes the second
-	// hash, the other two keep it. Refused rather than picked a winner for,
-	// because no correct reference reaches this line.
+	// %23. The three parsers disagree about it: this one used to re-encode the
+	// second hash, the other two keep it. Refused rather than picked a winner
+	// for, because no correct reference reaches this line.
 	if strings.Count(ref, "#") > 1 {
 		return "", errors.New("identity document: reference carries more than one fragment")
 	}
+	refScheme := uriSchemeOf(ref)
 	// RFC 3986 3.3 and 4.2: a reference with no scheme is path-noscheme, and its
-	// FIRST segment may not contain a colon — ":/x" and "1:x" would otherwise be
-	// ambiguous with a scheme. url.Parse refuses the first and accepts the
-	// second; both other SDKs resolved both into an ordinary path segment.
-	// Spelled out so the answer does not depend on which parser happens to
-	// notice.
-	if i := strings.IndexAny(ref, ":/?#"); i >= 0 && ref[i] == ':' && !isSchemeName(ref[:i]) {
-		return "", errors.New("identity document: reference's first segment carries a colon")
+	// FIRST segment may not contain a colon — ":/x" and "1:x" would otherwise
+	// be ambiguous with a scheme.
+	if refScheme == "" {
+		if i := strings.IndexAny(ref, ":/?#"); i >= 0 && ref[i] == ':' {
+			return "", errors.New("identity document: reference's first segment carries a colon")
+		}
 	}
-	refURL, err := url.Parse(ref)
-	if err != nil {
-		// Also does not WRAP the parse error: url.Error prints the input it
-		// failed on, so %w would echo the reference by the back door.
-		return "", errors.New("identity document: reference is not a URI reference")
-	}
-	// Resolved for its SCHEME and AUTHORITY only, which is why both paths are
-	// emptied first. net/url's dot-segment removal handles a ".." by copying the
-	// whole accumulated buffer into a fresh one, so it is quadratic in the length
-	// of the reference — and the reference is a member of a manifest fetched from
-	// a third party, carrying no maximum length. The path it computes is thrown
-	// away a few lines below, where resolvedPath recomputes it with a linear
-	// walk, so this used to run one linear path resolver and one quadratic path
-	// resolver over the same input and keep the answer from the linear one. A
-	// reference of 1.25 MiB cost five seconds; emptying the paths takes it to
-	// twenty-five milliseconds and moves no vector.
-	//
-	// Safe because RFC 3986 5.2.2 decides the scheme and the authority from
-	// whether the REFERENCE carries them, never from either path. The two paths
-	// reach the query-inheritance arm inside net/url, but nothing here reads the
-	// query or the fragment off this value: both come from the raw strings.
-	baseAuthority, refAuthority := *base, *refURL
-	baseAuthority.Path, baseAuthority.RawPath = "", ""
-	refAuthority.Path, refAuthority.RawPath = "", ""
-	resolved := baseAuthority.ResolveReference(&refAuthority)
-	if resolved.User != nil {
-		return "", errors.New("identity document: reference carries userinfo")
-	}
-	if resolved.Scheme != "https" {
+	if refScheme != "" && refScheme != "https" {
 		return "", errors.New("identity document: reference does not resolve to an https URL")
 	}
-
-	baseHost, resolvedHost := base.Hostname(), resolved.Hostname()
-	// Shape BEFORE case folding, the ordering audience.go already fixes: U+212A
-	// KELVIN SIGN case-folds to a plain ASCII "k", so EqualFold reports a host
-	// spelled with it and a plain ASCII host as the SAME name. IsBareDomain is
-	// the repo's one answer to "is this the host shape the wire admits", it is
-	// already ported and vector-tested in all three languages, and it refuses
-	// everything a rebuilt authority below would have to special-case — a
-	// non-ASCII label, an IP literal in brackets, an empty host, a trailing root
-	// dot.
-	if !IsBareDomain(baseHost) {
-		return "", errors.New("identity document: manifest URL does not name a plain host")
+	refAuthority, refHasAuthority := uriAuthorityOf(ref)
+	if refScheme != "" && !refHasAuthority {
+		// "https:/dir" — a scheme with no "//" names no authority, so it
+		// resolves to a URL with no host rather than borrowing the base's.
+		return "", errors.New("identity document: reference names no authority")
 	}
-	if !IsBareDomain(resolvedHost) {
-		return "", errors.New("identity document: reference does not name a plain host")
-	}
-	if !strings.EqualFold(baseHost, resolvedHost) {
-		return "", errors.New("identity document: reference is not on the manifest's origin")
-	}
-	if !portIsWritable(base.Port()) {
-		return "", errors.New("identity document: manifest URL names a port outside 1-65535")
-	}
-	if !portIsWritable(resolved.Port()) {
-		return "", errors.New("identity document: reference names a port outside 1-65535")
-	}
-	basePort := canonicalPort(base.Scheme, base.Port())
-	if basePort != canonicalPort(resolved.Scheme, resolved.Port()) {
-		return "", errors.New("identity document: reference is on a different port than the manifest")
+	if refHasAuthority {
+		refHost, refPort, err := vetAuthority(refAuthority, "reference")
+		if err != nil {
+			return "", err
+		}
+		// Shape BEFORE case folding, the ordering audience.go already fixes:
+		// U+212A KELVIN SIGN case-folds to a plain ASCII "k", so EqualFold
+		// reports a host spelled with it and a plain ASCII host as the SAME
+		// name. vetAuthority has run IsBareDomain on both by the time this
+		// compares them.
+		if !strings.EqualFold(refHost, baseHost) {
+			return "", errors.New("identity document: reference is not on the manifest's origin")
+		}
+		if refPort != basePort {
+			return "", errors.New("identity document: reference is on a different port than the manifest")
+		}
 	}
 
-	// Canonical output, assembled by hand. The authority is rebuilt from the
-	// values already checked, so the same input produces the same string in
-	// every SDK instead of each echoing however the manifest happened to spell
-	// it. Safe only because IsBareDomain has already refused every host shape
-	// that would need quoting.
+	// EVERY component of the answer is now read from the strings the author
+	// wrote. RFC 3986 3.2, 3.3, 3.4 and 3.5 define the authority, the path, the
+	// query and the fragment as substrings, and the three SDKs ran three
+	// serializers that disagree inside the character set untameReason admits on
+	// purpose: WHATWG percent-encodes an apostrophe in a query, and this one
+	// used to re-encode a second hash in a fragment.
 	//
-	// The PATH, the QUERY and the FRAGMENT are all taken from the strings the
-	// author wrote, not from url.URL's serializer. RFC 3986 3.3, 3.4 and 3.5
-	// define all three as substrings, and the three SDKs run three serializers
-	// that disagree inside the character set untameReason admits on purpose:
-	// WHATWG percent-encodes an apostrophe in a query, and this one used to
-	// re-encode a second hash in a fragment.
-	//
-	// The path was the last component still coming from ResolveReference, and it
-	// was wrong. net/url drops the empty segment when a "..' pops past the root,
-	// where RFC 3986 5.2.4 keeps it: "..//x" against a base of /ramp.json is
-	// //x, because step 2C removes nothing from an empty output buffer and step
-	// 2E then moves the empty segment. Both ports answered //x while this oracle
-	// answered /x — Python because it hand-writes 5.2.4, TypeScript because the
-	// platform parser it used then happened to be right on this case. It was not
-	// right on the next one, so that port now hand-writes 5.2.4 as well and all
-	// three compute every component of the answer from the raw string.
-	// ResolveReference is left to do only what it is still trusted for: the
-	// scheme and the authority.
-	path := resolvedPath(manifestURL, ref, refURL.Host != "")
+	// The AUTHORITY was the last one still coming from a parser, and it was
+	// wrong in a way the corpus could not see. net/url reads it with Hostname()
+	// and Port(), which split on the LAST colon: "a.example:8443:9" put
+	// "a.example:8443" in the host half, where IsBareDomain accepts it — its
+	// pattern admits an optional port and cannot tell a host from one that
+	// already carries a port. Every origin check downstream then ran against the
+	// wrong hostname. That input was refused only because the parser itself
+	// returned an error, and that error is new in Go 1.26: a consumer whose main
+	// module declares go 1.25 gets the lenient parse and the accepting answer,
+	// out of this same source. An oracle that emits the corpus two other
+	// languages replay cannot have a verdict that depends on the consumer's
+	// toolchain.
+	path := resolvedPath(manifestURL, ref, refHasAuthority)
 	if path == "" {
 		// RFC 3986 6.2.3: under a hierarchical scheme an empty path is
 		// equivalent to "/", and "/" is the normalized form. The WHATWG parser
@@ -221,9 +167,18 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 		path = "/"
 	}
 
+	// Canonical output, assembled by hand. The authority is rebuilt from the
+	// values already checked, so the same input produces the same string in
+	// every SDK instead of each echoing however the manifest happened to spell
+	// it. Safe only because IsBareDomain has already refused every host shape
+	// that would need quoting.
+	//
+	// The host written is the BASE's. When the reference names one too they are
+	// EqualFold-equal by this point, so the two spellings of one identity
+	// collapse to the one the manifest was fetched from.
 	var out strings.Builder
 	out.WriteString("https://")
-	out.WriteString(strings.ToLower(resolvedHost))
+	out.WriteString(strings.ToLower(baseHost))
 	if basePort != "" {
 		out.WriteString(":")
 		out.WriteString(basePort)
@@ -234,7 +189,7 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 	// which in practice means a fragment-only reference. A reference carrying
 	// any path drops the base's query even though it defines none.
 	query, hasQuery := rawQueryOf(ref)
-	if !hasQuery && refURL.Host == "" && !refURL.IsAbs() && refURL.Path == "" {
+	if !hasQuery && !refHasAuthority && refScheme == "" && rawPathOf(ref) == "" {
 		// The base cannot carry a fragment, refused above, so everything after
 		// its first "?" is its query.
 		query, hasQuery = rawQueryOf(manifestURL)
@@ -259,6 +214,75 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 		out.WriteString(fragment)
 	}
 	return out.String(), nil
+}
+
+// uriSchemeOf returns the scheme of a URI reference, lowercased, or "" when it
+// names none. RFC 3986 3.1: an ALPHA followed by ALPHA / DIGIT / "+" / "-" /
+// "." and terminated by a colon. A colon reached after a "/" belongs to a path
+// segment, and isSchemeName refuses the prefix in that case.
+func uriSchemeOf(s string) string {
+	i := strings.IndexByte(s, ':')
+	if i <= 0 || !isSchemeName(s[:i]) {
+		return ""
+	}
+	return strings.ToLower(s[:i])
+}
+
+// uriAuthorityOf returns the authority substring of a URI reference or URL, and
+// whether one is PRESENT. RFC 3986 3.2: the run after "//" up to the first "/",
+// "?" or "#". An authority can be present and empty — "//" alone, or "///x" --
+// which is why presence is a separate answer rather than a test for "".
+func uriAuthorityOf(s string) (string, bool) {
+	if scheme := uriSchemeOf(s); scheme != "" {
+		s = s[len(scheme)+1:]
+	}
+	if !strings.HasPrefix(s, "//") {
+		return "", false
+	}
+	s = s[2:]
+	if i := strings.IndexAny(s, "/?#"); i >= 0 {
+		s = s[:i]
+	}
+	return s, true
+}
+
+// splitHostPort splits "host[:port]" on the FIRST colon; no colon means no port.
+//
+// The first colon, not the last, because the caller cannot check what this hands
+// back. Splitting "a.example:8443:9" on the LAST colon gives the host half
+// "a.example:8443", and IsBareDomain accepts that — its pattern admits an
+// optional port, so it cannot tell a host from a host that already carries one.
+// Splitting on the FIRST colon puts everything after it in the port half, where
+// portIsWritable refuses it. Values that reached here through IsBareDomain hold
+// at most one colon, so the two rules agree on them.
+func splitHostPort(v string) (string, string) {
+	if i := strings.IndexByte(v, ':'); i >= 0 {
+		return v[:i], v[i+1:]
+	}
+	return v, ""
+}
+
+// vetAuthority checks one authority and returns its host and its folded port.
+//
+// Written once and called for both the base and the reference. The two used to
+// hold the same checks inline, and the split rule they share is exactly the kind
+// of thing that gets fixed in one copy and not the other. label names which of
+// the two strings is at fault and is the only difference between the two calls.
+//
+// Refuses userinfo without echoing the value, since that is where a credential
+// would be.
+func vetAuthority(authority, label string) (string, string, error) {
+	if strings.Contains(authority, "@") {
+		return "", "", fmt.Errorf("identity document: %s carries userinfo", label)
+	}
+	host, port := splitHostPort(authority)
+	if !IsBareDomain(host) {
+		return "", "", fmt.Errorf("identity document: %s does not name a plain host", label)
+	}
+	if !portIsWritable(port) {
+		return "", "", fmt.Errorf("identity document: %s names a port outside 1-65535", label)
+	}
+	return host, canonicalPort("https", port), nil
 }
 
 // rawPathOf returns the path component of a URI reference or URL, exactly as
@@ -466,10 +490,10 @@ func untameReason(s string) string {
 // portIsWritable reports whether a written-out port is a decimal number a TCP
 // port can actually take. An omitted port passes: the scheme's default applies.
 //
-// url.Parse already refuses a non-numeric port, but it accepts an out-of-range
-// one — ":70000" resolves fine today — and the other two SDKs read the port off
-// the raw string with no check at all, where ":abc" reaches the WHATWG parser
-// and throws a raw TypeError outside the error family that port documents.
+// Nothing upstream checks this any more. All three SDKs read the authority off
+// the raw string, so ":abc" and ":70000" both arrive here unexamined and this is
+// the only place either is refused. It used to sit behind net/url in this
+// language, which refused a non-numeric port and accepted an out-of-range one.
 //
 // The five-digit cap is not decoration. A padded ":0443" is accepted (it is a
 // different string from ":443" and does not fold, which a vector pins), so the
