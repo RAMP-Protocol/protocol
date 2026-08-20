@@ -44,22 +44,13 @@ _PREFIX = "./sdk/ts/"
 #: Subpaths declared in sdk/ts and deliberately NOT mirrored into the installable root
 #: map yet. Each entry is debt with a name, not an exemption from the rule.
 #:
-#: Every one of these holds symbols that docs/sdk-parity-matrix.md lists as being at
-#: cross-language parity — errordetail alone carries nine — so for those symbols the
-#: matrix over-claims: the TypeScript face exists in source and cannot be imported.
-#: They are deferred with the rest of the export-map repair, tracked with the
-#: TypeScript/Python transport work. Removing an entry here is the whole fix for it.
-UNREACHABLE: dict[str, str] = {
-    "./core/signing-transport": "not mirrored to the installable root map yet",
-    "./core/verify-multisig-request": "not mirrored to the installable root map yet",
-    "./core/window": "not mirrored to the installable root map yet",
-    "./core/wire-canon": "not mirrored to the installable root map yet",
-    "./errordetail": "not mirrored to the installable root map yet",
-    "./hashurl": "not mirrored to the installable root map yet",
-    "./idempotency": "not mirrored to the installable root map yet",
-    "./money": "not mirrored to the installable root map yet",
-    "./scopes": "not mirrored to the installable root map yet",
-}
+#: EMPTY, and it should stay that way. The nine that lived here were the modules the root
+#: map had drifted away from — errordetail alone carries nine symbols the parity matrix
+#: lists as cross-language, so for those the matrix over-claimed: the TypeScript face
+#: existed in source and could not be imported. They were mirrored when the unary client
+#: was built on top of them, since a client cannot compose over a module its own
+#: consumers cannot resolve. A new entry is a new instance of that same drift.
+UNREACHABLE: dict[str, str] = {}
 
 
 def _exports(path: pathlib.Path) -> dict[str, str]:

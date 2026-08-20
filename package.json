@@ -16,20 +16,30 @@
     "./offer-sign": "./sdk/ts/src/offer-sign.ts",
     "./pop": "./sdk/ts/src/pop.ts",
     "./crossfield": "./sdk/ts/src/crossfield.ts",
+    "./errordetail": "./sdk/ts/src/errordetail.ts",
+    "./money": "./sdk/ts/src/money.ts",
+    "./idempotency": "./sdk/ts/src/idempotency.ts",
+    "./scopes": "./sdk/ts/src/scopes.ts",
+    "./hashurl": "./sdk/ts/src/hashurl.ts",
     "./hosts": "./sdk/ts/src/hosts.ts",
     "./regschema": "./sdk/ts/src/regschema.ts",
     "./wire": "./sdk/ts/src/wire.ts",
     "./core": "./sdk/ts/core/verifier.ts",
+    "./core/wire-canon": "./sdk/ts/core/wire-canon.ts",
     "./core/sign": "./sdk/ts/core/sign.ts",
     "./core/sign-request": "./sdk/ts/core/sign-request.ts",
+    "./core/signing-transport": "./sdk/ts/core/signing-transport.ts",
     "./core/verify-request": "./sdk/ts/core/verify-request.ts",
+    "./core/verify-multisig-request": "./sdk/ts/core/verify-multisig-request.ts",
+    "./core/window": "./sdk/ts/core/window.ts",
     "./hono": "./sdk/ts/hono/middleware.ts",
     "./acceptance": "./sdk/ts/src/acceptance.ts",
     "./resolvers": "./sdk/ts/resolvers/index.ts"
   },
   "dependencies": {
     "ajv": "^8.20.0",
-    "canonicalize": "^3.0.0"
+    "canonicalize": "^3.0.0",
+    "undici": "^6.27.0"
   },
   "peerDependencies": {
     "hono": "^4.7.0",
