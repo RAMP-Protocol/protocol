@@ -285,47 +285,64 @@ func mergePath(basePath, refPath string) string {
 //
 // Not a refusal: "../card.json" is a form the field is specified to support and
 // there is a vector pinning it.
+//
+// Walks the string with an INDEX rather than reassigning the remainder. The RFC
+// states the algorithm as "remove the prefix and repeat", and two of its four
+// removal steps have to leave a slash behind — transcribing those literally
+// gives `path = "/" + path[3:]`, which allocates and copies the whole remainder
+// every time. The SLICE is free; the CONCATENATION is not. Only a dot segment
+// reaches those branches, so the cost hid behind the input: with the literal
+// transcription a reference of "/." repeated to 512 KiB took 6.6s here, while
+// the same length of "/a" took 19ms. The reference is a member of a
+// manifest fetched from a third party and carries no maximum length, so the
+// input is reachable. The branches below are the RFC's, unchanged; only the way
+// the prefix is dropped is different.
 func removeDotSegments(path string) string {
 	var out []string
-	for path != "" {
+	i, n := 0, len(path)
+	for i < n {
+		rest := n - i
 		switch {
-		case strings.HasPrefix(path, "../"):
-			path = path[3:]
-		case strings.HasPrefix(path, "./"):
-			path = path[2:]
-		case strings.HasPrefix(path, "/./"):
-			path = "/" + path[3:]
-		case path == "/.":
-			path = "/"
-		case strings.HasPrefix(path, "/../"):
-			path = "/" + path[4:]
+		case strings.HasPrefix(path[i:], "../"):
+			i += 3
+		case strings.HasPrefix(path[i:], "./"):
+			i += 2
+		case strings.HasPrefix(path[i:], "/./"):
+			// Drop the dot and ONE slash; the other starts the next segment.
+			i += 2
+		case rest == 2 && strings.HasPrefix(path[i:], "/."):
+			out = append(out, "/")
+			i = n
+		case strings.HasPrefix(path[i:], "/../"):
+			i += 3
 			if len(out) > 0 {
 				out = out[:len(out)-1]
 			}
-		case path == "/..":
-			path = "/"
+		case rest == 3 && strings.HasPrefix(path[i:], "/.."):
 			if len(out) > 0 {
 				out = out[:len(out)-1]
 			}
-		case path == "." || path == "..":
-			path = ""
+			out = append(out, "/")
+			i = n
+		case rest == 1 && path[i] == '.', rest == 2 && strings.HasPrefix(path[i:], ".."):
+			i = n
 		default:
 			// Move one segment, its leading "/" included, to the output. Popping
 			// one element above therefore drops a segment AND its slash, which
 			// is what 5.2.4 asks for.
-			i := strings.IndexByte(path, '/')
-			if strings.HasPrefix(path, "/") {
+			j := strings.IndexByte(path[i:], '/')
+			if path[i] == '/' {
 				// Skip the leading slash: it belongs to THIS segment.
-				if i = strings.IndexByte(path[1:], '/'); i >= 0 {
-					i++
+				if j = strings.IndexByte(path[i+1:], '/'); j >= 0 {
+					j++
 				}
 			}
-			if i < 0 {
-				out = append(out, path)
-				path = ""
+			if j < 0 {
+				out = append(out, path[i:])
+				i = n
 			} else {
-				out = append(out, path[:i])
-				path = path[i:]
+				out = append(out, path[i:i+j])
+				i += j
 			}
 		}
 	}

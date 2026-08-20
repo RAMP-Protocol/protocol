@@ -330,39 +330,54 @@ function mergePath(basePath: string, refPath: string): string {
 //
 // Not a refusal: "../card.json" is a form the field is specified to support and
 // there is a vector pinning it.
+//
+// Walks the string with an INDEX rather than reassigning the remainder. The RFC
+// states the algorithm as "remove the prefix and repeat", and two of its four
+// removal steps have to leave a slash behind — transcribing those literally
+// gives `` path = `/${path.slice(3)}` ``, which allocates and copies the whole
+// remainder every time. The SLICE is free; the CONCATENATION is not. Only a dot
+// segment reaches those branches, so the cost hid behind the input: with the
+// literal transcription a reference of "/." repeated to 512 KiB took 9.2s here,
+// while the same length of "/a" took 22ms. The reference is a
+// member of a manifest fetched from a third party and carries no maximum
+// length, so the input is reachable. The branches below are the RFC's,
+// unchanged; only the way the prefix is dropped is different.
 function removeDotSegments(path: string): string {
 	const out: string[] = [];
-	while (path !== "") {
-		if (path.startsWith("../")) {
-			path = path.slice(3);
-		} else if (path.startsWith("./")) {
-			path = path.slice(2);
-		} else if (path.startsWith("/./")) {
-			path = `/${path.slice(3)}`;
-		} else if (path === "/.") {
-			path = "/";
-		} else if (path.startsWith("/../")) {
-			path = `/${path.slice(4)}`;
+	const n = path.length;
+	let i = 0;
+	while (i < n) {
+		const rest = n - i;
+		if (path.startsWith("../", i)) {
+			i += 3;
+		} else if (path.startsWith("./", i)) {
+			i += 2;
+		} else if (path.startsWith("/./", i)) {
+			// Drop the dot and ONE slash; the other starts the next segment.
+			i += 2;
+		} else if (rest === 2 && path.startsWith("/.", i)) {
+			out.push("/");
+			i = n;
+		} else if (path.startsWith("/../", i)) {
+			i += 3;
 			out.pop();
-		} else if (path === "/..") {
-			path = "/";
+		} else if (rest === 3 && path.startsWith("/..", i)) {
 			out.pop();
-		} else if (path === "." || path === "..") {
-			path = "";
+			out.push("/");
+			i = n;
+		} else if ((rest === 1 && path[i] === ".") || (rest === 2 && path.startsWith("..", i))) {
+			i = n;
 		} else {
 			// Move one segment, its leading "/" included, to the output. Popping
 			// one element above therefore drops a segment AND its slash, which is
 			// what §5.2.4 asks for.
-			let i = path.indexOf("/");
-			if (path.startsWith("/")) {
-				i = path.indexOf("/", 1);
-			}
-			if (i < 0) {
-				out.push(path);
-				path = "";
+			const j = path.indexOf("/", path[i] === "/" ? i + 1 : i);
+			if (j < 0) {
+				out.push(path.slice(i));
+				i = n;
 			} else {
-				out.push(path.slice(0, i));
-				path = path.slice(i);
+				out.push(path.slice(i, j));
+				i = j;
 			}
 		}
 	}

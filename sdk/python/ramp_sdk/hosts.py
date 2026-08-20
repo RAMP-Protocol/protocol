@@ -350,16 +350,19 @@ def _remove_dot_segments(path: str) -> str:
     Not a refusal: "../card.json" is a form the field is specified to support
     and there is a vector pinning it.
 
-    Walks the string with an INDEX instead of reassigning a shrinking suffix.
-    The RFC states the algorithm as "remove the prefix and repeat", and writing
-    it that way in Python is quadratic: CPython copies on every slice, so a 1
-    MiB reference took about five seconds here against forty milliseconds in Go,
-    with each doubling of the input roughly quadrupling the time. Go and
-    TypeScript get linear behaviour for free because a Go slice and a V8 sliced
-    string are both O(1). The reference is a member of a manifest fetched from a
-    third party and carries no maximum length, so the input is reachable. The
-    branches below are the RFC's, unchanged; only the way the prefix is dropped
-    is different.
+    Walks the string with an INDEX rather than reassigning the remainder. The RFC
+    states the algorithm as "remove the prefix and repeat", and transcribing that
+    literally is quadratic in all three languages, for two different reasons.
+    CPython copies on EVERY slice, so every branch is expensive here. Go and
+    TypeScript slice for free, but two of the RFC's four removal steps have to
+    leave a slash behind, and writing those as a concatenation copies the whole
+    remainder — which only a DOT SEGMENT reaches. So the cost hides behind the
+    input: a reference of "/a" repeated to 512 KiB was flat in both of those
+    ports while "/." at the same length took 6.6s in Go and 9.2s in TypeScript.
+    All three now walk an index. The reference is a member of a manifest fetched
+    from a third party and carries no maximum length, so the input is reachable.
+    The branches below are the RFC's, unchanged; only the way the prefix is
+    dropped is different.
     """
     out: list[str] = []
     i, n = 0, len(path)
