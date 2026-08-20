@@ -133,7 +133,25 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 		// failed on, so %w would echo the reference by the back door.
 		return "", errors.New("identity document: reference is not a URI reference")
 	}
-	resolved := base.ResolveReference(refURL)
+	// Resolved for its SCHEME and AUTHORITY only, which is why both paths are
+	// emptied first. net/url's dot-segment removal handles a ".." by copying the
+	// whole accumulated buffer into a fresh one, so it is quadratic in the length
+	// of the reference — and the reference is a member of a manifest fetched from
+	// a third party, carrying no maximum length. The path it computes is thrown
+	// away a few lines below, where resolvedPath recomputes it with a linear
+	// walk, so this used to run one linear path resolver and one quadratic path
+	// resolver over the same input and keep the answer from the linear one. A
+	// reference of 1.25 MiB cost five seconds; emptying the paths takes it to
+	// twenty-five milliseconds and moves no vector.
+	//
+	// Safe because RFC 3986 5.2.2 decides the scheme and the authority from
+	// whether the REFERENCE carries them, never from either path. The two paths
+	// reach the query-inheritance arm inside net/url, but nothing here reads the
+	// query or the fragment off this value: both come from the raw strings.
+	baseAuthority, refAuthority := *base, *refURL
+	baseAuthority.Path, baseAuthority.RawPath = "", ""
+	refAuthority.Path, refAuthority.RawPath = "", ""
+	resolved := baseAuthority.ResolveReference(&refAuthority)
 	if resolved.User != nil {
 		return "", errors.New("identity document: reference carries userinfo")
 	}
