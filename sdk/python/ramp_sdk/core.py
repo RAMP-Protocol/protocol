@@ -139,8 +139,98 @@ class Result:
     rejected: list[RejectedOffer] = field(default_factory=list)
 
 
+# ---------------------------------------------------------------------------
+# The shape both discovery verbs return.
+#
+# A discovery call is per-URI: an agent asks about several resources at once and the
+# answer comes back grouped, one group per requested URI, each either carrying offers
+# or carrying a typed reason it carries none. A flat list cannot express that. It has
+# nowhere to put the reason, and a refused URI vanishes entirely — its group holds no
+# offer, so nothing survives to say which resource was refused or why.
+#
+# That distinction is the point of the vocabulary: "not in the catalogue" means give up,
+# "scope insufficient" means acquire an entitlement and retry, and "content blocked"
+# means never retry. Flattened, all three read as "found nothing".
+#
+# The fail-closed {verified, rejected} split is preserved inside each group, through the
+# same Verifier — not a second verification path.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class OfferGroupResult:
+    """One requested URI's answer (mirror sdk/go core.OfferGroupResult).
+
+    ``absence_reason`` is ``None`` when the responder stated no reason — a legitimate
+    answer, not an omission: where the existence of a resource must itself stay hidden,
+    a responder MAY withhold the reason rather than confirm the resource exists. The Go
+    oracle keeps a pointer to tell that apart from the unspecified enum value; here the
+    generated enums carry no ``*_UNSPECIFIED`` member at all, so a present value is
+    always a real reason and ``None`` is the only way to say nothing.
+    """
+
+    uri: str = ""
+    result: Result = field(default_factory=Result)
+    absence_reason: str | None = None
+    discovery_method: str | None = None
+    #: The restriction axes that drove a convenience pre-filter, when the absence reason
+    #: is a restriction filter. Advisory diagnostics, not an enforcement verdict — but
+    #: they tell an agent which axis to vary on a retry.
+    restriction_filters: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class DiscoveryResult:
+    """What discover and resolve return (mirror sdk/go core.DiscoveryResult)."""
+
+    #: One entry per requested URI, in the order the responder returned.
+    groups: list[OfferGroupResult] = field(default_factory=list)
+    #: Why the CALL as a whole yielded nothing. Set only on that path — when any group
+    #: carries offers it stays ``None``, and the per-URI causes ride on each group
+    #: instead. Only a Broker resolve can set it: an Exchange's own discovery response
+    #: has no whole-call reason field.
+    absence_reason: str | None = None
+    #: Canonical domain of the responding Exchange. Empty from a Broker resolve, whose
+    #: response names no single Exchange — each offer carries its own issuing domain.
+    exchange: str = ""
+    #: The caller's rate-limit standing, when the responder reported it, so an agent can
+    #: throttle before a fan-out meets a hard limit. ``None`` from a Broker resolve.
+    rate_limit: dict[str, Any] | None = None
+
+    def verified(self) -> list[VerifiedOffer]:
+        """Every verified offer across all groups, for a caller that does not care which
+        URI an offer answers.
+
+        A convenience over ``groups``, never a substitute. A URI that was REFUSED
+        contributes nothing here — it has no offer to contribute — so a caller reading
+        only this cannot tell a refusal from a resource it never asked about. That is
+        exactly the information ``groups`` exists to keep.
+        """
+        return [offer for group in self.groups for offer in group.result.verified]
+
+    def rejected(self) -> list[RejectedOffer]:
+        """Every rejected offer across all groups, with the reason each failed. The same
+        caveat as :meth:`verified` applies: a URI that yielded no offers at all is not a
+        rejection and appears only in ``groups``."""
+        return [offer for group in self.groups for offer in group.result.rejected]
+
+
 def _mint_verified(offer: Any) -> VerifiedOffer:
     return VerifiedOffer(offer, _VERIFIED_TOKEN)
+
+
+def _str_or(value: Any, fallback: str | None) -> Any:
+    """A wire string, or the fallback. A responder that sent the wrong JSON type for an
+    enum or a URI has said nothing usable, and reading it as its own text would put an
+    unvalidated value where a typed reason belongs."""
+    return value if isinstance(value, str) else fallback
+
+
+def _str_list(value: Any) -> list[str]:
+    """The string members of a wire array; anything else contributes nothing."""
+    if not isinstance(value, list):
+        return []
+    return [v for v in value if isinstance(v, str)]
 
 
 def canonical_offer_payload(offer: dict[str, Any]) -> bytes:
@@ -208,6 +298,34 @@ class Verifier:
             else:
                 rejected.append(RejectedOffer(offer, reason))
         return Result(verified=verified, rejected=rejected)
+
+    def sort_groups(self, groups: Sequence[Any]) -> list[OfferGroupResult]:
+        """Verify every group's offers through THIS Verifier, preserving each group's URI
+        and its typed reasons (mirror sdk/go ``Verifier.SortGroups``).
+
+        One Verifier sorts every group deliberately: it is stateless apart from the
+        injected resolver and clock, so a fresh one per group would mean N resolver
+        caches and N clock readings for a single logical answer.
+
+        A non-object element is SKIPPED rather than surfaced as an empty URI: it is not a
+        group with no offers, it is nothing at all, and inventing an answer the responder
+        never gave is worse than dropping a malformed one.
+        """
+        out: list[OfferGroupResult] = []
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            offers = group.get("offers")
+            out.append(
+                OfferGroupResult(
+                    uri=_str_or(group.get("uri"), ""),
+                    result=self.sort(offers if isinstance(offers, list) else []),
+                    absence_reason=_str_or(group.get("absence_reason"), None),
+                    discovery_method=_str_or(group.get("discovery_method"), None),
+                    restriction_filters=_str_list(group.get("restriction_filters")),
+                ),
+            )
+        return out
 
     def _check(self, offer: Any) -> str | None:
         if not isinstance(offer, dict):

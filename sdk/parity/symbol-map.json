@@ -54,9 +54,7 @@
     "connectserver.WithVerifyGate": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connectserver.WithoutReplayStore": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "core.DefaultRequestID": "Go default request-id minter; py/ts mint request-ids inline.",
-    "core.DiscoveryResult": "Go per-URI discovery result carrying the fail-closed split plus the typed absence reasons; py/ts gain the same shape with their client verbs.",
     "core.ErrOfferExpired": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
-    "core.OfferGroupResult": "Go per-URI group within a discovery result; py/ts gain the same shape with their client verbs.",
     "core.RequestIDFunc": "Go request-id function type; py/ts pass a callable inline.",
     "core.RequestIDMiddleware": "Go-only request-id middleware (matrix SERVER-role request-id row: TS/Py absent).",
     "core.SigningOption": "Go functional-option type for the signing transport; py/ts pass options objects.",
@@ -182,6 +180,11 @@
       "python": "clock_window",
       "ts": "clockWindow"
     },
+    "core.DiscoveryResult": {
+      "allowlist_reason": null,
+      "python": "DiscoveryResult",
+      "ts": "DiscoveryResult"
+    },
     "core.Mode": {
       "allowlist_reason": null,
       "python": "Mode",
@@ -201,6 +204,11 @@
       "allowlist_reason": "Go NewVerifier factory folds into the Python class constructor (Verifier(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createVerifier factory.",
       "python": null,
       "ts": "createVerifier"
+    },
+    "core.OfferGroupResult": {
+      "allowlist_reason": null,
+      "python": "OfferGroupResult",
+      "ts": "OfferGroupResult"
     },
     "core.RejectedOffer": {
       "allowlist_reason": null,

@@ -96,6 +96,94 @@ export interface Result {
 	rejected: RejectedOffer[];
 }
 
+// The shape both discovery verbs return.
+//
+// A discovery call is per-URI: an agent asks about several resources at once and the
+// answer comes back grouped, one group per requested URI, each either carrying offers or
+// carrying a typed reason it carries none. A flat list cannot express that. It has
+// nowhere to put the reason, and a refused URI vanishes entirely — its group holds no
+// offer, so nothing survives to say which resource was refused or why.
+//
+// That distinction is the point of the vocabulary: "not in the catalogue" means give up,
+// "scope insufficient" means acquire an entitlement and retry, and "content blocked"
+// means never retry. Flattened, all three read as "found nothing".
+//
+// The fail-closed {verified, rejected} split is preserved inside each group, through the
+// same Verifier — not a second verification path.
+
+/**
+ * OfferGroupResult is one requested URI's answer (mirror sdk/go core.OfferGroupResult).
+ *
+ * `absenceReason` is undefined when the responder stated no reason — a legitimate
+ * answer, not an omission: where the existence of a resource must itself stay hidden, a
+ * responder MAY withhold the reason rather than confirm the resource exists. The Go
+ * oracle keeps a pointer to tell that apart from the unspecified enum value; here the
+ * generated enums carry no `*_UNSPECIFIED` member at all, so a present value is always a
+ * real reason and undefined is the only way to say nothing.
+ */
+export interface OfferGroupResult {
+	readonly uri: string;
+	readonly result: Result;
+	readonly absenceReason?: string;
+	readonly discoveryMethod?: string;
+	/**
+	 * The restriction axes that drove a convenience pre-filter, when the absence reason
+	 * is a restriction filter. Advisory diagnostics, not an enforcement verdict — but
+	 * they tell an agent which axis to vary on a retry.
+	 */
+	readonly restrictionFilters: string[];
+}
+
+/** DiscoveryResult is what discover and resolve return (mirror sdk/go core.DiscoveryResult). */
+export interface DiscoveryResult {
+	/** One entry per requested URI, in the order the responder returned. */
+	readonly groups: OfferGroupResult[];
+	/**
+	 * Why the CALL as a whole yielded nothing. Set only on that path — when any group
+	 * carries offers it stays undefined, and the per-URI causes ride on each group
+	 * instead. Only a Broker resolve can set it: an Exchange's own discovery response has
+	 * no whole-call reason field.
+	 */
+	readonly absenceReason?: string;
+	/**
+	 * Canonical domain of the responding Exchange. Empty from a Broker resolve, whose
+	 * response names no single Exchange — each offer carries its own issuing domain.
+	 */
+	readonly exchange: string;
+	/**
+	 * The caller's rate-limit standing, when the responder reported it, so an agent can
+	 * throttle before a fan-out meets a hard limit. Undefined from a Broker resolve.
+	 */
+	readonly rateLimit?: Record<string, unknown>;
+}
+
+/**
+ * Every verified offer across all groups, for a caller that does not care which URI an
+ * offer answers.
+ *
+ * A free function rather than a method, unlike the Go and Python faces: DiscoveryResult
+ * here is a plain record — what the client hands back after parsing — and putting
+ * methods on the interface would force every hand-built literal to supply them. Same
+ * contract, spelled the way this language spells it.
+ *
+ * A convenience over `groups`, never a substitute. A URI that was REFUSED contributes
+ * nothing here — it has no offer to contribute — so a caller reading only this cannot
+ * tell a refusal from a resource it never asked about. That is exactly the information
+ * `groups` exists to keep.
+ */
+export function verifiedOffers(result: DiscoveryResult): VerifiedOffer[] {
+	return result.groups.flatMap((g) => g.result.verified);
+}
+
+/**
+ * Every rejected offer across all groups, with the reason each failed. The same caveat as
+ * {@link verifiedOffers} applies: a URI that yielded no offers at all is not a rejection
+ * and appears only in `groups`.
+ */
+export function rejectedOffers(result: DiscoveryResult): RejectedOffer[] {
+	return result.groups.flatMap((g) => g.result.rejected);
+}
+
 // mintVerified is the SOLE constructor of a branded VerifiedOffer, module-private.
 function mintVerified(offer: unknown): VerifiedOffer {
 	return { [VERIFIED_BRAND]: true, offer };
@@ -128,6 +216,24 @@ const defaultVerifyEd25519: Ed25519Verify = async (pubkey, sig, message) => {
 		return false;
 	}
 };
+
+// stringOr returns a wire string, or the fallback. A responder that sent the wrong JSON
+// type for an enum or a URI has said nothing usable, and reading it as its own text
+// would put an unvalidated value where a typed reason belongs.
+function stringOr<T extends string | undefined>(
+	value: unknown,
+	fallback: T,
+): string | T {
+	return typeof value === "string" ? value : fallback;
+}
+
+// stringList returns the string members of a wire array; anything else contributes
+// nothing.
+function stringList(value: unknown): string[] {
+	return Array.isArray(value)
+		? value.filter((v): v is string => typeof v === "string")
+		: [];
+}
 
 // hexToBytes decodes a hex string (the Offer.signature encoding) to bytes.
 function hexToBytes(hex: string): Uint8Array<ArrayBuffer> | undefined {
@@ -195,6 +301,43 @@ export class Verifier {
 			}
 		}
 		return result;
+	}
+
+	/**
+	 * sortGroups verifies every group's offers through THIS Verifier and returns the
+	 * per-URI results, preserving each group's URI and its typed reasons (mirror sdk/go
+	 * `Verifier.SortGroups`).
+	 *
+	 * One Verifier sorts every group deliberately: it is stateless apart from the
+	 * injected resolver and clock, so a fresh one per group would mean N resolver caches
+	 * and N clock readings for a single logical answer.
+	 *
+	 * A non-object element is SKIPPED rather than surfaced as an empty URI: it is not a
+	 * group with no offers, it is nothing at all, and inventing an answer the responder
+	 * never gave is worse than dropping a malformed one.
+	 */
+	async sortGroups(groups: readonly unknown[]): Promise<OfferGroupResult[]> {
+		const out: OfferGroupResult[] = [];
+		for (const group of groups) {
+			if (typeof group !== "object" || group === null || Array.isArray(group)) {
+				continue;
+			}
+			const rec = group as Record<string, unknown>;
+			const offers = rec["offers"];
+			// The two optional reasons are OMITTED when the responder gave none, rather
+			// than set to undefined: under exactOptionalPropertyTypes those are different
+			// facts, and "the responder said nothing" is the one being preserved.
+			const absenceReason = stringOr(rec["absence_reason"], undefined);
+			const discoveryMethod = stringOr(rec["discovery_method"], undefined);
+			out.push({
+				uri: stringOr(rec["uri"], ""),
+				result: await this.sort(Array.isArray(offers) ? offers : []),
+				...(absenceReason !== undefined ? { absenceReason } : {}),
+				...(discoveryMethod !== undefined ? { discoveryMethod } : {}),
+				restrictionFilters: stringList(rec["restriction_filters"]),
+			});
+		}
+		return out;
 	}
 
 	// check verifies a single offer: resolve the exchange offer-signing key, verify

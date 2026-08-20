@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 103 symbols at cross-language parity · 14 documented divergences · 140 Go-idiomatic exclusions · 28 conformance corpora, each tri-replayed.
+**At a glance:** 105 symbols at cross-language parity · 14 documented divergences · 138 Go-idiomatic exclusions · 28 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -125,9 +125,11 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | Go | python | ts |
 |---|---|---|
 | `ClockWindow` | `clock_window` | `clockWindow` |
+| `DiscoveryResult` | `DiscoveryResult` | `DiscoveryResult` |
 | `Mode` | `Mode` | `Mode` |
 | `MonotonicWindow` | `monotonic_window` | `monotonicWindow` |
 | `NewSigningTransport` | `SigningTransport` | `createSigningTransport` |
+| `OfferGroupResult` | `OfferGroupResult` | `OfferGroupResult` |
 | `RejectedOffer` | `RejectedOffer` | `RejectedOffer` |
 | `ReplayStore` | `ReplayStore` | `ReplayStore` |
 | `RequestIDHeader` | `RequestIDHeader` | `RequestIDHeader` |
@@ -235,9 +237,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `connectserver.WithVerifyGate` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithoutReplayStore` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `core.DefaultRequestID` | Go default request-id minter; py/ts mint request-ids inline. |
-| `core.DiscoveryResult` | Go per-URI discovery result carrying the fail-closed split plus the typed absence reasons; py/ts gain the same shape with their client verbs. |
 | `core.ErrOfferExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
-| `core.OfferGroupResult` | Go per-URI group within a discovery result; py/ts gain the same shape with their client verbs. |
 | `core.RequestIDFunc` | Go request-id function type; py/ts pass a callable inline. |
 | `core.RequestIDMiddleware` | Go-only request-id middleware (matrix SERVER-role request-id row: TS/Py absent). |
 | `core.SigningOption` | Go functional-option type for the signing transport; py/ts pass options objects. |
