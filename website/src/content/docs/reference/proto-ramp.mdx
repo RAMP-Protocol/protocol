@@ -16,6 +16,8 @@ Request correlation is **not** carried in the proto body. It rides on the `X-Req
 The canonical wire form is **snake_case proto-JSON** — the field names exactly as declared in the `.proto` (e.g. `idempotency_key`, `unit_cost`), across every example on this site, the generated Pydantic/Zod clients, and the conformance corpus. The proto3-JSON `lowerCamelCase` alias (`idempotencyKey`) is **out of contract**: `protojson` on the server tolerates it on input, but the generated clients emit and accept snake_case only.
 
 This is **load-bearing for signatures**: signed messages (`Offer.signature`, `ResourceAttestation`, …) are Ed25519 over **JCS-canonicalized (RFC 8785) proto-JSON**, and JCS sorts keys lexicographically, so the field-name casing determines the signed bytes. snake_case proto-JSON is the canonical input the signature is computed over.
+
+One exception, and it is **transport framing** rather than a RAMP message: the `debug` projection Connect attaches to an error detail is lowerCamelCase, and no server option changes it — `connect-go` renders that projection with its own `protojson` codec at default options, so the snake_case codec a deployment registers reaches the response **body** and not the error beside it. A JSON client normalizes that one projection back to the proto names before reading it, which is possible because `json_name` inverts to the field name for every field in this contract.
 :::
 
 ## Services

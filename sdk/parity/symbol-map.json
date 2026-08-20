@@ -1,18 +1,10 @@
 {
   "_comment": "Symbol-level Go->Python->TS API-surface parity map. Go is the oracle (sdk/go/{helpers,resolvers,core,connect,connectserver}). One entry per Go public symbol (pkg-qualified). 'python'/'ts' hold the mapped public name or null when that language exposes no public symbol of that name. allowlist_reason marks a deliberate documented divergence (shrink-only). Enforced by sdk/python/tests/test_api_surface_parity.py. TS object factories use the create* prefix and value generators use generate* (Go NewX stays idiomatic); the guarded-client names (guarded_client/guarded_async_client vs guardedFetchFromEnv) are a documented idiomatic divergence, not a transliteration.",
   "go_exclusions": {
-    "connect.BrokerClient": "Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md.",
-    "connect.CallError": "Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md.",
-    "connect.CallErrorKind": "Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md.",
-    "connect.CallOption": "Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md.",
-    "connect.ClientOption": "Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md.",
-    "connect.DefaultCallTimeout": "Go default deadline for a call to an offer-derived Exchange. Python and TS ship no Connect client at all, so neither holds a counterpart today; the default arrives with their unary client work.",
-    "connect.DefaultMaxRPCReadBytes": "Go default response-size bound for a Connect call. Python and TS ship no unary client to hold one; the bound arrives with their unary client work.",
-    "connect.EndpointResolver": "Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md.",
-    "connect.ExecuteOption": "Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md.",
-    "connect.NewBrokerClient": "Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md.",
-    "connect.NewValidateInterceptor": "Go-only protovalidate interceptor (matrix SERVER-role validation row: TS/Py absent).",
-    "connect.Validation": "Part of the Go-only typed Connect client validation option; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md.",
+    "connect.CallOption": "Go functional-option type for the per-call knobs; py/ts pass options objects (TS ClientOptions / CallOptions, Python ClientConfig and keyword arguments).",
+    "connect.ClientOption": "Go functional-option type for the client; py/ts pass options objects (TS ClientOptions / CallOptions, Python ClientConfig and keyword arguments).",
+    "connect.ExecuteOption": "Go type alias kept for continuity with the original execute-only option name; py/ts have one per-call options shape and no alias to mirror.",
+    "connect.NewValidateInterceptor": "Go protovalidate interceptor. The two JSON clients DO check an outbound request, against its generated model rather than through an interceptor — a field-level check, not protovalidate's cross-field CEL — so what has no counterpart is the interceptor, not the validation (see connect.Validation).",
     "connect.WithAgentKey": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithClientOptions": "Go escape hatch for raw connectrpc.ClientOption values, mirroring connectserver.WithHandlerOptions; py/ts have no Connect option type to pass through.",
     "connect.WithContentTimeout": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
@@ -128,35 +120,70 @@
     "helpers.VerifyRequestResolved": "Go resolver-injected VerifyRequest overload; py/ts expose a single verify entry point.",
     "helpers.WithSignatureAgent": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "resolvers.ActiveKeyScanOptions": "Go scan-options struct; py/ts pass scan options inline.",
-    "resolvers.Content": "Go value struct for one fetched resource; py/ts return their runtime-native body/type pair.",
-    "resolvers.ContentFetchOptions": "Go options struct for the content-download leg; py/ts pass the same values as kwargs/an options object.",
-    "resolvers.ContentFetcher": "Part of the Go content-download leg; the TS/Python download verbs are tracked with their unary client work.",
-    "resolvers.DefaultContentTimeout": "Go default bound for one content fetch. Neither Python nor TS ships a content fetcher, so no counterpart holds this default today; it arrives with the download verbs tracked alongside their unary client work.",
-    "resolvers.DefaultMaxContentBytes": "Go default body cap for one content fetch. Neither Python nor TS ships a content fetcher, so no counterpart holds this cap today; it arrives with the download verbs tracked alongside their unary client work.",
-    "resolvers.FetchError": "Go typed error for the content leg; py/ts raise/throw a runtime-native error carrying the same class and reason.",
-    "resolvers.FetchFailure": "Go failure-class enum for the content leg; py/ts express the same classes as string literals.",
-    "resolvers.NewContentFetcher": "Go constructor for the content-download leg; py/ts fold construction into their client.",
+    "resolvers.ContentFetchOptions": "Go options struct for the content-download leg; TS passes the same values as an options object to its fetch, Python as ClientConfig fields.",
+    "resolvers.ContentFetcher": "Go value that owns the content-download leg; py/ts fold it into the client's fetch verb, which is the only caller either has.",
+    "resolvers.FetchError": "Go typed error for the content leg; py/ts report a delivery failure through the client's own CallError, so a caller branches on one failure type for every verb.",
+    "resolvers.FetchFailure": "Go failure-class enum for the content leg; py/ts fold the same classes into CallErrorKind rather than carrying a second, parallel taxonomy.",
+    "resolvers.NewContentFetcher": "Go constructor for the content-download leg; py/ts fold construction into their client, so there is no fetcher to build separately.",
     "resolvers.NewGuardedTransport": "Go constructor composing the SSRF guard over a caller's base transport; py/ts expose their guarded fetch as a single factory with no separable base.",
     "resolvers.ProofSigner": "Go interface seam that keeps key custody out of the dialing tier; py/ts inject a signing callable instead of a named interface.",
     "resolvers.SSRFCheckRedirect": "Go redirect-policy hook; py/ts fold redirect checks into the guard (async_ssrf_guard / the guarded fetch)."
   },
   "symbols": {
+    "connect.BrokerClient": {
+      "allowlist_reason": null,
+      "python": "BrokerClient",
+      "ts": "BrokerClient"
+    },
+    "connect.CallError": {
+      "allowlist_reason": null,
+      "python": "CallError",
+      "ts": "RampCallError"
+    },
+    "connect.CallErrorKind": {
+      "allowlist_reason": null,
+      "python": "CallErrorKind",
+      "ts": "CallErrorKind"
+    },
     "connect.Client": {
-      "allowlist_reason": "Go-only typed Connect client covering the agent verb set (Discover, Resolve, Execute, ReportUsage, Dispute, Fetch) — OPEN DECISION in docs/sdk-parity-matrix.md: the API-surface design governs and specifies a thin Connect-unary JSON client for TypeScript and Python with the SAME verb names, so this is an implementation difference pending that work, not a settled API divergence",
-      "decision_anchor": "typed Connect **client** — OPEN",
-      "python": null,
-      "ts": null
+      "allowlist_reason": null,
+      "python": "Client",
+      "ts": "Client"
+    },
+    "connect.DefaultCallTimeout": {
+      "allowlist_reason": null,
+      "python": "DEFAULT_CALL_TIMEOUT_SEC",
+      "ts": "DEFAULT_CALL_TIMEOUT_MS"
+    },
+    "connect.DefaultMaxRPCReadBytes": {
+      "allowlist_reason": null,
+      "python": "DEFAULT_MAX_RPC_READ_BYTES",
+      "ts": "DEFAULT_MAX_RPC_READ_BYTES"
+    },
+    "connect.EndpointResolver": {
+      "allowlist_reason": null,
+      "python": "EndpointResolver",
+      "ts": "EndpointResolver"
     },
     "connect.ErrorDetailFrom": {
       "allowlist_reason": null,
       "python": "error_detail_from",
       "ts": "errorDetailFrom"
     },
-    "connect.NewClient": {
-      "allowlist_reason": "Go-only typed Connect client constructor (NewClient plus NewBrokerClient) — OPEN DECISION in docs/sdk-parity-matrix.md, pending the TypeScript and Python unary client that carries the same verb names",
-      "decision_anchor": "typed Connect **client** — OPEN",
+    "connect.NewBrokerClient": {
+      "allowlist_reason": "Go NewX factory folds into the Python class constructor (BrokerClient(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix.",
       "python": null,
-      "ts": null
+      "ts": "createBrokerClient"
+    },
+    "connect.NewClient": {
+      "allowlist_reason": "Go NewX factory folds into the Python class constructor (Client(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix.",
+      "python": null,
+      "ts": "createClient"
+    },
+    "connect.Validation": {
+      "allowlist_reason": null,
+      "python": "Validation",
+      "ts": "Validation"
     },
     "connectserver.NewBrokerServiceHandler": {
       "allowlist_reason": "Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md",
@@ -629,6 +656,21 @@
       "allowlist_reason": "Go config struct / TS options object folds into Python constructor keyword arguments (CachedOfferKeyResolver(...)); idiomatic Python has no separate options type.",
       "python": null,
       "ts": "CachedOfferKeyResolverOptions"
+    },
+    "resolvers.Content": {
+      "allowlist_reason": null,
+      "python": "Content",
+      "ts": "Content"
+    },
+    "resolvers.DefaultContentTimeout": {
+      "allowlist_reason": null,
+      "python": "DEFAULT_CONTENT_TIMEOUT_SEC",
+      "ts": "DEFAULT_CONTENT_TIMEOUT_MS"
+    },
+    "resolvers.DefaultMaxContentBytes": {
+      "allowlist_reason": null,
+      "python": "DEFAULT_MAX_CONTENT_BYTES",
+      "ts": "DEFAULT_MAX_CONTENT_BYTES"
     },
     "resolvers.ErrDirectoryUnavailable": {
       "allowlist_reason": null,
