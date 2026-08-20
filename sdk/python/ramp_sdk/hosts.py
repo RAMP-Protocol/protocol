@@ -343,38 +343,54 @@ def _remove_dot_segments(path: str) -> str:
 
     Not a refusal: "../card.json" is a form the field is specified to support
     and there is a vector pinning it.
+
+    Walks the string with an INDEX instead of reassigning a shrinking suffix.
+    The RFC states the algorithm as "remove the prefix and repeat", and writing
+    it that way in Python is quadratic: CPython copies on every slice, so a 1
+    MiB reference took about five seconds here against forty milliseconds in Go,
+    with each doubling of the input roughly quadrupling the time. Go and
+    TypeScript get linear behaviour for free because a Go slice and a V8 sliced
+    string are both O(1). The reference is a member of a manifest fetched from a
+    third party and carries no maximum length, so the input is reachable. The
+    branches below are the RFC's, unchanged; only the way the prefix is dropped
+    is different.
     """
     out: list[str] = []
-    while path:
-        if path.startswith("../"):
-            path = path[3:]
-        elif path.startswith("./"):
-            path = path[2:]
-        elif path.startswith("/./"):
-            path = "/" + path[3:]
-        elif path == "/.":
-            path = "/"
-        elif path.startswith("/../"):
-            path = "/" + path[4:]
+    i, n = 0, len(path)
+    while i < n:
+        rest = n - i
+        if path.startswith("../", i):
+            i += 3
+        elif path.startswith("./", i):
+            i += 2
+        elif path.startswith("/./", i):
+            # Drop the dot and ONE slash; the other slash starts the next segment.
+            i += 2
+        elif rest == 2 and path.startswith("/.", i):
+            out.append("/")
+            i = n
+        elif path.startswith("/../", i):
+            i += 3
             if out:
                 out.pop()
-        elif path == "/..":
-            path = "/"
+        elif rest == 3 and path.startswith("/..", i):
             if out:
                 out.pop()
-        elif path in (".", ".."):
-            path = ""
+            out.append("/")
+            i = n
+        elif (rest == 1 and path[i] == ".") or (rest == 2 and path.startswith("..", i)):
+            i = n
         else:
             # Move one segment, its leading "/" included, to the output. Popping
             # one element above therefore drops a segment AND its slash, which
             # is what 5.2.4 asks for.
-            i = path.find("/", 1) if path.startswith("/") else path.find("/")
-            if i < 0:
-                out.append(path)
-                path = ""
+            j = path.find("/", i + 1) if path[i] == "/" else path.find("/", i)
+            if j < 0:
+                out.append(path[i:])
+                i = n
             else:
-                out.append(path[:i])
-                path = path[i:]
+                out.append(path[i:j])
+                i = j
     return "".join(out)
 
 
