@@ -177,11 +177,17 @@ def enumerate_go() -> dict[str, str]:
 
 
 def enumerate_python() -> set[str]:
-    """The public Python surface: ramp_sdk.__all__ + ramp_sdk.resolvers.__all__."""
-    import ramp_sdk
-    from ramp_sdk import resolvers
+    """The public Python surface: the aggregator plus each IO package's own ``__all__``.
 
-    return set(ramp_sdk.__all__) | set(resolvers.__all__)
+    The aggregator flattens the faces a caller reaches for by name, but not every constant
+    the client tier owns — bounds and timeouts belong beside the client that applies them
+    rather than in a namespace of ninety names. Reading each package's ``__all__`` is what
+    keeps those in scope, the same way ``resolvers`` was brought in when it landed.
+    """
+    import ramp_sdk
+    from ramp_sdk import client, resolvers
+
+    return set(ramp_sdk.__all__) | set(resolvers.__all__) | set(client.__all__)
 
 
 _TS_INLINE_RE = re.compile(

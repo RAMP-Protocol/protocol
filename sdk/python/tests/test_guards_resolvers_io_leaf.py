@@ -1,18 +1,22 @@
-"""Structural guard for the resolver IO-leaf invariant.
+"""Structural guard for the IO-leaf invariant.
 
-The resolver faces (``ramp_sdk/resolvers/``) are the SDK's ONLY IO-bearing tree:
-they fetch JWKS / WBA directories / ramp.json over an injected transport (default
-a maintained ``httpx`` client with the SSRF guard). The pure L1 modules
-(``core``, ``httpsig``, ``pop``, ``server_verify``, ``keyresolver``,
-``thumbprint``, ``b64``, ...) are transport-neutral by contract -- they own no
-keys, open no sockets, and MUST NOT depend on the IO tree. Dependency flows one
-way only: ``resolvers`` -> pure-modules (it reuses thumbprint + b64), never the
-reverse. A pure module that imports ``ramp_sdk.resolvers``, ``httpx``, or raw
-``urllib`` would drag IO into the transport-neutral core -- the httpx dependency
-is scoped to the IO tree -- and is exactly the regression this guard bans.
+Three packages bear IO: the resolver faces (``ramp_sdk/resolvers/``), which fetch
+JWKS / WBA directories / ramp.json, and the client (``ramp_sdk/client/``) with its
+blocking facade (``ramp_sdk/sync/``), which speak the RAMP RPCs and the delivery
+fetch. All of them dial over an injected transport whose default is a maintained
+``httpx`` client with the SSRF guard. The pure L1 modules (``core``, ``httpsig``,
+``pop``, ``server_verify``, ``keyresolver``, ``thumbprint``, ``b64``, ...) are
+transport-neutral by contract -- they own no keys, open no sockets, and MUST NOT
+depend on any of them. Dependency flows one way only: the IO packages ->
+pure-modules (they reuse thumbprint, b64, the signing and verifying faces), never
+the reverse. A pure module that imports ``ramp_sdk.resolvers``,
+``ramp_sdk.client``, ``httpx``, or raw ``urllib`` would drag IO into the
+transport-neutral core -- the httpx dependency is scoped to the IO tree -- and is
+exactly the regression this guard bans.
 
-``__init__.py`` is the public aggregator and legitimately re-exports the resolver
-faces, so it is excluded from the pure set.
+The pure set is the TOP-LEVEL ``ramp_sdk/*.py`` modules; the IO packages are
+subpackages and so are outside it by construction. ``__init__.py`` is the public
+aggregator and legitimately re-exports every face, so it is excluded too.
 """
 
 from __future__ import annotations
@@ -27,8 +31,8 @@ _RAMP_SDK = pathlib.Path(__file__).resolve().parents[1] / "ramp_sdk"
 _NON_PURE = {"__init__.py"}
 
 _FORBIDDEN = (
-    re.compile(r"(?:from|import)\s+ramp_sdk\.resolvers\b"),
-    re.compile(r"(?:from|import)\s+ramp_sdk\.resolvers$", re.MULTILINE),
+    re.compile(r"(?:from|import)\s+ramp_sdk\.(?:resolvers|client|sync)\b"),
+    re.compile(r"(?:from|import)\s+ramp_sdk\.(?:resolvers|client|sync)$", re.MULTILINE),
     # The maintained HTTP client is scoped to the IO tree; a pure module importing
     # httpx (or httpcore, or raw urllib) would drag IO into the trust core.
     re.compile(r"\bimport\s+httpx\b"),

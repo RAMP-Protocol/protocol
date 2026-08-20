@@ -69,6 +69,13 @@ select = [
 # the rule away from the place a reader checks it against the contract text.
 "ramp_sdk/regschema.py" = ["PLR0911", "PLR0912"]
 "ramp_sdk/acceptance.py" = ["PLR0913"]
+# CallError's constructor IS the client's failure contract: the class, the verb, and the
+# four things a caller branches on (status, the peer's reason token, the typed detail, the
+# cause). Every one of them is asserted by name in the client suite and by the Go oracle's
+# own CallError, so folding them into an options object would hide the contract behind a
+# second type that exists only to satisfy an argument count. PLR0913 is waived for exactly
+# this constructor.
+"ramp_sdk/client/errors.py" = ["PLR0913"]
 # The L2 core mirrors the same crypto-primitive shape: the offer-verify _check
 # walks each fail-closed rejection reason as its own early return (resolver-miss,
 # bad-hex, sig-invalid, expired), and the acceptance verify keeps the four
