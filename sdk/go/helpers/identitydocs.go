@@ -423,10 +423,6 @@ func untameReason(s string) string {
 	return ""
 }
 
-func isHexDigit(c byte) bool {
-	return '0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F'
-}
-
 // portIsWritable reports whether a written-out port is a decimal number a TCP
 // port can actually take. An omitted port passes: the scheme's default applies.
 //

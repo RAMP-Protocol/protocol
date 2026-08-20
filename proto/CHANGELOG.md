@@ -62,6 +62,246 @@ Two proto comments that still described the pre-WBA-split world — an agent's k
 inline in `ramp.json`, and `Requester.domain` being "used for public key lookup" — are
 corrected in the same change.
 
+**The registration schema's rules become checkable, and two of them were wrong
+(comment-only, no wire change).** The previous revision stated a rule set for
+`AccountRegistration.data_schema` and shipped an SDK to enforce it. Reviewing what
+shipped found the central promise — that two conformant validators agree about which
+payloads a published schema accepts — was false, and that the resource caps bounded the
+wrong thing. Both are corrected here, and the shared corpus gains the dimension that
+would have caught them.
+
+**`pattern` needed two mechanisms, not one.** Draft 2020-12 patterns are ECMA-262 and
+the engines implementations run disagree about them in two different ways. Some
+constructs one engine cannot express at all, and those are refused — that much the
+previous revision had. The rest every engine compiles and then reads DIFFERENTLY, and
+refusing those would have gutted the feature, because they are `$`, `\d` and `\w`,
+which appear in almost every real pattern. `^[A-Z]{2}[0-9]+$` — the example this
+contract itself gives — accepted `"DE12345\n"` under one implementation and refused it
+under two, with nothing logged. So an implementation whose engine differs is expected to
+correct it: match ASCII character classes, and anchor `$` at the end of the text and
+nowhere else. `\s` and `\B` are refused instead, because for those there is no single
+meaning to correct TO — RE2 reads `\s` as `[\t\n\f\r ]`, Python adds the vertical tab,
+and ECMA-262 adds that plus every Unicode space separator, while `\B` finds no word
+boundary in the empty string for two engines and finds one for the third. An explicit
+character class says what was meant.
+
+**The alphabet is now stated as what a pattern MAY contain.** The previous revision
+enumerated the divergent escapes, and that list was wrong in both directions and could
+not be finished: the set of escapes three engines disagree about grows with every
+dialect and library version, so it needed a new entry each time somebody found one, and
+`\B`, `\cA`, `\a`, `\012`, `\x{41}`, `\uHHHH` and the identity escapes were all admitted
+until somebody did. The portable set is small and closed — the shorthand classes, the
+control characters, `\xHH`, and the metacharacters that stand for themselves — and it
+was derived by running every ASCII escape through all three engines in three positions
+rather than by reasoning about them. An author who wants anything else writes the
+characters out.
+
+Four more shapes join the refused list, each of which two engines read differently
+without erroring: a POSIX name anywhere inside a bracket expression (not merely at its
+start, which is all the previous rule checked, so `^[a[:alpha:]]+$` slipped through and
+produced three different answers); a counted repeat over 1000, which RE2 refuses and the
+others expand; a bracket expression that opens with `]` or never closes; and a range
+whose endpoint is a shorthand class (`[\w-x]`), which RE2 reads as a range while the
+other two refuse it outright.
+
+**Where a pattern may appear is now stated.** `pattern` carries its regex as a value and
+`patternProperties` carries its regexes as KEYS. Both are patterns, both are held to the
+alphabet, and they are the only two keywords in the dialect that carry one. Saying so
+matters because it is exactly what an implementation gets wrong: correcting the `pattern`
+keyword alone leaves `patternProperties` uncorrected, and a property name that is a
+non-ASCII digit then matches `^\d+$` for one implementation and not the other two — the
+same silent split, on the keyword the rules already single out for pattern SAFETY.
+
+**Nested quantifiers are refused outright.** `(a+)+`, `(a|a)*` and `([a-z]+)*` are the
+catastrophic-backtracking forms, they need neither lookaround nor backreferences, and
+the previous revision's claim that excluding those two "falls out of the same rule" was
+simply wrong — every one of them was admitted. It has to be a PUBLISHING rule rather
+than a runtime bound, because a regex spin holds its interpreter: a consumer cannot
+reliably interrupt one it has already started.
+
+**The caps bounded the document, not the work.** 16KB and 32 containers say nothing
+about how expensive checking a payload is. Branches multiply along a reference chain, so
+a 1,675-byte schema five containers deep — a tenth of the size cap, a sixth of the depth
+cap — cost 16.7 million evaluations and twenty-seven seconds against a two-member
+payload. A new bound of **10000 evaluations**, counted statically before anything runs,
+is the missing one; it is about fifteen milliseconds of work, several hundred times what
+a schema describing a business entity needs. It bounds the SCHEMA: it is the cost of
+applying the schema at one location in a payload, so a subschema under `items` is counted
+once here and evaluated once per element at runtime.
+
+**Reference cycles are refused.** A `$ref` chain that returns to a schema already on it
+is legal JSON Schema and has no static cost bound; it is also what made validators
+recurse until they aborted, out of an API documented as returning a verdict rather than
+throwing. `{"$ref":"#"}` is twelve bytes. The same walk that counts evaluations follows
+every reference to its target, so it decides this and the resolvability of a
+same-document reference at the same time — three questions the libraries had been
+answering three different ways.
+
+**The encoding is pinned, because it decides which document the rules are read
+against.** The bytes MUST be well-formed UTF-8 and MUST NOT begin with a byte order
+mark. RFC 8259 forbids adding a mark and permits a parser to ignore one, so both
+policies conform and the contract makes the choice once: a parser that strips a mark
+validates a different document than the one served, and counts three bytes against the
+size cap that the schema does not contain. Ill-formed bytes MUST NOT be repaired either
+— one implementation's parser silently substituted U+FFFD and enforced a `pattern` with
+a different character inside it, while the other two refused the same bytes. The
+JavaScript-only literals `NaN` and `Infinity` are not JSON (RFC 8259 §6) and are refused
+with them; one implementation's parser accepts all three as an extension.
+
+**The payload's nesting is bounded too, at 32 containers — because without it the answer
+depended on who was reading.** A deeply nested payload is small and has few top-level
+members, so neither the byte cap nor the member cap saw it, and canonicalising one walks
+it recursively. Where that walk runs out of stack is a property of the runtime, not of
+the payload: one implementation refused past roughly five hundred containers on one
+release of its language and accepted nine hundred on the next, while two others accepted
+every depth tried. Two deployments of the same SDK on different runtimes therefore
+disagreed about the same registration. The bound is the same number and the same counting
+rule as the schema's own depth cap, it is checked before anything walks the payload, and
+the walk that checks it is iterative — a recursive check would hit the very limit it
+exists to keep a caller away from.
+
+**A reference chain is bounded on its own axis: 100 hops.** A chain of definitions each
+referring to the next is three JSON containers deep however long it is, so the depth cap
+never saw it, and it costs one evaluation per link, so the work cap did not either. Both
+caps passed a five-hundred-link chain and every SDK called it valid — and then the
+recursion each validator performs while resolving that chain exhausted one
+implementation's stack outright, raising out of a face documented as returning a verdict.
+A third bound is what stops the document being published, rather than asking three
+libraries to survive it. A schema describing a business entity chains one or two
+references; the deepest chain in a conformance vector that is accepted is eleven. The
+refusal is its own verdict, `ref_chain_too_long`, because it is its own rule — a cycle
+still reports `ref_cycle`, which is the more specific answer.
+
+**Two more brace rules, found the way the bracket rules were.** A counted repeat MUST
+state its first bound, and a `}` outside a bracket expression MUST close one. `a{,5}` is
+five literal characters to RE2 and a repeat of zero to five to Python, so both engines
+compile it and then disagree about which payloads match, with nothing logged — the silent
+kind. An unmatched `}` is a literal to RE2 and Python and a syntax error to ECMA-262 under
+the `u` flag, which is the loud kind and exactly what the unmatched `]` rule already
+refuses. A literal brace is written `\}`, which the alphabet admits. `{n,}` is unaffected.
+
+*Tooling:* three corrections in the SDKs behind those rules, none of them contract
+changes. The dot's line-terminator set is now corrected in the TypeScript port rather
+than left to diverge — RE2 and Python exclude only `\n` where ECMA-262 excludes all four
+terminators, so `^.$` against a carriage return conformed in two SDKs and violated in the
+third; that port gains the same kind of source-level correction the Python `$` rewrite
+already uses, which reaches every place its validator compiles a regex. A multi-part
+repeat like `a{1,2,3}` was admitted by the TypeScript scanner alone, because
+`String.split`'s second argument caps the result and discards the remainder where Go's
+`SplitN` and Python's `maxsplit` keep it. And the Python compile face no longer runs out
+of interpreter stack on a long flat `$ref` chain: a chain is three containers deep however
+long it is, so the depth cap never saw it, and the walk that follows references is now
+iterative. The payload face answers with a verdict for an oversized integer and a deeply
+nested payload instead of raising, out of an API documented as never raising.
+
+**The payload is bounded too, and the bound names its unit.** A published schema is
+applied to `RegisterRequest.registration_data`, and the cost of that is roughly the
+schema's own cost multiplied by the elements in the payload — a subschema under `items`
+is counted once by the evaluation cap and evaluated once per element. The multiplier was
+unbounded. It now is: at most **64 members at the top level**, and at most **16384
+bytes**, measured as the payload's **RFC 8785 (JCS) canonical JSON encoding**.
+
+The unit is the load-bearing half. Every other cap in this contract is over bytes a
+party actually served; `registration_data` is never served as bytes — it is a `Struct`,
+decoded before any consumer sees it — so "16KB" means nothing until an encoding is
+chosen, and two implementations choosing privately is the same both-ends disagreement
+the schema rules exist to prevent. JCS also pins number formatting, which is not a
+detail: a payload carrying `1e300` is seven bytes under one renderer and three hundred
+under another. Both bounds are checked before the schema runs, and a payload breaking
+either is a malformed request rather than
+`REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA`, which names non-conformance to
+a published schema and applies only where one is published.
+
+**"No schema published" is defined at the byte level, because it is the enforcement
+switch.** Absent means no bytes, or only JSON whitespace — RFC 8259's space, tab,
+carriage return and line feed, and no others. Each implementation had been asking its
+own language what "blank" means, which is three different questions: U+00A0 and U+3000
+are whitespace to some runtimes and not to others, and a decoder that strips a byte
+order mark makes a mark followed by a space look like nothing at all. That last one
+silently bypassed the rule refusing a mark, so an Exchange whose configured schema was
+an empty file saved with one would have run with validation OFF while the other two
+implementations called the same bytes malformed. A document that is not empty and not
+JSON is malformed, which is a refusal; it is never silence.
+
+**Data is not schema, stated explicitly.** `const`, `enum`, `default` and `examples`
+hold arbitrary JSON values whose contents are never read as keywords, so the `$ref` and
+`$schema` rules stop at them — a `const` carrying a "$ref" member states a value a
+payload may equal, not a reference to resolve. The rules said "every `$ref`" and
+"`$schema`, wherever it appears", which an implementor following the text literally would
+apply inside those four keywords and refuse schemas every SDK accepts.
+
+**Smaller corrections.** The value MUST be a JSON object: 2020-12 admits a bare boolean
+as a schema, but a `Struct` cannot carry one, so the previous rules pinned behaviour for
+a document the wire cannot transport. A consumer that refuses a schema MUST skip its
+local pre-check rather than decline to send — stated before as a SHOULD in one sentence
+and a MUST in another, in the same comment. And the escape list is spelled out character
+by character rather than ranged, so a conformance guard can compare the contract's set
+with the SDK's in both directions; the previous guard compared five of eight rules
+against string literals in its own test file, and dropping an escape from every SDK left
+every gate green.
+
+*Tooling:* the shared corpus gains a fourth dimension recording what an admitted pattern
+MATCHES, not merely which schemas are admitted. Its absence is why none of the above was
+visible: 141 cases across three dimensions all passed while the three implementations
+disagreed about payloads. The corpus can now also state a case as raw bytes, because the
+encoding rules above are defined over the bytes as served and ill-formed UTF-8 cannot be
+written into a JSON string at all. Also corrected in the SDK: the refusal list is clamped by
+CHARACTERS rather than bytes or UTF-16 units, which is what `string.max_len` counts and
+what stopped one implementation naming a different member than the others; a refusal
+carrying a non-ASCII constraint no longer cuts mid-character into a message
+`proto.Marshal` rejects; and the JSON Schema library is given an explicitly REFUSING
+loader, since leaving it unset does not mean "resolves nothing" — one library's default
+reads a reference off local disk and another's fetches it over HTTP.
+
+**The published registration schema states its safety rules as numbers (comment-only,
+no wire change).** `AccountRegistration.data_schema` already required a self-contained
+schema, forbade resolving a remote `$ref`, and capped the document at 16KB. What it did
+not say was how deep a schema may nest, which regex constructs a `pattern` may use, or
+whether `format` is asserted — it said only that a consumer SHOULD bound validation time
+and recursion depth, and left every implementation to pick. Those are numbers chosen
+privately at BOTH ends of one registration: the Exchange enforces the schema and a client
+pre-checks against it before signing, so a bound one side invents refuses payloads the
+other accepts, which is the disagreement the field exists to prevent. The rules are now
+stated. Every `$ref`, `$dynamicRef` and `$recursiveRef` begins with `#`; every `$schema`
+in the document names 2020-12, and a document declaring none is read as 2020-12; 16KB as
+served; 32 nested JSON containers; and a `pattern` alphabet in which a group opens `(`
+or `(?:` and nothing else, the escapes `\1`-`\9`, `\k`, `\p`, `\P`, `\A`, `\z`, `\Z`,
+`\Q`, `\E`, `\C`, `\G` and `\K` do not appear, and `[[:` does not appear.
+
+The pattern rule is the one that is not obvious, and it is a MUST rather than a SHOULD
+because half of what it excludes fails SILENTLY. Draft 2020-12 `pattern` is ECMA-262 and
+the engines implementations run do not agree on it. The loud half is RE2 refusing the
+lookaround, atomic groups and backreferences ECMA allows: a schema using them compiles
+for one implementation and fails for the next, which is visible and merely annoying. The
+quiet half is the reason for the rule — inline flags, Unicode property classes, text
+anchors and POSIX bracket names are accepted by one engine and either refused or read
+DIFFERENTLY by another, so two conformant validators both compile the pattern and then
+disagree about which payloads match it, with nothing to log and no error to catch.
+Excluding catastrophic backtracking, the hazard the field comment already named, falls
+out of the same rule instead of needing its own. `format`, `contentEncoding` and
+`contentMediaType` are pinned as annotations for the same reason at a smaller scale: the
+libraries default differently on each, so a schema whose verdict depended on which
+library read it had no single answer.
+
+*Tooling:* the rules ship as an executable SDK face rather than as prose alone —
+`CompileRegistrationSchema` returns a verdict naming WHICH rule a schema broke, because
+the two callers act on it differently: a client that cannot check locally sends anyway
+and lets the Exchange decide, while an Exchange that cannot compile its own configured
+schema is looking at a misconfigured deployment. A refusal names the offending members as
+`RegistrationFieldError` values, built from the failed keyword rather than from the
+validating library's own message, which quotes the value that failed — the field forbids
+carrying an operator's business data back out, and the obvious implementation leaks. The
+reported set is deduplicated by pointer and keyword and sorted before the 64-item cap,
+because the three libraries surface duplicates and orderings that differ, and a list
+whose length depends on the library is one no shared corpus could pin. A conformance
+guard reads the SDK's numbers back out of the shared corpus and fails if the field
+comment stops stating them, which is the only drift gate available for a bound that lives
+in a comment: `data_schema` is a `Struct`, and no field-level rule can reach inside one.
+The depth bound is measured lexically over the raw bytes, BEFORE the document is parsed:
+every JSON parser involved descends recursively, and one of them aborts on a deep
+document by raising an error that is not a verdict at all, so a check placed after the
+parse is reached only for documents harmless enough to parse.
+
 **Every addressed request names its recipient: `exchange` becomes required (breaking,
 pre-1.0).** `ResourceQuery` (field 10), `DisputeRequest` (field 10), `RegisterRequest`
 (field 3), `GetAccountStatusRequest` (field 2), `DomainVerificationRequest` (field 4),

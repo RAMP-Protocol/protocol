@@ -114,6 +114,7 @@
     "helpers.NewMultisigContext": "Go context.Context accessor; py/ts thread multisig state explicitly.",
     "helpers.PoPOptions": "Go options struct for the delivery-proof signer; Python takes the same values as keyword arguments and TS as an options object.",
     "helpers.RedactURL": "Go query-stripping helper for a signed URL headed to a log; py/ts redact inline at the log site.",
+    "helpers.RegistrationSchemaCompileTimeout": "Go-only wall-clock backstop on compilation, not part of the accepted/refused contract and deliberately absent from the ports: Go's runtime preempts, while a CPU-bound spin holds CPython's interpreter and blocks Node's event loop, so a timer there cannot interrupt the work it names. What bounds all three identically is static — the size, depth and evaluation caps and the pattern alphabet — and no admitted schema should ever reach this timeout.",
     "helpers.RetrievalAuthFailureReasonFromToken": "Go lookup from the delivery edge's refusal token to the typed enum; py/ts branch on the token string directly.",
     "helpers.SharedValidator": "Go protovalidate validator singleton; TS/Python ship no protovalidate face.",
     "helpers.SignOfferAcceptanceWith": "Go Signer-custody variant of SignOfferAcceptance so the SDK never holds the key; py/ts pass key material directly to their single acceptance signer.",
@@ -295,6 +296,16 @@
       "python": "check_audience",
       "ts": "checkAudience"
     },
+    "helpers.CheckRegistrationData": {
+      "allowlist_reason": null,
+      "python": "check_registration_data",
+      "ts": "checkRegistrationData"
+    },
+    "helpers.CompileRegistrationSchema": {
+      "allowlist_reason": null,
+      "python": "compile_registration_schema",
+      "ts": "compileRegistrationSchema"
+    },
     "helpers.ConnectProtocolVersion": {
       "allowlist_reason": null,
       "python": "ConnectProtocolVersion",
@@ -350,6 +361,11 @@
       "python": "is_bare_domain",
       "ts": "isBareDomain"
     },
+    "helpers.IsSafeSchemaPattern": {
+      "allowlist_reason": null,
+      "python": "is_safe_schema_pattern",
+      "ts": "isSafeSchemaPattern"
+    },
     "helpers.KeyResolver": {
       "allowlist_reason": null,
       "python": "KeyResolver",
@@ -359,6 +375,56 @@
       "allowlist_reason": null,
       "python": "MAX_BARE_DOMAIN_LEN",
       "ts": "maxBareDomainLen"
+    },
+    "helpers.MaxRegistrationDataBytes": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_DATA_BYTES",
+      "ts": "maxRegistrationDataBytes"
+    },
+    "helpers.MaxRegistrationDataDepth": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_DATA_DEPTH",
+      "ts": "maxRegistrationDataDepth"
+    },
+    "helpers.MaxRegistrationDataMembers": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_DATA_MEMBERS",
+      "ts": "maxRegistrationDataMembers"
+    },
+    "helpers.MaxRegistrationFieldErrorPathLen": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_FIELD_ERROR_PATH_LEN",
+      "ts": "maxRegistrationFieldErrorPathLen"
+    },
+    "helpers.MaxRegistrationFieldErrorTextLen": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN",
+      "ts": "maxRegistrationFieldErrorTextLen"
+    },
+    "helpers.MaxRegistrationFieldErrors": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_FIELD_ERRORS",
+      "ts": "maxRegistrationFieldErrors"
+    },
+    "helpers.MaxRegistrationSchemaBytes": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_SCHEMA_BYTES",
+      "ts": "maxRegistrationSchemaBytes"
+    },
+    "helpers.MaxRegistrationSchemaDepth": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_SCHEMA_DEPTH",
+      "ts": "maxRegistrationSchemaDepth"
+    },
+    "helpers.MaxRegistrationSchemaEvaluations": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_SCHEMA_EVALUATIONS",
+      "ts": "maxRegistrationSchemaEvaluations"
+    },
+    "helpers.MaxRegistrationSchemaRefHops": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_SCHEMA_REF_HOPS",
+      "ts": "maxRegistrationSchemaRefHops"
     },
     "helpers.NewIdempotencyKey": {
       "allowlist_reason": null,
@@ -395,10 +461,25 @@
       "python": "reason",
       "ts": "reason"
     },
+    "helpers.RegistrationDataVerdict": {
+      "allowlist_reason": null,
+      "python": "RegistrationDataVerdict",
+      "ts": "RegistrationDataVerdict"
+    },
     "helpers.RegistrationFailureDetail": {
       "allowlist_reason": null,
       "python": "registration_failure_detail",
       "ts": "registrationFailureDetail"
+    },
+    "helpers.RegistrationSchema": {
+      "allowlist_reason": null,
+      "python": "RegistrationSchema",
+      "ts": "RegistrationSchema"
+    },
+    "helpers.RegistrationSchemaDialect": {
+      "allowlist_reason": null,
+      "python": "REGISTRATION_SCHEMA_DIALECT",
+      "ts": "registrationSchemaDialect"
     },
     "helpers.RequestIDHeader": {
       "allowlist_reason": null,
@@ -414,6 +495,11 @@
       "allowlist_reason": null,
       "python": "retrieval_auth_failure_detail",
       "ts": "retrievalAuthFailureDetail"
+    },
+    "helpers.SchemaVerdict": {
+      "allowlist_reason": null,
+      "python": "SchemaVerdict",
+      "ts": "SchemaVerdict"
     },
     "helpers.ScopesSubset": {
       "allowlist_reason": null,
