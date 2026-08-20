@@ -39,7 +39,15 @@ function refusalMessage(manifestUrl: string, ref: string): string {
 	try {
 		resolvedTo = resolveIdentityDocument(manifestUrl, ref);
 	} catch (err) {
-		return err instanceof Error ? err.message : String(err);
+		// The TYPE first, and separately from the message. The function's
+		// signature promises an Error; a bare string carrying the documented
+		// prefix would satisfy every message check below. The caught value is
+		// deliberately NOT quoted in this failure — the no-echo probe feeds
+		// credentials through this same helper.
+		if (!(err instanceof Error)) {
+			throw new Error("expected a refusal to throw an Error, got a non-Error value");
+		}
+		return err.message;
 	}
 	throw new Error(`expected a refusal, got ${resolvedTo}`);
 }

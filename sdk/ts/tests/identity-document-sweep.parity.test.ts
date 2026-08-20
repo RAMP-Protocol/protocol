@@ -33,9 +33,14 @@ function answer(manifestUrl: string, ref: string): string | null {
 	try {
 		return resolveIdentityDocument(manifestUrl, ref);
 	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
-		if (!message.startsWith("identity document: ")) {
-			return `FOREIGN THROW: ${message}`;
+		// The TYPE first: the function's signature promises an Error, and a bare
+		// string carrying the documented prefix would otherwise pass as a correct
+		// refusal.
+		if (!(err instanceof Error)) {
+			return `NON-ERROR THROW: ${String(err)}`;
+		}
+		if (!err.message.startsWith("identity document: ")) {
+			return `FOREIGN THROW: ${err.message}`;
 		}
 		return null;
 	}
