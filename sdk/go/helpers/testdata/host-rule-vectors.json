@@ -204,6 +204,34 @@
       "error": false
     },
     {
+      "name": "ipv6_v4_mapped_same_host",
+      "anchor": "[::ffff:127.0.0.1]",
+      "candidate": "https://[::ffff:127.0.0.1]/v1",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_anchor_is_not_an_address",
+      "anchor": "[not-an-ip]",
+      "candidate": "https://[::1]/v1",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "ipv6_candidate_is_not_an_address",
+      "anchor": "[::1]",
+      "candidate": "https://[not-an-ip]/v1",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "ipv6_candidate_is_ipv4_bracketed",
+      "anchor": "[::1]",
+      "candidate": "https://[127.0.0.1]/v1",
+      "anchored": false,
+      "error": true
+    },
+    {
       "name": "empty_anchor",
       "anchor": "",
       "candidate": "https://exchange.example",
@@ -506,6 +534,72 @@
     {
       "name": "bracket_inside_the_name",
       "ref": "a[b.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "ipv6_all_zeroes",
+      "ref": "[::]",
+      "host": "[::]",
+      "error": false
+    },
+    {
+      "name": "ipv6_v4_mapped",
+      "ref": "[::ffff:127.0.0.1]",
+      "host": "[::ffff:127.0.0.1]",
+      "error": false
+    },
+    {
+      "name": "ipv6_v4_translated",
+      "ref": "[::ffff:0:127.0.0.1]",
+      "host": "[::ffff:0:127.0.0.1]",
+      "error": false
+    },
+    {
+      "name": "ipv6_nat64_prefix",
+      "ref": "[64:ff9b::192.0.2.1]",
+      "host": "[64:ff9b::192.0.2.1]",
+      "error": false
+    },
+    {
+      "name": "ipv6_trailing_v4_form",
+      "ref": "[::1.2.3.4]",
+      "host": "[::1.2.3.4]",
+      "error": false
+    },
+    {
+      "name": "brackets_around_a_name",
+      "ref": "[not-an-ip]",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "brackets_around_ipv4",
+      "ref": "[127.0.0.1]",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "brackets_around_nothing",
+      "ref": "[]",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "brackets_around_too_few_groups",
+      "ref": "[1:2]",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "brackets_around_two_elisions",
+      "ref": "[1::2::3]",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "brackets_around_an_oversized_group",
+      "ref": "[12345::1]",
       "host": "",
       "error": true
     },
@@ -860,6 +954,30 @@
       "error": false
     },
     {
+      "name": "ipv6_all_zeroes",
+      "ref": "[::]",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_v4_mapped",
+      "ref": "[::ffff:127.0.0.1]",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_v4_translated",
+      "ref": "[::ffff:0:127.0.0.1]",
+      "bare": true,
+      "error": false
+    },
+    {
+      "name": "ipv6_trailing_v4_form",
+      "ref": "[::1.2.3.4]",
+      "bare": true,
+      "error": false
+    },
+    {
       "name": "empty",
       "ref": "",
       "bare": false,
@@ -916,6 +1034,30 @@
     {
       "name": "ipv6_unclosed",
       "ref": "[::1",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "brackets_around_a_name",
+      "ref": "[not-an-ip]",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "brackets_around_ipv4",
+      "ref": "[127.0.0.1]",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "brackets_around_nothing",
+      "ref": "[]",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "brackets_around_too_few_groups",
+      "ref": "[1:2]",
       "bare": false,
       "error": true
     },

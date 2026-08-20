@@ -111,6 +111,36 @@ export function redactUserinfo(ref: string): string {
 // points at or above 0x80 are admitted — the oracle's parser keeps them, so a name
 // in a non-ASCII script is a usable host even though the wire's domain rule
 // refuses it.
+/** Refuse brackets that enclose anything but an IPv6 address.
+ *
+ * Per RFC 3986 only an IPv6 address may be bracketed, and the oracle enforces it:
+ * `netip.ParseAddr` must succeed AND the result must not be IPv4, so `[]`,
+ * `[not-an-ip]`, `[1:2]` and `[127.0.0.1]` are all refused — the last as an "invalid
+ * IP-literal", since a v4 address in brackets is a spelling no parser is obliged to
+ * accept.
+ *
+ * Stripping the brackets without reading what is between them is what the platform
+ * parsers this module replaces did NOT do: both of them validate the literal, so the
+ * hand-rolled split had to take that job over with them. Left out, a value the oracle
+ * refuses at the caller boundary is accepted here and only surfaces later as a
+ * transport failure.
+ *
+ * `new URL` is the validator, and this is NOT the reading the module header refuses.
+ * The header refuses platform parsers because they NORMALIZE what they return —
+ * `[::ffff:127.0.0.1]` comes back as `[::ffff:7f00:1]`, a different string for the
+ * same address — which is precisely why nothing is read back out of it here. Only
+ * whether it threw is used, and the shared vectors hold that verdict to the oracle's.
+ * An IPv6 grammar written out by hand is the alternative, and the shapes that catch
+ * one out — `::ffff:0:127.0.0.1`, `64:ff9b::192.0.2.1`, `::1.2.3.4` — are exactly
+ * where a port would drift. */
+function vetIpLiteral(ref: string, literal: string): void {
+	try {
+		new URL(`https://[${literal}]`);
+	} catch {
+		throw invalidHost(ref, "brackets enclose no IP literal");
+	}
+}
+
 const hostAscii = new Set(
 	"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:[]<>\"",
 );
@@ -252,6 +282,7 @@ export function parseRef(ref: string): ParsedRef {
 			throw invalidHost(ref, "missing ']' in host");
 		}
 		hostname = host.slice(1, close);
+		vetIpLiteral(ref, hostname);
 		const after = host.slice(close + 1);
 		if (after === "") {
 			port = "";

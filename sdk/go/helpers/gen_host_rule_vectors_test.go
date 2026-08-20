@@ -133,6 +133,21 @@ func buildHostOfVectors(t *testing.T) []hostOfVector {
 		{"ipv6_trailing_garbage", "[::1]x", "", true},
 		{"bracket_inside_the_name", "a[b.example", "", true},
 
+		// Brackets must enclose an IPv6 address and nothing else. Closing the
+		// bracket is not enough — a port that only splits on it, without reading
+		// what is between, admits every value below.
+		{"ipv6_all_zeroes", "[::]", "[::]", false},
+		{"ipv6_v4_mapped", "[::ffff:127.0.0.1]", "[::ffff:127.0.0.1]", false},
+		{"ipv6_v4_translated", "[::ffff:0:127.0.0.1]", "[::ffff:0:127.0.0.1]", false},
+		{"ipv6_nat64_prefix", "[64:ff9b::192.0.2.1]", "[64:ff9b::192.0.2.1]", false},
+		{"ipv6_trailing_v4_form", "[::1.2.3.4]", "[::1.2.3.4]", false},
+		{"brackets_around_a_name", "[not-an-ip]", "", true},
+		{"brackets_around_ipv4", "[127.0.0.1]", "", true},
+		{"brackets_around_nothing", "[]", "", true},
+		{"brackets_around_too_few_groups", "[1:2]", "", true},
+		{"brackets_around_two_elisions", "[1::2::3]", "", true},
+		{"brackets_around_an_oversized_group", "[12345::1]", "", true},
+
 		// Characters an authority may not contain. Not a denylist of separators —
 		// the set an authority ADMITS is closed, and these are outside it.
 		{"space_in_the_host", "ex ample.example", "", true},
@@ -266,6 +281,10 @@ func buildIsBareHostVectors(t *testing.T) []isBareHostVector {
 		{"empty_label", "a..example", true, false},
 		{"leading_zero_port", "exchange.example:080", true, false},
 		{"ipv6_without_a_port", "[::1]", true, false},
+		{"ipv6_all_zeroes", "[::]", true, false},
+		{"ipv6_v4_mapped", "[::ffff:127.0.0.1]", true, false},
+		{"ipv6_v4_translated", "[::ffff:0:127.0.0.1]", true, false},
+		{"ipv6_trailing_v4_form", "[::1.2.3.4]", true, false},
 
 		{"empty", "", false, true},
 		{"whitespace_only", "   ", false, true},
@@ -277,6 +296,13 @@ func buildIsBareHostVectors(t *testing.T) []isBareHostVector {
 		{"backslash_in_the_host", "a\\b.example", false, true},
 		{"percent_escape", "%41.example", false, true},
 		{"ipv6_unclosed", "[::1", false, true},
+		// A closed bracket around something that is not an IPv6 address. Both ports
+		// split on the bracket rather than reading it, so nothing but these caught
+		// the omission.
+		{"brackets_around_a_name", "[not-an-ip]", false, true},
+		{"brackets_around_ipv4", "[127.0.0.1]", false, true},
+		{"brackets_around_nothing", "[]", false, true},
+		{"brackets_around_too_few_groups", "[1:2]", false, true},
 		{"separator_in_a_path_segment", "evil.example/x://exchange.example", false, true},
 		{"scheme_starting_with_a_digit", "1https://exchange.example/", false, true},
 		{"backslash_in_userinfo", "http://evil.example\\@exchange.example/rev", false, true},
@@ -381,6 +407,12 @@ func buildHostAnchoredVectors(t *testing.T) []hostAnchoredVector {
 		// IPv6 literals compare with their brackets stripped.
 		{"ipv6_same_host_and_port", "[::1]:8443", "https://[::1]:8443/v1", true, false},
 		{"ipv6_default_port_folds", "[::1]", "https://[::1]:443/v1", true, false},
+		{"ipv6_v4_mapped_same_host", "[::ffff:127.0.0.1]", "https://[::ffff:127.0.0.1]/v1", true, false},
+		// A bracket payload that is not an IPv6 address is unreadable on either
+		// side, so it is an error rather than an unanchored answer.
+		{"ipv6_anchor_is_not_an_address", "[not-an-ip]", "https://[::1]/v1", false, true},
+		{"ipv6_candidate_is_not_an_address", "[::1]", "https://[not-an-ip]/v1", false, true},
+		{"ipv6_candidate_is_ipv4_bracketed", "[::1]", "https://[127.0.0.1]/v1", false, true},
 
 		// Neither side can be unreadable.
 		{"empty_anchor", "", "https://exchange.example", false, true},

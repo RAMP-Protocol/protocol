@@ -13,6 +13,7 @@ it; these names are internal to the SDK.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from typing import NamedTuple
 
@@ -266,6 +267,29 @@ def _parse_ref(ref: str) -> ParsedRef:
     return ParsedRef(host, hostname, port, had_scheme, scheme, has_userinfo)
 
 
+def _vet_ip_literal(ref: str, literal: str) -> None:
+    """Refuse brackets that enclose anything but an IPv6 address.
+
+    Per RFC 3986 only an IPv6 address may be bracketed, and the oracle enforces it:
+    ``netip.ParseAddr`` must succeed AND the result must not be IPv4, so ``[]``,
+    ``[not-an-ip]``, ``[1:2]`` and ``[127.0.0.1]`` are all refused — the last as an
+    "invalid IP-literal", since a v4 address in brackets is a spelling no parser is
+    obliged to accept.
+
+    Stripping the brackets without reading what is between them is what the platform
+    parsers this module replaces did NOT do: both of them validate the literal, so
+    the hand-rolled split had to take that job over with them. Left out, a value the
+    oracle refuses at the caller boundary is accepted here and only surfaces later
+    as a transport failure.
+    """
+    try:
+        parsed = ipaddress.ip_address(literal)
+    except ValueError:
+        raise _invalid_host(ref, "brackets enclose no IP literal") from None
+    if parsed.version != 6:
+        raise _invalid_host(ref, "brackets enclose an IPv4 literal")
+
+
 def _split_host(ref: str, host: str) -> tuple[str, str]:
     """Split an authority into its host and its port, as written.
 
@@ -280,6 +304,7 @@ def _split_host(ref: str, host: str) -> tuple[str, str]:
         if close < 0:
             raise _invalid_host(ref, "missing ']' in host")
         hostname = host[1:close]
+        _vet_ip_literal(ref, hostname)
         after = host[close + 1 :]
         if after != "" and not after.startswith(":"):
             raise _invalid_host(ref, "trailing characters after ']' in host")
