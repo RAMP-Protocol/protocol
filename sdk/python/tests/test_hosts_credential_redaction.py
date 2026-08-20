@@ -20,9 +20,11 @@ break.
 
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from ramp_sdk.hosts import host_anchored, host_of
+from ramp_sdk.resolvers import WellKnownEndpointResolver
 from ramp_sdk.resolvers.wellknown import _endpoint_refusal
 
 _SECRET = "s3cr3t"  # noqa: S105 - a test fixture, not a credential
@@ -65,6 +67,27 @@ def test_a_well_formed_credential_still_gets_the_rules_own_message() -> None:
     """
     refusal = _endpoint_refusal("exchange.example", f"https://u:{_SECRET}@exchange.example/v1")
     assert refusal == "host='exchange.example' advertises an endpoint carrying userinfo"
+
+
+# The SERVING HOST, not the advertised endpoint. Every case above feeds the
+# credential in as the endpoint, and no arrangement of them reaches this branch: a
+# host carrying userinfo PARSES, so is_bare_host answers False instead of raising,
+# and the refusal that names it is the resolver's own. That value is
+# network-supplied in the real flow — it is the exchange domain an offer named.
+@pytest.mark.parametrize(
+    "host",
+    [f"user:{_SECRET}@exchange.example", f"u:{_SECRET}@exchange.example:8443"],
+)
+def test_a_credential_in_the_serving_host_is_not_echoed(host: str) -> None:
+    def unreachable(_request: httpx.Request) -> httpx.Response:  # pragma: no cover
+        msg = "refused before the network, so the transport is never reached"
+        raise AssertionError(msg)
+
+    r = WellKnownEndpointResolver(http=httpx.Client(transport=httpx.MockTransport(unreachable)))
+    with pytest.raises(ValueError) as caught:  # noqa: PT011 - the message IS the assertion
+        r.resolve_endpoint(host)
+    assert _SECRET not in str(caught.value)
+    assert "not a bare host" in str(caught.value)
 
 
 def test_an_at_sign_outside_the_authority_is_not_redacted() -> None:

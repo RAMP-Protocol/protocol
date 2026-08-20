@@ -21,7 +21,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from ramp_sdk._hostref import _parse_ref, anchored_parsed
+from ramp_sdk._hostref import _invalid_host, _parse_ref, anchored_parsed
 from ramp_sdk.b64 import b64url_decode_strict
 from ramp_sdk.hosts import is_bare_host
 from ramp_sdk.resolvers._http import default_client, fetch_strict
@@ -222,9 +222,13 @@ class WellKnownEndpointResolver:
         # cannot read at all — the oracle uses one sentinel across both branches
         # here for the same reason. EndpointRefusedError stays what it says: the
         # manifest was read and its answer is unusable.
+        #
+        # Built by the shared constructor rather than by hand. A value that PARSES
+        # and carries a credential — user:pass@exchange.example — reaches this
+        # branch rather than the raising one, so a message written out here is the
+        # one path into these refusals that would name the credential.
         if not is_bare_host(host):
-            msg = f"hosts: reference is not a usable host: not a bare host: {host!r}"
-            raise ValueError(msg)
+            raise _invalid_host(host, "not a bare host")
         if self._allow is not None and not self._allow(host):
             raise NoEndpointError(f"host {host} not allowed")
         cached = self._cached(host)

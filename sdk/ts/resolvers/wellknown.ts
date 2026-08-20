@@ -4,7 +4,7 @@
 // its fail-closed taxonomy: a fetch/decode failure throws DirectoryUnavailable;
 // an unknown kid is `undefined`; a manifest with no endpoint throws NoEndpoint.
 
-import { anchoredParsed, parseRef } from "../src/host-ref.ts";
+import { anchoredParsed, invalidHost, parseRef } from "../src/host-ref.ts";
 import { isBareHost } from "../src/hosts.ts";
 import { DirectoryUnavailable, EndpointRefused, NoEndpoint } from "./errors.ts";
 import { type FetchLike, defaultFetch, fetchStrict } from "./http.ts";
@@ -193,10 +193,13 @@ class EndpointResolverImpl implements WellKnownEndpointResolver {
     // it cannot read at all — the oracle uses one sentinel across both branches
     // here for the same reason. EndpointRefused stays what it says: the manifest
     // was read and its answer is unusable.
+    //
+    // Built by the shared constructor rather than by hand. A value that PARSES and
+    // carries a credential — user:pass@exchange.example — reaches this branch
+    // rather than the throwing one, so a message written out here is the one path
+    // into these refusals that would name the credential.
     if (!isBareHost(host)) {
-      throw new Error(
-        `hosts: reference is not a usable host: not a bare host: ${JSON.stringify(host)}`,
-      );
+      throw invalidHost(host, "not a bare host");
     }
     if (this.allow && !this.allow(host)) throw new NoEndpoint(`host ${host} not allowed`);
     const hit = this.cached(host);

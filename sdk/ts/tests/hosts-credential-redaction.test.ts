@@ -83,6 +83,28 @@ describe("a refusal never names a credential", () => {
 		expect(message).toBe('host="exchange.example" advertises an endpoint carrying userinfo');
 	});
 
+	// The SERVING HOST, not the advertised endpoint. Every case above feeds the
+	// credential in as the endpoint, and no arrangement of them reaches this branch:
+	// a host carrying userinfo PARSES, so isBareHost answers false instead of
+	// throwing, and the refusal that names it is the resolver's own. That value is
+	// network-supplied in the real flow — it is the exchange domain an offer named.
+	for (const host of [`user:${SECRET}@exchange.example`, `u:${SECRET}@exchange.example:8443`]) {
+		it(`keeps a credential in the serving host ${JSON.stringify(host)} out of the refusal`, async () => {
+			const r = createWellKnownEndpointResolver({
+				fetch: async () => {
+					throw new Error("refused before the network, so the fetch is never reached");
+				},
+			});
+			const message = await r.resolveEndpoint(host).then(
+				() => undefined,
+				(e: unknown) => (e as Error).message,
+			);
+			expect(message).toBeDefined();
+			expect(message).not.toContain(SECRET);
+			expect(message).toContain("not a bare host");
+		});
+	}
+
 	// The redaction is conservative, not indiscriminate: a path is not a credential.
 	it("leaves an @ outside the authority alone", () => {
 		expect(refusalOf(() => hostOf("https://exchange.example/p%zz@x"))).toContain("p%zz@x");
