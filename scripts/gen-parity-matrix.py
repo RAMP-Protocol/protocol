@@ -37,11 +37,15 @@ _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 _SYMBOL_MAP = _REPO_ROOT / "sdk" / "parity" / "symbol-map.json"
 _OUT = _REPO_ROOT / "docs" / "sdk-parity-matrix.md"
 
-# The two corpus homes and the three SDK source trees — identical scope to the
-# completeness gate, so this table lists exactly the set that gate enforces.
+# The three corpus homes and the three SDK source trees — identical scope to the
+# completeness gate, so this table lists exactly the set that gate enforces. A corpus
+# lives with the tier that can produce it: L1 primitives, L2 resolvers, and the L2
+# transport (the Connect error envelope can only be captured from a real connect-go
+# handler, which the Connect-free tiers may not import).
 _CORPUS_DIRS = (
     _REPO_ROOT / "sdk" / "go" / "helpers" / "testdata",
     _REPO_ROOT / "sdk" / "go" / "resolvers" / "testdata",
+    _REPO_ROOT / "sdk" / "go" / "connect" / "testdata",
 )
 _LANG_TREES: dict[str, tuple[pathlib.Path, str]] = {
     "go": (_REPO_ROOT / "sdk" / "go", ".go"),

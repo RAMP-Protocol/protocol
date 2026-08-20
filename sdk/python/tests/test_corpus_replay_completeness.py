@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import pathlib
 
-from conftest import GO_RESOLVERS_TESTDATA, GO_TESTDATA
+from conftest import GO_CONNECT_TESTDATA, GO_RESOLVERS_TESTDATA, GO_TESTDATA
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 
@@ -55,9 +55,11 @@ _SKIP_DIR_PARTS = frozenset(
 
 
 def _corpus_files() -> list[pathlib.Path]:
-    """Every committed shared corpus (both the L1 helpers and L2 resolvers homes)."""
+    """Every committed shared corpus, across all three tier homes (L1 helpers, L2
+    resolvers, L2 connect). Enumerated rather than listed by name, so a corpus added to
+    any home is gated the day it is committed."""
     files: list[pathlib.Path] = []
-    for d in (GO_TESTDATA, GO_RESOLVERS_TESTDATA):
+    for d in (GO_TESTDATA, GO_RESOLVERS_TESTDATA, GO_CONNECT_TESTDATA):
         files.extend(sorted(d.glob("*-vectors.json")))
     return files
 

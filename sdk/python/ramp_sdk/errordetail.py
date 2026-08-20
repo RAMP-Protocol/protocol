@@ -92,6 +92,52 @@ def reason(detail: ErrorDetail) -> Enum | None:
     return None
 
 
+# The one ErrorDetail member whose KEYS belong to whoever emitted it rather than to the
+# proto: ``metadata`` is a map<string,string>, so a key inside it is data and must reach
+# the caller byte-for-byte. Nothing else in the ErrorDetail subtree is a map or a Struct,
+# which is what makes a single name enough; the conformance suite holds that fact so a
+# future map field cannot quietly widen what the walk below rewrites.
+_OPEN_MAP_MEMBERS = frozenset({"metadata"})
+
+
+def _snake_from_json_name(name: str) -> str:
+    """Recover a proto field name from protojson's lowerCamelCase spelling of it."""
+    out: list[str] = []
+    for ch in name:
+        if ch.isupper():
+            out.append("_")
+            out.append(ch.lower())
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _proto_names(payload: Any) -> Any:
+    """Rewrite a lowerCamelCase proto-JSON object into the proto's own field names.
+
+    Connect's error-detail ``debug`` projection is the one place a RAMP payload arrives
+    in lowerCamelCase, and no server option changes it: connect-go renders it with its
+    own protojson codec at default options, inside a method on an unexported type, so the
+    snake_case codec a RAMP deployment registers reaches the response BODY and not the
+    error beside it. The generated ErrorDetail model accepts snake_case only — which is
+    the RAMP wire — so without this the reason block is silently dropped as an unknown
+    key and a refusal the Exchange named precisely reads back as no reason at all.
+
+    Values under an open map keep their keys verbatim: those are the emitter's, not the
+    proto's. The rewrite is textual and depends on protojson's spelling being invertible,
+    which the conformance suite proves for every field in the contract.
+    """
+    if isinstance(payload, list):
+        return [_proto_names(v) for v in payload]
+    if not isinstance(payload, dict):
+        return payload
+    out: dict[str, Any] = {}
+    for key, value in payload.items():
+        name = _snake_from_json_name(key)
+        out[name] = value if name in _OPEN_MAP_MEMBERS else _proto_names(value)
+    return out
+
+
 def error_detail_from(err: Mapping[str, Any] | Iterable[Any]) -> ErrorDetail | None:
     """Extract the first RAMP ErrorDetail from a Connect error (or its details).
 
@@ -104,6 +150,10 @@ def error_detail_from(err: Mapping[str, Any] | Iterable[Any]) -> ErrorDetail | N
 
     The opaque binary ``value`` of a detail is intentionally NOT decoded here: the
     JSON SDKs have no protobuf binary codec, so they consume the proto-JSON form.
+
+    Both payload forms are read through :func:`_proto_names`, because ``debug`` arrives
+    lowerCamelCase and a decoded ``value`` — which only a caller that owns a binary codec
+    can supply — may be either. A snake_case object passes through it unchanged.
     """
     details = err.get("details", ()) if isinstance(err, dict) else err
     for entry in details:
@@ -115,7 +165,7 @@ def error_detail_from(err: Mapping[str, Any] | Iterable[Any]) -> ErrorDetail | N
         if payload is None and isinstance(entry.get("value"), dict):
             payload = entry["value"]
         if isinstance(payload, dict):
-            return parse_error_detail(payload)
+            return parse_error_detail(_proto_names(payload))
     return None
 
 

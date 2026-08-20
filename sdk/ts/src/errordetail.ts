@@ -107,6 +107,49 @@ function detailsOf(err: unknown): unknown[] {
 	return [];
 }
 
+// The one ErrorDetail member whose KEYS belong to whoever emitted it rather than to the
+// proto: `metadata` is a map<string,string>, so a key inside it is data and must reach
+// the caller byte-for-byte. Nothing else in the ErrorDetail subtree is a map or a
+// Struct, which is what makes a single name enough; the conformance suite holds that
+// fact so a future map field cannot quietly widen what the walk below rewrites.
+const OPEN_MAP_MEMBERS = new Set(["metadata"]);
+
+/** Recover a proto field name from protojson's lowerCamelCase spelling of it. */
+function snakeFromJsonName(name: string): string {
+	let out = "";
+	for (const ch of name) {
+		const lower = ch.toLowerCase();
+		out += ch === lower ? ch : `_${lower}`;
+	}
+	return out;
+}
+
+/**
+ * Rewrite a lowerCamelCase proto-JSON object into the proto's own field names.
+ *
+ * Connect's error-detail `debug` projection is the one place a RAMP payload arrives in
+ * lowerCamelCase, and no server option changes it: connect-go renders it with its own
+ * protojson codec at default options, inside a method on an unexported type, so the
+ * snake_case codec a RAMP deployment registers reaches the response BODY and not the
+ * error beside it. The generated ErrorDetailSchema accepts snake_case only — which is
+ * the RAMP wire — and strips unknown keys, so without this the reason block is silently
+ * dropped and a refusal the Exchange named precisely reads back as no reason at all.
+ *
+ * Values under an open map keep their keys verbatim: those are the emitter's, not the
+ * proto's. The rewrite is textual and depends on protojson's spelling being invertible,
+ * which the conformance suite proves for every field in the contract.
+ */
+function protoNames(payload: unknown): unknown {
+	if (Array.isArray(payload)) return payload.map(protoNames);
+	if (!isRecord(payload)) return payload;
+	const out: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(payload)) {
+		const name = snakeFromJsonName(key);
+		out[name] = OPEN_MAP_MEMBERS.has(name) ? value : protoNames(value);
+	}
+	return out;
+}
+
 /**
  * Extract the first RAMP ErrorDetail from a Connect error (or its details array).
  * `err` is either a Connect error object (carrying a `details` array) or the
@@ -118,6 +161,10 @@ function detailsOf(err: unknown): unknown[] {
  *
  * The opaque binary `value` of a detail is intentionally NOT decoded here: the JSON
  * SDKs have no protobuf binary codec, so they consume the proto-JSON form.
+ *
+ * Both payload forms are read through protoNames, because `debug` arrives
+ * lowerCamelCase and a decoded `value` — which only a caller that owns a binary codec
+ * can supply — may be either. A snake_case object passes through it unchanged.
  */
 export function errorDetailFrom(err: unknown): ErrorDetail | null {
 	for (const entry of detailsOf(err)) {
@@ -126,7 +173,7 @@ export function errorDetailFrom(err: unknown): ErrorDetail | null {
 		const value = entry["value"];
 		const payload = isRecord(debug) ? debug : isRecord(value) ? value : null;
 		if (payload === null) continue;
-		const parsed = ErrorDetailSchema.safeParse(payload);
+		const parsed = ErrorDetailSchema.safeParse(protoNames(payload));
 		if (parsed.success) return parsed.data;
 	}
 	return null;
