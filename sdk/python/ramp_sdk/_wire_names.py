@@ -1,35 +1,22 @@
 """Recovering a proto field name from protojson's lowerCamelCase spelling of it.
 
-The RAMP wire is snake_case proto-JSON everywhere — the proto field names, the corpus,
-the generated clients — and the camelCase json_name alias is out of contract. Two places
-still have to reason about that alias, which is why this rule is shared rather than
-written twice:
+Re-export, not a second copy. The rule lives in :mod:`wire.names`, beside the generated
+models, because the schema seam itself depends on it — ``wire.base`` refuses an answer
+spelled in the ``json_name`` alias, and a rule the seam needs cannot live in a tier above
+the seam. It is re-exported here so the SDK's own reader of the alias — the Connect
+error-detail ``debug`` projection, which IS lowerCamelCase and cannot be made otherwise —
+reaches the same implementation rather than transcribing it.
 
-* Connect's error-detail ``debug`` projection IS lowerCamelCase and cannot be made
-  otherwise. connect-go renders it with its own protojson codec at default options,
-  inside a method on an unexported type, so the snake_case codec a RAMP deployment
-  registers reaches the response body and not the error beside it. That projection is
-  normalized before parsing.
-* A response body from a server that did not register a snake_case codec is
-  lowerCamelCase throughout. That one is REFUSED rather than normalized: it is out of
-  contract, and the point of naming it is to fail loudly instead of parsing into a
-  message with every multiword field silently missing.
+One rule, two callers, opposite verdicts, which is the reason it is worth sharing:
+``errordetail`` NORMALIZES the alias (Connect emits it there and no server codec replaces
+it), while the schema seam REFUSES it (a whole response body in the alias means the peer
+is not speaking the contract).
 
-The rewrite is textual. It is sound only while protojson's spelling inverts back to every
-field's name — it would not for a field like ``field_2``, whose json_name is ``field2`` —
-which the conformance suite asserts for the whole contract.
+See :mod:`wire.names` for the rule itself and why the boundary test is ASCII-only.
 """
 
 from __future__ import annotations
 
+from wire.names import snake_from_json_name
 
-def snake_from_json_name(name: str) -> str:
-    """Recover a proto field name from protojson's lowerCamelCase spelling of it."""
-    out: list[str] = []
-    for ch in name:
-        if ch.isupper():
-            out.append("_")
-            out.append(ch.lower())
-        else:
-            out.append(ch)
-    return "".join(out)
+__all__ = ["snake_from_json_name"]

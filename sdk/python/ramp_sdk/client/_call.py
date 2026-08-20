@@ -20,7 +20,9 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any, Literal
 
-from ramp_sdk._wire_names import snake_from_json_name
+from pydantic import ValidationError
+from wire.base import JSON_NAME_ALIAS_ERROR
+
 from ramp_sdk.errordetail import error_detail_from
 from ramp_sdk.wire import (
     ConnectProtocolVersion,
@@ -137,9 +139,9 @@ def validate_request(
         return
     try:
         model.model_validate(message)
-    except Exception as exc:  # pydantic's ValidationError, by any name
-        raise malformed(
-            op, "request failed its generated schema; the server could only refuse it"
+    except ValidationError as exc:
+        raise _schema_failure(
+            op, exc, "request failed its generated schema; the server could only refuse it"
         ) from exc
 
 
@@ -154,11 +156,26 @@ def decode(op: str, status: int, body: str, model: type[BaseModel]) -> Any:
     payload = _parse_json(op, status, body)
     if not _HTTP_OK <= status < _HTTP_MULTIPLE_CHOICES:
         raise _connect_envelope_error(op, status, payload)
-    _assert_canonical_naming(op, payload, model)
     try:
         return model.model_validate(payload)
-    except Exception as exc:  # pydantic's ValidationError, by any name
-        raise malformed(op, "peer answer failed its generated schema") from exc
+    except ValidationError as exc:
+        raise _schema_failure(op, exc, "peer answer failed its generated schema") from exc
+
+
+def _schema_failure(op: str, exc: ValidationError, summary: str) -> CallError:
+    """Name what a generated model refused.
+
+    The wire policy — the lowerCamelCase ``json_name`` alias is out of contract, at every
+    depth — belongs to the schemas, so it lives with them on :class:`wire.base.WireModel`
+    and this tier only says what its refusal MEANS to a caller. Recognised by the error
+    ``type`` the validator raises rather than by its message, so the wording stays free to
+    change.
+    """
+    if any(err.get("type") == JSON_NAME_ALIAS_ERROR for err in exc.errors()):
+        return CallError(
+            CallErrorKind.MALFORMED, op, reason=NOT_CANONICAL_WIRE_NAMING, cause=str(exc)
+        )
+    return malformed(op, summary)
 
 
 def _parse_json(op: str, status: int, body: str) -> Any:
@@ -187,45 +204,6 @@ def _connect_envelope_error(op: str, status: int, payload: Any) -> CallError:
         detail=error_detail_from(envelope),
         cause=message if isinstance(message, str) else None,
     )
-
-
-def _assert_canonical_naming(op: str, payload: Any, model: type[BaseModel]) -> None:
-    """Refuse an answer whose field names are lowerCamelCase.
-
-    The RAMP wire is snake_case proto-JSON and the camelCase json_name alias is out of
-    contract, so a conformant Exchange serves snake_case — connect-go does that only when
-    a codec with UseProtoNames is registered, which a RAMP deployment does and a stock
-    connect-go server does not. The generated models accept snake_case only and IGNORE
-    what they do not recognise, so a camelCase answer would otherwise parse SUCCESSFULLY
-    into a message with every multiword field missing: no offers, no rate limit, no
-    absence reason, and no error anywhere. Silence is the wrong answer to a peer that is
-    not speaking the protocol.
-
-    The check is at the message ROOT and nowhere deeper. That is what makes it safe rather
-    than merely cheap: open maps — ``ext``, ``metadata``, a Struct — hold caller-chosen
-    keys, and those live inside a root field's VALUE, so a root-key comparison cannot
-    reach them. A camelCase peer is camelCase everywhere, so the root is enough to
-    recognise one; the case it cannot see is a message whose populated fields are all
-    single words, where the two spellings are identical and nothing is lost either way.
-    """
-    if not isinstance(payload, dict):
-        return
-    declared = set(model.model_fields)
-    for key in payload:
-        if key in declared:
-            continue
-        name = snake_from_json_name(key)
-        if name != key and name in declared:
-            raise CallError(
-                CallErrorKind.MALFORMED,
-                op,
-                reason=NOT_CANONICAL_WIRE_NAMING,
-                cause=(
-                    f"peer answered with the lowerCamelCase json_name alias ({key}); the "
-                    "RAMP wire is snake_case proto-JSON, so its answer cannot be read "
-                    "without silently dropping every multiword field"
-                ),
-            )
 
 
 def as_call_error(op: str, exc: BaseException) -> CallError:

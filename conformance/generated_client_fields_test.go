@@ -24,7 +24,6 @@ package conformance
 // declares; fix scripts/sdk-types/ and regenerate — never delete the field here.
 
 import (
-	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -66,6 +65,17 @@ func TestGeneratedClientsCarryEveryContractField(t *testing.T) {
 			t.Errorf("message %s has no generated Zod schema", name)
 			return
 		}
+		// The message's OWN keys, not every key on the line. json-schema-to-zod inlines
+		// each nested message into the same expression, so a substring search would let a
+		// nested field of the same name stand in for a missing outer one — and `ext`,
+		// `ver` and `exchange` recur throughout the contract, so that is the common case
+		// rather than a corner of it.
+		zodKeys := zodTopLevelKeys(schema)
+		if len(zodKeys) == 0 {
+			t.Errorf("message %s: no properties read out of its generated Zod schema — "+
+				"the scan, not the output, is wrong", name)
+			return
+		}
 		fields := md.Fields()
 		for i := 0; i < fields.Len(); i++ {
 			field := string(fields.Get(i).Name())
@@ -73,8 +83,7 @@ func TestGeneratedClientsCarryEveryContractField(t *testing.T) {
 				t.Errorf("%s.%s is declared in the proto and missing from %s",
 					name, field, pydanticModels)
 			}
-			// The Zod object key, quoted exactly as json-schema-to-zod emits it.
-			if !strings.Contains(schema, fmt.Sprintf("%q:", field)) {
+			if _, ok := zodKeys[field]; !ok {
 				t.Errorf("%s.%s is declared in the proto and missing from %s",
 					name, field, zodSchemas)
 			}
@@ -127,4 +136,73 @@ func readFile(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(b)
+}
+
+// zodTopLevelKeys returns the property names of a generated Zod schema's OWN object.
+//
+// json-schema-to-zod emits a whole message — nested messages inlined — as one expression
+// on one line, so telling the message's own fields from its children's means tracking
+// brace depth rather than searching text. Strings are skipped as units: a field
+// description is arbitrary prose, and an enum's values sit at the same depth as the keys.
+func zodTopLevelKeys(schema string) map[string]struct{} {
+	out := map[string]struct{}{}
+	open := strings.Index(schema, "z.object({")
+	if open < 0 {
+		return out
+	}
+	depth := 1
+	for i := open + len("z.object({"); i < len(schema); i++ {
+		switch schema[i] {
+		case '"':
+			end := i + 1
+			for end < len(schema) && schema[end] != '"' {
+				if schema[end] == '\\' {
+					end++ // an escaped byte, including an escaped quote
+				}
+				end++
+			}
+			// A property key is a string at this object's own depth followed by a colon.
+			// An enum value or a describe() argument sits at the same depth and is not.
+			if depth == 1 && end+1 < len(schema) && schema[end+1] == ':' {
+				out[schema[i+1:end]] = struct{}{}
+			}
+			i = end
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+// TestZodTopLevelKeysReadsOneMessage proves the scan above distinguishes a message's own
+// fields from the nested ones json-schema-to-zod inlines beside them.
+//
+// Without it the guard was satisfiable by accident: TransactionResponse does not declare
+// transaction_id — it lives one level down in TransactionResultItem — yet a substring
+// search over the line finds it, so the outer message could lose a field of that name and
+// the guard would still pass. `ext`, `ver` and `exchange` recur across the contract the
+// same way.
+func TestZodTopLevelKeysReadsOneMessage(t *testing.T) {
+	schema, ok := zodSchemaOf(readFile(t, zodSchemas), "TransactionResponse")
+	if !ok {
+		t.Fatal("no generated Zod schema for TransactionResponse")
+	}
+	keys := zodTopLevelKeys(schema)
+	for _, own := range []string{"ver", "items", "agent_identity_hash", "ext"} {
+		if _, found := keys[own]; !found {
+			t.Errorf("%s is TransactionResponse's own field and was not read", own)
+		}
+	}
+	// Declared by TransactionResultItem, inlined into the same expression.
+	if _, found := keys["transaction_id"]; found {
+		t.Error("transaction_id is a nested field and must not read as TransactionResponse's own")
+	}
+	if !strings.Contains(schema, `"transaction_id":`) {
+		t.Error("the nested field is absent from the line entirely — this test proves nothing")
+	}
 }

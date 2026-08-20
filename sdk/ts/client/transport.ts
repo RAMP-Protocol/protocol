@@ -14,7 +14,7 @@
 import { signOutbound } from "../core/signing-transport.ts";
 import type { Window } from "../core/window.ts";
 import { errorDetailFrom } from "../src/errordetail.ts";
-import { snakeFromJsonName } from "../src/wire-names.ts";
+import { parseWire, WireNamingError } from "../../../gen/ts/wire/base.ts";
 import {
 	ConnectProtocolVersion,
 	ConnectProtocolVersionHeader,
@@ -270,58 +270,6 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  */
 export const NOT_CANONICAL_WIRE_NAMING = "not_canonical_wire_naming";
 
-// declaredKeys reads a generated schema's own property names, or undefined when the
-// schema is not an object schema (nothing to compare against).
-function declaredKeys(schema: unknown): Set<string> | undefined {
-	const shape = (schema as { shape?: unknown }).shape;
-	if (typeof shape !== "object" || shape === null) return undefined;
-	return new Set(Object.keys(shape as Record<string, unknown>));
-}
-
-/**
- * assertCanonicalNaming refuses an answer whose field names are lowerCamelCase.
- *
- * The RAMP wire is snake_case proto-JSON and the camelCase json_name alias is out of
- * contract, so a conformant Exchange serves snake_case — connect-go does that only when
- * a codec with UseProtoNames is registered, which a RAMP deployment does and a stock
- * connect-go server does not. The generated schemas accept snake_case only and STRIP
- * what they do not recognise, so a camelCase answer would otherwise parse SUCCESSFULLY
- * into a message with every multiword field missing: no offers, no rate limit, no
- * absence reason, and no error anywhere. Silence is the wrong answer to a peer that is
- * not speaking the protocol.
- *
- * The check is at the message ROOT and nowhere deeper. That is what makes it safe rather
- * than merely cheap: open maps — `ext`, `metadata`, a Struct — hold caller-chosen keys,
- * and those live inside a root field's VALUE, so a root-key comparison cannot reach
- * them. A camelCase peer is camelCase everywhere, so the root is enough to recognise
- * one; the case it cannot see is a message whose populated fields are all single words,
- * where the two spellings are identical and nothing is lost either way.
- */
-export function assertCanonicalNaming(
-	op: string,
-	raw: unknown,
-	schema: unknown,
-): void {
-	const declared = declaredKeys(schema);
-	if (declared === undefined || !isRecord(raw)) return;
-	for (const key of Object.keys(raw)) {
-		if (declared.has(key)) continue;
-		const name = snakeFromJsonName(key);
-		if (name !== key && declared.has(name)) {
-			throw new RampCallError({
-				kind: "malformed",
-				op,
-				reason: NOT_CANONICAL_WIRE_NAMING,
-				cause: new Error(
-					`peer answered with the lowerCamelCase json_name alias (${key}); the RAMP ` +
-						"wire is snake_case proto-JSON, so its answer cannot be read without " +
-						"silently dropping every multiword field",
-				),
-			});
-		}
-	}
-}
-
 /**
  * Whether a request is checked against its generated schema before it is signed and sent.
  * "strict" is the default, mirroring the Go client. A caller that means to probe a server
@@ -346,11 +294,11 @@ export type Validation = "strict" | "off";
 export function validateRequest(
 	op: string,
 	message: unknown,
-	schema: { safeParse: (v: unknown) => { success: boolean } },
+	schema: { safeParse: (v: unknown) => { success: boolean; data?: unknown } },
 	validation: Validation,
 ): void {
 	if (validation === "off") return;
-	if (!schema.safeParse(message).success) {
+	if (!parseUnderWirePolicy(op, message, schema).success) {
 		throw malformed(
 			op,
 			new Error("request failed its generated schema; the server could only refuse it"),
@@ -368,10 +316,39 @@ export function parseMessage<T>(
 	raw: unknown,
 	schema: { safeParse: (v: unknown) => { success: boolean; data?: unknown } },
 ): T {
-	assertCanonicalNaming(op, raw, schema);
-	const parsed = schema.safeParse(raw);
+	const parsed = parseUnderWirePolicy<T>(op, raw, schema);
 	if (!parsed.success) {
 		throw malformed(op, new Error("peer answer failed its generated schema"));
 	}
-	return parsed.data as T;
+	return parsed.data;
+}
+
+/**
+ * parseUnderWirePolicy runs the generated schema seam and turns its one refusal into this
+ * tier's typed failure.
+ *
+ * The wire policy — an unset message field arrives as null, and the lowerCamelCase
+ * json_name alias is refused at every depth — belongs to the schemas, so it lives with
+ * them in gen/ts/wire/base.ts and this tier only names what a refusal MEANS to a caller.
+ * Every parse of a generated schema in this SDK goes through here; a bare `safeParse`
+ * would skip the policy, which the no-direct-parse guard is there to catch.
+ */
+function parseUnderWirePolicy<T>(
+	op: string,
+	raw: unknown,
+	schema: { safeParse: (v: unknown) => { success: boolean; data?: unknown } },
+): { success: true; data: T } | { success: false } {
+	try {
+		return parseWire<T>(schema, raw);
+	} catch (cause) {
+		if (cause instanceof WireNamingError) {
+			throw new RampCallError({
+				kind: "malformed",
+				op,
+				reason: NOT_CANONICAL_WIRE_NAMING,
+				cause,
+			});
+		}
+		throw cause;
+	}
 }
