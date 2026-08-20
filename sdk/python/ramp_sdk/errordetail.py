@@ -47,6 +47,8 @@ from wire.models import (
     UsageReportRejectionReason,
 )
 
+from ramp_sdk._wire_names import snake_from_json_name
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
     from enum import Enum
@@ -100,18 +102,6 @@ def reason(detail: ErrorDetail) -> Enum | None:
 _OPEN_MAP_MEMBERS = frozenset({"metadata"})
 
 
-def _snake_from_json_name(name: str) -> str:
-    """Recover a proto field name from protojson's lowerCamelCase spelling of it."""
-    out: list[str] = []
-    for ch in name:
-        if ch.isupper():
-            out.append("_")
-            out.append(ch.lower())
-        else:
-            out.append(ch)
-    return "".join(out)
-
-
 def _proto_names(payload: Any) -> Any:
     """Rewrite a lowerCamelCase proto-JSON object into the proto's own field names.
 
@@ -133,7 +123,7 @@ def _proto_names(payload: Any) -> Any:
         return payload
     out: dict[str, Any] = {}
     for key, value in payload.items():
-        name = _snake_from_json_name(key)
+        name = snake_from_json_name(key)
         out[name] = value if name in _OPEN_MAP_MEMBERS else _proto_names(value)
     return out
 

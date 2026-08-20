@@ -9,6 +9,7 @@ import type {
 	UsageReportRejectionReasonSchema,
 } from "../../../gen/ts/wire/schemas.ts";
 import { ErrorDetailSchema } from "../../../gen/ts/wire/schemas.ts";
+import { snakeFromJsonName } from "./wire-names.ts";
 
 // ADR-019 ErrorDetail reader + typed detail builders (both halves of the contract).
 //
@@ -113,16 +114,6 @@ function detailsOf(err: unknown): unknown[] {
 // Struct, which is what makes a single name enough; the conformance suite holds that
 // fact so a future map field cannot quietly widen what the walk below rewrites.
 const OPEN_MAP_MEMBERS = new Set(["metadata"]);
-
-/** Recover a proto field name from protojson's lowerCamelCase spelling of it. */
-function snakeFromJsonName(name: string): string {
-	let out = "";
-	for (const ch of name) {
-		const lower = ch.toLowerCase();
-		out += ch === lower ? ch : `_${lower}`;
-	}
-	return out;
-}
 
 /**
  * Rewrite a lowerCamelCase proto-JSON object into the proto's own field names.
