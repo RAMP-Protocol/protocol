@@ -21,6 +21,7 @@ address.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from typing import Any
 
@@ -28,6 +29,7 @@ import httpx
 import pytest
 
 from ramp_sdk import sync as blocking
+from ramp_sdk.client import Client as AsyncClient
 from ramp_sdk.client import ClientConfig
 from ramp_sdk.client.errors import CallError, CallErrorKind
 from ramp_sdk.signing_transport import SigningTransport
@@ -95,12 +97,45 @@ class _Recording:
     def __init__(self) -> None:
         self.url: str | None = None
 
-    def client(self) -> httpx.Client:
-        def respond(request: httpx.Request) -> httpx.Response:
-            self.url = str(request.url)
-            return httpx.Response(200, json={"ver": "1.0", "report_id": "r"})
+    def _respond(self, request: httpx.Request) -> httpx.Response:
+        self.url = str(request.url)
+        return httpx.Response(200, json={"ver": "1.0", "report_id": "r"})
 
-        return httpx.Client(transport=httpx.MockTransport(respond))
+    def client(self) -> httpx.Client:
+        return httpx.Client(transport=httpx.MockTransport(self._respond))
+
+    def async_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(transport=httpx.MockTransport(self._respond))
+
+
+class _Face:
+    """One client face, driven synchronously so both read the same in a test.
+
+    The pre-flight is written twice — once in the async client, once in the blocking facade
+    over it — so a test that drives only one of them gates only half of it. Mutating either
+    async site used to leave the whole suite green, and the async client is the documented
+    core; the facade is the wrapper. Parametrizing is what keeps the pair from drifting
+    again, rather than a second set of tests somebody has to remember to add to.
+    """
+
+    def __init__(self, name: str, is_async: bool) -> None:
+        self.name = name
+        self.is_async = is_async
+
+    def injected(self, config: ClientConfig, recorder: _Recording) -> Any:
+        if self.is_async:
+            return AsyncClient(config, http=recorder.async_client())
+        return blocking.Client(config, http=recorder.client())
+
+    def run(self, call: Any) -> Any:
+        # The blocking face has already raised by the time this is entered — the call is
+        # evaluated as the argument — and the async face raises out of asyncio.run. Both
+        # land inside the caller's pytest.raises either way.
+        return asyncio.run(call) if self.is_async else call
+
+
+_FACES = [_Face("async", True), _Face("sync", False)]
+_FACE_IDS = [f.name for f in _FACES]
 
 
 class _Plaintext:
@@ -108,34 +143,40 @@ class _Plaintext:
         return f"http://{host}"
 
 
-def test_an_injected_client_cannot_carry_a_signed_report_over_plaintext() -> None:
+@pytest.mark.parametrize("face", _FACES, ids=_FACE_IDS)
+def test_an_injected_client_cannot_carry_a_signed_report_over_plaintext(face: _Face) -> None:
     recorder = _Recording()
-    client = blocking.Client(
-        _config(endpoint_resolver=_Plaintext()), http=recorder.client()
-    )
-    with client, pytest.raises(CallError) as caught:
-        client.report_usage({"exchange": "issuer.test", "transaction_id": "t-1"})
+    client = face.injected(_config(endpoint_resolver=_Plaintext()), recorder)
+    with pytest.raises(CallError) as caught:
+        face.run(client.report_usage({"exchange": "issuer.test", "transaction_id": "t-1"}))
     assert caught.value.kind is CallErrorKind.UNREACHABLE
     assert recorder.url is None, "the injected client was reached over plaintext"
 
 
-def test_an_injected_client_cannot_carry_a_delivery_proof_over_plaintext() -> None:
+@pytest.mark.parametrize("face", _FACES, ids=_FACE_IDS)
+def test_an_injected_client_cannot_carry_a_delivery_proof_over_plaintext(face: _Face) -> None:
     recorder = _Recording()
-    client = blocking.Client(_config(), http=recorder.client())
-    with client, pytest.raises(CallError) as caught:
-        client.fetch("http://edge.test/a?token=live-credential")
+    client = face.injected(_config(), recorder)
+    with pytest.raises(CallError) as caught:
+        face.run(client.fetch("http://edge.test/a?token=live-credential"))
     assert caught.value.kind is CallErrorKind.UNREACHABLE
     assert recorder.url is None
     # The refusal reaches a log; a delivery URL's query is the credential.
     assert "live-credential" not in str(caught.value)
 
 
-def test_but_the_home_exchange_keeps_its_latitude() -> None:
+@pytest.mark.parametrize("face", _FACES, ids=_FACE_IDS)
+def test_but_the_home_exchange_keeps_its_latitude(face: _Face) -> None:
     # The operator configured that address. Same split as TypeScript's unaryCall and Go's
     # NewGuardedTransport: only the legs whose host another party named are gated.
+    #
+    # This is the only case that catches the gate firing too WIDELY, and it has to run on
+    # both faces for the same reason the two above do: dropping the guarded-leg condition in
+    # the async client alone would otherwise refuse an address the operator chose and
+    # nothing would say so.
     recorder = _Recording()
-    client = blocking.Client(_config(base_url="http://exchange.test"), http=recorder.client())
-    with client, contextlib.suppress(CallError):
-        client.discover({"exchange": "exchange.test"})
+    client = face.injected(_config(base_url="http://exchange.test"), recorder)
+    with contextlib.suppress(CallError):
+        face.run(client.discover({"exchange": "exchange.test"}))
     assert recorder.url is not None, "the home leg was refused before it dialed"
     assert recorder.url.startswith("http://exchange.test")
