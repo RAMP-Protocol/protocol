@@ -21,8 +21,10 @@ address.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
+import httpx
 import pytest
 
 from ramp_sdk import sync as blocking
@@ -81,3 +83,59 @@ def test_the_delivery_leg_refuses_plaintext() -> None:
     assert caught.value.kind is CallErrorKind.UNREACHABLE
     # The refusal reaches a log; a delivery URL carries a live credential in its query.
     assert "live-credential" not in str(caught.value)
+
+
+# The scheme check has to sit ABOVE the transport, because the transport is replaceable.
+# _SchemeGuardTransport is where the policy lives, and an injected client replaces it —
+# deliberately, since an injected client carries both legs. Measured before this: a signed
+# usage report reached http://issuer.test with the signature header attached.
+class _Recording:
+    """An injected client with no scheme policy of its own — the documented `http=` seam."""
+
+    def __init__(self) -> None:
+        self.url: str | None = None
+
+    def client(self) -> httpx.Client:
+        def respond(request: httpx.Request) -> httpx.Response:
+            self.url = str(request.url)
+            return httpx.Response(200, json={"ver": "1.0", "report_id": "r"})
+
+        return httpx.Client(transport=httpx.MockTransport(respond))
+
+
+class _Plaintext:
+    def resolve_endpoint(self, host: str) -> str:
+        return f"http://{host}"
+
+
+def test_an_injected_client_cannot_carry_a_signed_report_over_plaintext() -> None:
+    recorder = _Recording()
+    client = blocking.Client(
+        _config(endpoint_resolver=_Plaintext()), http=recorder.client()
+    )
+    with client, pytest.raises(CallError) as caught:
+        client.report_usage({"exchange": "issuer.test", "transaction_id": "t-1"})
+    assert caught.value.kind is CallErrorKind.UNREACHABLE
+    assert recorder.url is None, "the injected client was reached over plaintext"
+
+
+def test_an_injected_client_cannot_carry_a_delivery_proof_over_plaintext() -> None:
+    recorder = _Recording()
+    client = blocking.Client(_config(), http=recorder.client())
+    with client, pytest.raises(CallError) as caught:
+        client.fetch("http://edge.test/a?token=live-credential")
+    assert caught.value.kind is CallErrorKind.UNREACHABLE
+    assert recorder.url is None
+    # The refusal reaches a log; a delivery URL's query is the credential.
+    assert "live-credential" not in str(caught.value)
+
+
+def test_but_the_home_exchange_keeps_its_latitude() -> None:
+    # The operator configured that address. Same split as TypeScript's unaryCall and Go's
+    # NewGuardedTransport: only the legs whose host another party named are gated.
+    recorder = _Recording()
+    client = blocking.Client(_config(base_url="http://exchange.test"), http=recorder.client())
+    with client, contextlib.suppress(CallError):
+        client.discover({"exchange": "exchange.test"})
+    assert recorder.url is not None, "the home leg was refused before it dialed"
+    assert recorder.url.startswith("http://exchange.test")

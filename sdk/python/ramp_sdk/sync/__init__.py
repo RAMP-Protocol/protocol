@@ -23,6 +23,7 @@ from ramp_sdk.client._read import (
     IDENTITY_ENCODING,
     bounded_chunks,
     refuse_unrequested_encoding,
+    require_dialable_scheme,
     rpc_headers,
 )
 from ramp_sdk.client._verbs import ClientConfig
@@ -99,6 +100,10 @@ class _Face:
         """Send one RPC and read its answer under the cap. The async twin's own docstring
         carries the reasoning; only the iteration differs."""
         self._refuse_if_closed(plan.op)
+        # The scheme, before the transport — which an injected client replaces. Only the
+        # guarded legs: the configured home Exchange is the operator's own address.
+        if plan.guarded:
+            require_dialable_scheme(plan.op, plan.url)
         http = self._guarded if plan.guarded else self._http
         try:
             with http.stream(
@@ -163,6 +168,8 @@ class Client(_Face):
         headers, timeout, max_bytes = _fetch_inputs(self._config, signed_url)
         op = "fetch content"
         self._refuse_if_closed(op)
+        # A delivery URL always names a host another party chose.
+        require_dialable_scheme(op, signed_url)
         try:
             # Redirects are REFUSED, and the body is STREAMED under the cap, for the
             # reasons the async face records.

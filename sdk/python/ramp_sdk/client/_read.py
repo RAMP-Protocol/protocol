@@ -28,15 +28,50 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import httpx
+
+from ramp_sdk.resolvers._http import _allow_insecure, _require_scheme
+from ramp_sdk.resolvers._ssrf import SsrfError as _SsrfError
+
 from .errors import CallError, CallErrorKind
 
 if TYPE_CHECKING:
-    import httpx
-
     from . import _verbs
 
 #: Asks the peer for no content coding. See the module docstring.
 IDENTITY_ENCODING = {"accept-encoding": "identity"}
+
+
+def require_dialable_scheme(op: str, url: str) -> None:
+    """Refuse a URL this SDK will not dial, before the transport is reached.
+
+    ABOVE the transport rather than inside it, and that placement is the whole point. The
+    scheme policy lives in ``_SchemeGuardTransport``, which a caller REPLACES when they pass
+    their own client — deliberately, since an injected client carries both legs. So the
+    check that keeps a signature off plaintext cannot live only there: measured, an injected
+    client sent a signed usage report to ``http://issuer.test`` with the signature header
+    attached.
+
+    Applied to the legs whose host another party named — the offer-derived RPC legs and the
+    delivery fetch. The configured home Exchange keeps its latitude, which is the same split
+    TypeScript makes in ``unaryCall`` and Go makes with ``NewGuardedTransport``.
+
+    One owner for the rule: the predicate and the ``ALLOW_INSECURE`` relax are the
+    resolvers' own, imported rather than restated.
+
+    The refusal names the scheme and never the URL — a delivery URL's query IS a
+    credential — and reports UNREACHABLE, matching what the guard's own refusal reports
+    once it is typed, and what Go answers when the same check fires inside its
+    RoundTripper.
+    """
+    try:
+        _require_scheme(httpx.URL(url).scheme, allow_http=_allow_insecure())
+    except _SsrfError as exc:
+        raise CallError(CallErrorKind.UNREACHABLE, op, cause=str(exc)) from exc
+    except (ValueError, TypeError, httpx.InvalidURL) as exc:
+        raise CallError(
+            CallErrorKind.UNREACHABLE, op, cause=f"url is unparseable: {type(exc).__name__}"
+        ) from exc
 
 
 def over_cap(op: str, max_bytes: int, status: int | None = None) -> CallError:
