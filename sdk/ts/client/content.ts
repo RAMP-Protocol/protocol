@@ -178,6 +178,16 @@ export async function fetchContent(
 				mimeType: mimeTypeOf(headerValue(response.headers, "content-type")),
 				body,
 			};
+		} catch (failure) {
+			// The answer arrived, and then went wrong: the deadline fired mid-body, or the
+			// connection reset under the read. Both raise the dialing library's own error
+			// out of the loop, and this leg had no catch of its own — so a caller branching
+			// on the contract this package states, that every verb raises RampCallError and
+			// nothing else, silently dropped it. Measured before this: a mid-body deadline
+			// surfaced as a bare DOMException. The RPC legs route the identical case through
+			// their own classifier; this is that, plus the redaction only this leg needs,
+			// because a delivery URL carries a live credential in its query.
+			throw failure instanceof RampCallError ? failure : dialFailure(op, failure);
 		} finally {
 			// Every exit, not every throw — including a future one that returns early.
 			reclaim(response.body);

@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createServer } from "node:http";
+import { randomBytes } from "node:crypto";
 
 import { Agent } from "undici";
 
@@ -30,6 +31,56 @@ describe("a redirect this client refused to follow", () => {
 			expect((thrown as RampCallError).kind).toBe("unreachable");
 		});
 	}
+});
+
+describe("the DELIVERY leg's own failures", () => {
+	// The answer arrives and then goes wrong under the read — the deadline fires mid-body,
+	// or the connection resets. Both raise the dialing library's own error, and this leg
+	// used to have no catch, so it escaped past every caller branching on the contract this
+	// package states. Measured before the fix: a bare DOMException.
+	it("classify a mid-body deadline instead of raising the dialer's own error", async () => {
+		const body = randomBytes(8 << 20);
+		const server = createServer((_req, res) => {
+			res.writeHead(200, {
+				"content-type": "text/plain",
+				"content-length": String(body.length),
+			});
+			// Headers and a first chunk, then nothing: the read is still open when the
+			// client's own deadline fires.
+			res.write(body.subarray(0, 1024));
+		});
+		await new Promise<void>((done) => server.listen(0, "127.0.0.1", () => done()));
+		const port = (server.address() as { port: number }).port;
+		const keys = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
+			"sign",
+			"verify",
+		])) as CryptoKeyPair;
+
+		const saved = process.env["ALLOW_INSECURE"];
+		process.env["ALLOW_INSECURE"] = "true";
+		let failure: unknown;
+		try {
+			failure = await fetchContent(`http://127.0.0.1:${port}/x`, {
+				keyPair: keys,
+				dispatcher: new Agent(),
+				timeoutMs: 400,
+				maxBytes: 64 << 20,
+			}).catch((e: unknown) => e);
+		} finally {
+			if (saved === undefined) delete process.env["ALLOW_INSECURE"];
+			else process.env["ALLOW_INSECURE"] = saved;
+			server.closeAllConnections();
+			await new Promise<void>((done) => server.close(() => done()));
+		}
+
+		expect(
+			failure,
+			"the dialer's own error escaped a verb that promises RampCallError and nothing else",
+		).toBeInstanceOf(RampCallError);
+		expect((failure as RampCallError).kind).toBe("unreachable");
+		// The refusal reaches a log, and a delivery URL's query is the credential.
+		expect(String((failure as RampCallError).cause ?? "")).not.toContain("127.0.0.1");
+	}, 20000);
 });
 
 describe("a redirect on the DELIVERY leg", () => {
