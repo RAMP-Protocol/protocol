@@ -15,7 +15,7 @@ import { RequestIDHeader } from "../src/wire.ts";
 import { IDENTITY_ENCODING, refuseUnrequestedEncoding } from "./transport.ts";
 import { requireScheme, skipSSRF, ssrfGuard, SsrfBlockedError } from "../resolvers/http.ts";
 import { RampCallError } from "./errors.ts";
-import { concat } from "./send.ts";
+import { concat, reclaim } from "./send.ts";
 
 /**
  * DEFAULT_CONTENT_TIMEOUT_MS bounds one content fetch. An agent is blocked on the call
@@ -85,7 +85,8 @@ export interface ContentFetchOptions {
 	maxBytes?: number;
 	requestId?: () => string;
 	/** The dialing seam, guarded by default. An edge runtime with no undici injects its
-	 * own; the same obligations come with it — no redirects, and the address pin. */
+	 * own; the same obligations come with it — no redirects, the address pin, and a body
+	 * whose socket is released even when this leg refuses without reading it. */
 	dispatcher?: Dispatcher;
 }
 
@@ -149,33 +150,38 @@ export async function fetchContent(
 			throw dialFailure(op, cause);
 		});
 
-		// Before either branch reads a byte, refusal included: its 4 KiB bound is the
-		// tightest here, so it is the one an unnegotiated coding overshoots furthest.
-		refuseUnrequestedEncoding(op, response.statusCode, response.headers);
+		try {
+			// Before either branch reads a byte, refusal included: its 4 KiB bound is the
+			// tightest here, so it is the one an unnegotiated coding overshoots furthest.
+			refuseUnrequestedEncoding(op, response.statusCode, response.headers);
 
-		// A 3xx reached this client only because the dial refused to follow it, so it is a
-		// server that did not answer rather than one that declined — the class every
-		// failure taxonomy here already documents for a redirect. Checked BEFORE the
-		// refusal reader, which would otherwise promote a token out of the redirect body:
-		// a 302 carrying {"reason":"moved"} surfaced as though the edge had named a typed
-		// refusal.
-		if (response.statusCode >= 300 && response.statusCode < 400) {
-			throw new RampCallError({
-				kind: "unreachable",
-				op,
-				status: response.statusCode,
-				cause: new Error("peer answered with a redirect, which this client does not follow"),
-			});
+			// A 3xx reached this client only because the dial refused to follow it, so it
+			// is a server that did not answer rather than one that declined — the class
+			// every failure taxonomy here already documents for a redirect. Checked BEFORE
+			// the refusal reader, which would otherwise promote a token out of the redirect
+			// body: a 302 carrying {"reason":"moved"} surfaced as though the edge had named
+			// a typed refusal.
+			if (response.statusCode >= 300 && response.statusCode < 400) {
+				throw new RampCallError({
+					kind: "unreachable",
+					op,
+					status: response.statusCode,
+					cause: new Error("peer answered with a redirect, which this client does not follow"),
+				});
+			}
+			if (response.statusCode < 200 || response.statusCode >= 300) {
+				throw await edgeRefusal(op, response.statusCode, response.body);
+			}
+			const body = await readBody(op, response.body, maxBytes);
+			return {
+				url: signedURL,
+				mimeType: mimeTypeOf(headerValue(response.headers, "content-type")),
+				body,
+			};
+		} finally {
+			// Every exit, not every throw — including a future one that returns early.
+			reclaim(response.body);
 		}
-		if (response.statusCode < 200 || response.statusCode >= 300) {
-			throw await edgeRefusal(op, response.statusCode, response.body);
-		}
-		const body = await readBody(op, response.body, maxBytes);
-		return {
-			url: signedURL,
-			mimeType: mimeTypeOf(headerValue(response.headers, "content-type")),
-			body,
-		};
 	} finally {
 		clearTimeout(timer);
 	}

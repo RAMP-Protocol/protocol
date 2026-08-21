@@ -20,8 +20,10 @@
 // plaintext endpoint carrying a signature.
 //
 // An edge runtime with no undici injects its own send. That is the same escape hatch the
-// resolver tier offers, and the same obligations come with it: no redirects, and no
-// reading past the caller's byte bound.
+// resolver tier offers, and the same obligations come with it: no redirects, no reading
+// past the caller's byte bound, and the lifetime of a body it does NOT read — a refusal
+// that walks away from an unread stream holds the socket open until the peer hangs up,
+// and a peer that never does is the case the guard exists for. See reclaim.
 
 import { Agent, type Dispatcher, request as undiciRequest } from "undici";
 
@@ -69,14 +71,19 @@ export function createUnarySend(opts: SendOptions): UnarySend {
 			// the refusal is the absence of that interceptor rather than a setting.
 			maxRedirections: 0,
 		});
-		// Before a byte is read: a coding the client did not negotiate cannot be bounded,
-		// because a decoder expands a whole raw read at once. The headers are only visible
-		// here, which is why the check lives in the send rather than beside the decode.
-		refuseUnrequestedEncoding(req.op, response.statusCode, response.headers);
-		return {
-			status: response.statusCode,
-			body: await readBounded(response.body, req.maxBytes, req.op),
-		};
+		try {
+			// Before a byte is read: a coding the client did not negotiate cannot be
+			// bounded, because a decoder expands a whole raw read at once. The headers are
+			// only visible here, which is why the check lives in the send rather than
+			// beside the decode.
+			refuseUnrequestedEncoding(req.op, response.statusCode, response.headers);
+			return {
+				status: response.statusCode,
+				body: await readBounded(response.body, req.maxBytes, req.op),
+			};
+		} finally {
+			reclaim(response.body);
+		}
 	};
 }
 
@@ -106,6 +113,51 @@ export async function readBounded(
 		chunks.push(chunk);
 	}
 	return new TextDecoder().decode(concat(chunks, total));
+}
+
+/**
+ * reclaim releases the socket behind a response body that was not read to the end.
+ *
+ * Every refusal above a read is one of these: the check that rejects a coding, the class
+ * that rejects a redirect. Each throws while the body is still mid-stream, and undici
+ * cannot return a connection whose response nobody consumed — so the socket stays open
+ * until the PEER hangs up, and a peer that never does is exactly the party these guards
+ * exist to contain. Measured before this: six refusals left six live sockets, still six
+ * after fifteen seconds idle, on a dispatcher the delivery leg shares process-wide. With a
+ * bounded pool one refusal wedged it outright and the client's own deadline did not break
+ * it.
+ *
+ * Both siblings get this from an idiom TypeScript has no equivalent of — Go from
+ * `defer resp.Body.Close()`, Python from `with … stream()` — so here it is spelled out, in
+ * a `finally` rather than at each throw. That placement is the point: the last regression
+ * added a throw ABOVE the branch that happened to be doing the reclaiming, and a fix
+ * attached to the throws we can currently name would go the same way.
+ *
+ * DESTROY rather than drain. Reading the body to free the socket would be an unbounded read
+ * from a peer whose answer is already refused, and draining under a cap is what undici's
+ * `dump` does — but `dump` settles only when the stream closes, so awaiting it hands a peer
+ * that trickles control of how long the refusal takes. Nothing is owed to a body that is
+ * being discarded.
+ *
+ * Idempotent, so the paths that already consumed can run through it unharmed: a read that
+ * finished has ended, and one that threw mid-iteration was destroyed by the loop's own
+ * exit. `destroy` alone would be safe on an ended stream — undici raises the abort only
+ * while `endEmitted` is false — but the guard says so where a reader will see it.
+ */
+export function reclaim(body: {
+	readonly destroyed: boolean;
+	readonly readableEnded: boolean;
+	on: (event: "error", listener: () => void) => unknown;
+	destroy: () => void;
+}): void {
+	if (body.destroyed || body.readableEnded) return;
+	// Tearing down a stream that has not ended raises an abort ON that stream, and an
+	// "error" nothing is listening for is an uncaught exception in Node — so releasing the
+	// socket would take the caller's process down on every refusal, which is worse than the
+	// leak. The listener is what makes the teardown survivable, and undici's own discard
+	// helper carries the same one for the same reason.
+	body.on("error", () => {});
+	body.destroy();
 }
 
 /** concat joins the read chunks into one buffer. */
