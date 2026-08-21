@@ -237,3 +237,48 @@ def test_the_delivery_deadline_covers_proof_minting() -> None:
         client.fetch("https://edge.test/x")
     assert caught.value.kind is CallErrorKind.NOT_SIGNABLE
     assert "budget" in str(caught.value)
+
+
+# The DELIVERY leg's coding refusal, which the RPC tests above do not reach. Its refusal
+# path carries the tightest bound in the client — 4 KiB — so it is the site an unnegotiated
+# coding overshoots furthest, and it was the one with no test at all.
+@pytest.fixture
+def plaintext_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let a loopback http:// delivery URL past the scheme pre-flight.
+
+    The pre-flight refuses it first, correctly — which is why the coding check below needs
+    the deployment relax to be reachable at all. Exactly what the TypeScript twins do.
+    """
+    monkeypatch.setenv("ALLOW_INSECURE", "true")
+    monkeypatch.setenv("SKIP_SSRF", "true")
+
+
+@pytest.mark.usefixtures("plaintext_allowed")
+def test_the_delivery_leg_refuses_a_coding_it_did_not_negotiate(gzipping_server: str) -> None:
+    with blocking.Client(_config("https://exchange.test")) as client, pytest.raises(
+        CallError
+    ) as caught:
+        client.fetch(f"{gzipping_server}/x")
+    assert caught.value.kind is CallErrorKind.MALFORMED
+    assert "content-encoding" in str(caught.value)
+
+
+@pytest.mark.usefixtures("plaintext_allowed")
+def test_the_async_delivery_leg_refuses_it_too(gzipping_server: str) -> None:
+    async def run() -> CallError:
+        async with Client(_config("https://exchange.test")) as client:
+            with pytest.raises(CallError) as caught:
+                await client.fetch(f"{gzipping_server}/x")
+            return caught.value
+
+    assert asyncio.run(run()).kind is CallErrorKind.MALFORMED
+
+
+@pytest.mark.usefixtures("plaintext_allowed")
+def test_the_delivery_leg_negotiates_identity(gzipping_server: str) -> None:
+    with blocking.Client(_config("https://exchange.test")) as client, contextlib.suppress(
+        CallError
+    ):
+        client.fetch(f"{gzipping_server}/x")
+    # The subclass records it, so read it there — _Handler's own attribute stays unset.
+    assert _GzipAnyway.seen_accept_encoding == "identity"

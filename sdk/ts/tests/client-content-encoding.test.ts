@@ -111,6 +111,27 @@ describe("content coding", () => {
 		server.close();
 	});
 
+	// The DELIVERY leg, which the cases above do not reach. Its refusal path carries the
+	// tightest bound in the client — 4 KiB — so it is the site an unnegotiated coding
+	// overshoots furthest, and it was the one with no test at all.
+	it("the delivery leg refuses one too", async () => {
+		const bomb = gzipSync(Buffer.alloc(64 * 1024 * 1024, 0x41));
+		const [server, port] = await serving(bomb, { "content-encoding": "gzip" });
+		const keys = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
+			"sign",
+			"verify",
+		])) as CryptoKeyPair;
+		const failure = await withLoopback(() =>
+			fetchContent(`http://127.0.0.1:${port}/x`, { keyPair: keys }).catch(
+				(e: unknown) => e,
+			),
+		);
+		expect(failure).toBeInstanceOf(RampCallError);
+		expect((failure as RampCallError).kind).toBe("malformed");
+		expect(String((failure as RampCallError).cause ?? "")).toContain("content-encoding");
+		server.close();
+	});
+
 	it("an identity coding, and no coding at all, are both fine", async () => {
 		for (const headers of [{ "content-encoding": "identity" }, {}]) {
 			const [server, port] = await serving(Buffer.from('{"ver":"1.0"}'), headers);

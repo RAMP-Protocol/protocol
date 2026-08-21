@@ -18,6 +18,7 @@ language read a signature where two read garbage.
 
 from __future__ import annotations
 
+import base64
 from typing import Any
 
 import pytest
@@ -69,3 +70,42 @@ def test_hex_decode(vector: dict[str, Any]) -> None:
         f"{vector['name']}: oracle says decodes={vector['ok']}, "
         f"this reader says decodes={not refused_the_decode} ({reason})"
     )
+
+
+def test_a_value_only_a_lenient_decoder_would_accept_does_not_verify() -> None:
+    """The ACCEPTANCE decoder is a second copy of the rule, on a face answering a boolean.
+
+    A refused decode and a signature that merely does not match both read ``False``, so no
+    corpus vector fed to it can separate them — which is how this half stayed ungated while
+    the offer half was pinned.
+
+    What separates them is a value a LENIENT decoder reads as the RIGHT bytes.
+    ``bytes.fromhex`` skips ASCII whitespace between bytes, so a genuine signature with one
+    space inserted decodes to the identical bytes there and is refused by the strict check.
+    That is the mutation this test exists to fail.
+    """
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from ramp_sdk.core import sign_offer_acceptance_jcs, verify_offer_acceptance_jcs
+
+    seed = bytes(range(32))
+    public = base64.b64encode(
+        Ed25519PrivateKey.from_private_bytes(seed).public_key().public_bytes_raw()
+    ).decode()
+    fields = {
+        "offer_sig": "abcd",
+        "requester_id": "agent-1",
+        "requester_domain": "agent.test",
+        "idempotency_key": "idem-1",
+    }
+    genuine, _algorithm = sign_offer_acceptance_jcs(seed=seed, **fields)
+
+    # The control: it verifies as issued.
+    assert verify_offer_acceptance_jcs(**fields, signature_hex=genuine, pubkey_b64=public)
+
+    # A space between two pairs. bytes.fromhex rebuilds the exact signature from this.
+    lenient_only = f"{genuine[:4]} {genuine[4:]}"
+    assert lenient_only != genuine
+    assert not verify_offer_acceptance_jcs(
+        **fields, signature_hex=lenient_only, pubkey_b64=public
+    ), "a signature carrying embedded whitespace was accepted"

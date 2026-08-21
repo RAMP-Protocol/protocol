@@ -16,6 +16,7 @@
 // accepted all three, so this language read a signature where the other two read garbage.
 import { describe, expect, it } from "vitest";
 
+import { signOfferAcceptance, verifyOfferAcceptance } from "../src/acceptance.ts";
 import { createVerifier } from "../core/verifier.ts";
 import { snakeFromJsonName } from "../src/wire-names.ts";
 import vectorsFile from "../../go/helpers/testdata/wire-names-vectors.json";
@@ -54,6 +55,51 @@ describe("hex decoding refuses what the oracle refuses", () => {
 	// The earlier version of this replay asserted only that verification returned false,
 	// which is true for every vector either way — reverting both hexToBytes copies to the
 	// lenient parseInt form left the whole suite green.
+	// The ACCEPTANCE decoder is a second copy of the same rule, on a face that answers a
+	// plain boolean. A refused decode and a signature that merely does not match both read
+	// false, so no vector spliced into a signature can separate them — which is how this
+	// half stayed ungated while the offer half was pinned.
+	//
+	// What separates them is a value a LENIENT decoder reads as the RIGHT bytes. parseInt
+	// reads " a" as 0x0a, exactly like "0a", so a genuine signature with one "0a" pair
+	// rewritten as " a" verifies under the lenient decoder and is refused by the strict
+	// one. That is the mutation this test exists to fail.
+	it("a value only a lenient decoder would accept does not verify", async () => {
+		const kp = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
+			"sign",
+			"verify",
+		])) as CryptoKeyPair;
+		const base = {
+			offerSig: "abcd",
+			requesterId: "agent-1",
+			requesterDomain: "agent.test",
+		};
+
+		// Sign until the signature carries an "0a" pair at an even offset.
+		let genuine = "";
+		let input = { ...base, idempotencyKey: "idem-0" };
+		for (let i = 0; i < 200 && genuine === ""; i += 1) {
+			input = { ...base, idempotencyKey: `idem-${i}` };
+			const hex = await signOfferAcceptance(input, kp.privateKey);
+			for (let j = 0; j + 2 <= hex.length; j += 2) {
+				if (hex.slice(j, j + 2) === "0a") {
+					genuine = hex;
+					break;
+				}
+			}
+		}
+		expect(genuine, "no signature carried an 0a pair in 200 attempts").not.toBe("");
+
+		// The control: it verifies as issued.
+		expect(await verifyOfferAcceptance(input, genuine, kp.publicKey)).toBe(true);
+
+		const at = genuine.indexOf("0a") - (genuine.indexOf("0a") % 2);
+		const lenientOnly = `${genuine.slice(0, at)} a${genuine.slice(at + 2)}`;
+		expect(lenientOnly).not.toBe(genuine);
+		// parseInt(" a", 16) === 0x0a, so a lenient decoder rebuilds the exact signature.
+		expect(await verifyOfferAcceptance(input, lenientOnly, kp.publicKey)).toBe(false);
+	});
+
 	for (const v of doc.hex_decode) {
 		it(`${v.name}: decodes = ${v.ok}`, async () => {
 			const verifier = createVerifier("strict", {
