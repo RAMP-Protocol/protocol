@@ -339,7 +339,10 @@ def test_a_redirect_is_reported_rather_than_followed(face: Face) -> None:
 
     with pytest.raises(CallError) as excinfo:
         face.run(client.discover({"exchange": "exchange.test"}))
-    assert excinfo.value.kind is CallErrorKind.REFUSED
+    # Unreachable, not refused: this client did not follow the hop, so the call never
+    # reached a server that could decline it — and a redirect body carries nothing to read
+    # as a verdict, even when it happens to look like a Connect envelope.
+    assert excinfo.value.kind is CallErrorKind.UNREACHABLE
     assert excinfo.value.status == 302
     # One request: the hop was not taken.
     assert len(rec.seen) == 1
@@ -687,3 +690,35 @@ def test_fetch_proves_possession_of_the_signers_key_not_a_second_one(face: Face)
     assert presented == expected, (
         "the delivery proof was minted under a key other than the request signer's"
     )
+
+
+# A rate limit is handed back as the peer sent it, once the parse has GATED it. Pydantic
+# reads reset_at into a datetime and re-renders it, and that round trip is not the identity:
+# ".123Z" comes back ".123000Z", nanosecond precision is truncated, and "+00:00" becomes
+# "Z". Zod keeps whatever the Exchange sent, so handing back the parsed value meant two
+# languages reporting different rate limits for one answer.
+@pytest.mark.parametrize(
+    "reset_at",
+    [
+        "2099-01-01T00:00:00Z",
+        "2099-01-01T00:00:00.123Z",
+        "2099-01-01T00:00:00.123456789Z",
+        "2099-01-01T00:00:00+00:00",
+    ],
+)
+def test_a_rate_limit_is_handed_back_as_the_peer_sent_it(reset_at: str) -> None:
+    from ramp_sdk.client import _verbs
+
+    plan = _verbs.Plan(
+        op="discover", url="u", body=b"", headers={}, timeout=1.0, max_bytes=1 << 20, sent={}
+    )
+    body = json.dumps(
+        {
+            "ver": "1.0",
+            "exchange": "exchange.test",
+            "rate_limit": {"reset_at": reset_at, "remaining": 5},
+        }
+    )
+    result = _verbs.finish_discover(_verbs.ClientConfig(base_url="https://e.test"), plan, 200, body)
+    assert result.rate_limit is not None
+    assert result.rate_limit["reset_at"] == reset_at

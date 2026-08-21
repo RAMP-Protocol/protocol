@@ -165,15 +165,14 @@ def finish_discover(cfg: ClientConfig, plan: Plan, status: int, body: str) -> Di
         # signature covers what the responder sent.
         groups=_discovered_groups(cfg.resolved_verifier(), plan.sent, raw),
         exchange=msg.exchange or "",
-        # From the PARSED message, unlike the offers above: a rate limit is the SDK's own
-        # answer to the caller rather than bytes a signature covers, so it goes through the
-        # schema like every other field.
-        #
-        # Dumped in JSON mode, which is what makes it the same value TypeScript hands back.
-        # Pydantic parses reset_at into a datetime, so a plain model_dump returns an object
-        # that is not JSON-serializable — a caller logging or forwarding the rate limit hits
-        # that — while the Zod schema keeps it the RFC 3339 string it arrived as.
-        rate_limit=msg.rate_limit.model_dump(mode="json") if msg.rate_limit is not None else None,
+        # From the RAW answer, like the offers above, once the parse has GATED it. Pydantic
+        # reads reset_at into a datetime and re-renders it on the way out, and the round
+        # trip is not the identity: ".123Z" comes back ".123000Z", nanosecond precision is
+        # truncated, and "+00:00" becomes "Z". Zod keeps whatever the Exchange sent. Handing
+        # back the parsed value therefore meant two languages reporting different rate
+        # limits for one answer — so the parse decides whether the field is WELL FORMED and
+        # the wire decides what it SAYS.
+        rate_limit=_raw_mapping(raw.get("rate_limit")) if msg.rate_limit is not None else None,
     )
 
 
@@ -498,6 +497,11 @@ def _stamp_envelope(
         or generate_idempotency_key()
     )
     return sent
+
+
+def _raw_mapping(value: Any) -> dict[str, Any] | None:
+    """The peer's own object, once its parsed twin has proved it well formed."""
+    return dict(value) if isinstance(value, dict) else None
 
 
 def _clone(op: str, message: dict[str, Any]) -> dict[str, Any]:

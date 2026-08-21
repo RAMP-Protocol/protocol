@@ -276,7 +276,10 @@ describe("reading an answer", () => {
 			.discover({ exchange: "exchange.test" })
 			.catch((e: unknown) => e)) as RampCallError;
 
-		expect(err.kind).toBe("refused");
+		// Unreachable, not refused: this client did not follow the hop, so the call never
+		// reached a server that could decline it — and a redirect body carries nothing to
+		// read as a verdict, even when it happens to look like a Connect envelope.
+		expect(err.kind).toBe("unreachable");
 		expect(err.status).toBe(302);
 	});
 });

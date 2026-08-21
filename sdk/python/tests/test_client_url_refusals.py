@@ -45,3 +45,33 @@ def test_an_unusable_url_is_refused_without_echoing_it(name: str, url: str) -> N
         vet_signed_url(url)
     assert caught.value.kind is CallErrorKind.MALFORMED, name
     assert _CREDENTIAL not in str(caught.value), f"{name}: the refusal echoed the credential"
+
+
+# The DELIVERY leg's redirect class, which was fixed on the RPC leg only. Worse than a wrong
+# class: the refusal reader ran first and promoted a token out of the redirect body, so a 302
+# carrying {"reason":"moved"} surfaced as though the edge had named a typed refusal.
+@pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
+def test_a_delivery_redirect_is_unreachable_and_promotes_no_token(status: int) -> None:
+    import httpx
+
+    from ramp_sdk import sync as blocking
+    from ramp_sdk.client import ClientConfig
+    from ramp_sdk.signing_transport import SigningTransport
+
+    def respond(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            status,
+            headers={"location": "https://elsewhere.test/x", "content-type": "application/json"},
+            json={"reason": "moved"},
+        )
+
+    config = ClientConfig(
+        base_url="https://exchange.test",
+        requester={"id": "a", "domain": "agent.test", "type": "REQUESTER_TYPE_AGENT"},
+        signer=SigningTransport(signer_seed=bytes(range(32)), keyid="agent.v1"),
+    )
+    client = blocking.Client(config, http=httpx.Client(transport=httpx.MockTransport(respond)))
+    with client, pytest.raises(CallError) as caught:
+        client.fetch("https://edge.test/x")
+    assert caught.value.kind is CallErrorKind.UNREACHABLE
+    assert caught.value.reason is None, "a token was promoted out of a redirect body"

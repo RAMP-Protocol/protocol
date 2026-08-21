@@ -153,6 +153,20 @@ export async function fetchContent(
 		// tightest here, so it is the one an unnegotiated coding overshoots furthest.
 		refuseUnrequestedEncoding(op, response.statusCode, response.headers);
 
+		// A 3xx reached this client only because the dial refused to follow it, so it is a
+		// server that did not answer rather than one that declined — the class every
+		// failure taxonomy here already documents for a redirect. Checked BEFORE the
+		// refusal reader, which would otherwise promote a token out of the redirect body:
+		// a 302 carrying {"reason":"moved"} surfaced as though the edge had named a typed
+		// refusal.
+		if (response.statusCode >= 300 && response.statusCode < 400) {
+			throw new RampCallError({
+				kind: "unreachable",
+				op,
+				status: response.statusCode,
+				cause: new Error("peer answered with a redirect, which this client does not follow"),
+			});
+		}
 		if (response.statusCode < 200 || response.statusCode >= 300) {
 			throw await edgeRefusal(op, response.statusCode, response.body);
 		}

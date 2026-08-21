@@ -316,6 +316,20 @@ export function refuseUnrequestedEncoding(
  * projection connect-go emits there and no server codec replaces.
  */
 export function decodeResponse(op: string, response: UnaryResponse): unknown {
+	// A 3xx before anything is read out of the body. Every leg refuses to follow a
+	// redirect, so one reaching here is a server that did not answer rather than one that
+	// declined — and there is nothing in a redirect body to interpret. Unconditional on
+	// purpose: a 302 carrying a Connect envelope would otherwise be read as the peer's own
+	// verdict, and connect-go has no answer to mirror here because its transport follows
+	// redirects and never surfaces one.
+	if (response.status >= 300 && response.status < 400) {
+		throw new RampCallError({
+			kind: "unreachable",
+			op,
+			status: response.status,
+			cause: new Error("peer answered with a redirect, which this client does not follow"),
+		});
+	}
 	const payload = parseJSON(op, response);
 	if (response.status < 200 || response.status >= 300) {
 		throw connectEnvelopeError(op, response.status, payload);

@@ -5,6 +5,10 @@
 // retrying, so collapsing them either strands a usage report or retries a refusal forever.
 import { describe, expect, it } from "vitest";
 
+import { createServer } from "node:http";
+
+import { Agent } from "undici";
+
 import { RampCallError } from "../client/errors.ts";
 import { fetchContent } from "../client/content.ts";
 import { decodeResponse } from "../client/transport.ts";
@@ -26,6 +30,45 @@ describe("a redirect this client refused to follow", () => {
 			expect((thrown as RampCallError).kind).toBe("unreachable");
 		});
 	}
+});
+
+describe("a redirect on the DELIVERY leg", () => {
+	// The RPC leg was fixed and this one was not, in both ports. Worse than a wrong class:
+	// the refusal reader ran first and promoted a token out of the redirect body, so a 302
+	// carrying {"reason":"moved"} surfaced as though the edge had named a typed refusal.
+	it("is unreachable, and no token is promoted out of its body", async () => {
+		const server = createServer((_req, res) => {
+			res.writeHead(302, {
+				location: "https://elsewhere.test/x",
+				"content-type": "application/json",
+			});
+			res.end('{"reason":"moved"}');
+		});
+		await new Promise<void>((done) => server.listen(0, "127.0.0.1", () => done()));
+		const port = (server.address() as { port: number }).port;
+		const keys = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
+			"sign",
+			"verify",
+		])) as CryptoKeyPair;
+
+		// An explicit dispatcher rather than SKIP_SSRF: the shared one is built once per
+		// process and caches whatever the flag said at first use, so setting it here would
+		// leave every later test in this file dialing unguarded. ALLOW_INSECURE is still
+		// needed — the scheme pre-flight above the dial reads it, not the dispatcher.
+		const saved = process.env["ALLOW_INSECURE"];
+		process.env["ALLOW_INSECURE"] = "true";
+		const failure = (await fetchContent(`http://127.0.0.1:${port}/x`, {
+			keyPair: keys,
+			dispatcher: new Agent(),
+		}).catch((e: unknown) => e)) as RampCallError;
+		if (saved === undefined) delete process.env["ALLOW_INSECURE"];
+		else process.env["ALLOW_INSECURE"] = saved;
+		server.close();
+
+		expect(failure).toBeInstanceOf(RampCallError);
+		expect(failure.kind).toBe("unreachable");
+		expect(failure.reason, "a token was promoted out of a redirect body").toBeUndefined();
+	}, 20000);
 });
 
 describe("a dial the guard refused", () => {

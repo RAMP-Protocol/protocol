@@ -167,6 +167,7 @@ def decode_with_raw(
     a signature covers no such thing. Parsing the body twice would be a second read of the
     same bytes for no gain.
     """
+    _refuse_redirect(op, status)
     payload = _parse_json(op, status, body)
     parsed = _validate(op, status, payload, model)
     return parsed, payload if isinstance(payload, dict) else {}
@@ -180,7 +181,29 @@ def decode(op: str, status: int, body: str, model: type[BaseModel]) -> Any:
     including the lowerCamelCase ``debug`` projection connect-go emits there and no server
     codec replaces.
     """
+    _refuse_redirect(op, status)
     return _validate(op, status, _parse_json(op, status, body), model)
+
+
+_HTTP_MULTIPLE_CHOICES_END = 400
+
+
+def _refuse_redirect(op: str, status: int) -> None:
+    """A 3xx is a server that did not answer, not one that declined.
+
+    Every leg refuses to follow a redirect, so one reaching a reader means the call did not
+    happen — and there is nothing in a redirect body to interpret. Unconditional on purpose:
+    a 302 carrying a Connect envelope would otherwise be read as the peer's own verdict, and
+    connect-go has no answer to mirror here because its transport follows redirects and
+    never surfaces one.
+    """
+    if _HTTP_MULTIPLE_CHOICES <= status < _HTTP_MULTIPLE_CHOICES_END:
+        raise CallError(
+            CallErrorKind.UNREACHABLE,
+            op,
+            status=status,
+            cause="peer answered with a redirect, which this client does not follow",
+        )
 
 
 def _validate(op: str, status: int, payload: Any, model: type[BaseModel]) -> Any:

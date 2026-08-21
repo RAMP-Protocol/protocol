@@ -274,6 +274,18 @@ class Client(_Face):
                 follow_redirects=False,
             ) as response:
                 refuse_unrequested_encoding(op, response)
+                # A 3xx reached this client only because the dial refused to follow it,
+                # so it is a server that did not answer rather than one that declined —
+                # the class every failure taxonomy here already documents for a redirect.
+                # Checked BEFORE the refusal reader, which would otherwise promote a token
+                # out of the redirect body.
+                if response.is_redirect:
+                    raise CallError(
+                        CallErrorKind.UNREACHABLE,
+                        op,
+                        status=response.status_code,
+                        cause="peer answered with a redirect, which this client does not follow",
+                    )
                 if not response.is_success:
                     # A refusal body is a small JSON object carrying a reason token. It is
                     # TRUNCATED rather than refused: past the reason bound there is nothing
