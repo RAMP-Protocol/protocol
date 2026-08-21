@@ -49,6 +49,18 @@
       "bytes": ""
     },
     {
+      "name": "embedded_space",
+      "hex": "00 ff",
+      "ok": false,
+      "bytes": ""
+    },
+    {
+      "name": "embedded_tab",
+      "hex": "00\tff",
+      "ok": false,
+      "bytes": ""
+    },
+    {
       "name": "non_hex_letter",
       "hex": "zz",
       "ok": false,

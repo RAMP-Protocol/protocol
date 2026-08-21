@@ -24,6 +24,7 @@ import pytest
 
 from conftest import GO_TESTDATA, load_json
 from ramp_sdk._wire_names import snake_from_json_name
+from ramp_sdk.core import Mode, StaticOfferKeyResolver, Verifier
 
 _DOC = load_json(GO_TESTDATA / "wire-names-vectors.json")
 _SNAKE: list[dict[str, Any]] = _DOC["snake_from_json_name"]
@@ -43,10 +44,28 @@ def test_snake_from_json_name(vector: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize("vector", _HEX, ids=[v["name"] for v in _HEX])
 def test_hex_decode(vector: dict[str, Any]) -> None:
-    try:
-        decoded = bytes.fromhex(vector["hex"])
-    except ValueError:
-        assert not vector["ok"], f"{vector['name']}: the oracle accepts this and Python does not"
-        return
-    assert vector["ok"], f"{vector['name']}: Python accepts this and the oracle does not"
-    assert decoded.hex() == vector["bytes"]
+    """Driven through the Verifier, whose REJECTION REASON separates the two outcomes.
+
+    ``"offer signature is not valid hex"`` means the decode refused the value; ``"offer
+    signature invalid"`` means it decoded and did not match. Both languages already word it
+    that way, so the corpus is asserted through a public face and nothing new is exported.
+
+    Asserting only that verification failed would assert nothing: it fails for every vector
+    either way, which is how the TypeScript half of this replay stayed green while its
+    decoder was lenient.
+    """
+    verifier = Verifier(
+        mode=Mode.STRICT,
+        resolver=StaticOfferKeyResolver({"e.test": bytes(32)}),
+        now=lambda: 0,
+    )
+    result = verifier.sort(
+        [{"exchange": "e.test", "signature": vector["hex"], "expires_at": "2099-01-01T00:00:00Z"}]
+    )
+    assert not result.verified
+    reason = result.rejected[0].reason
+    refused_the_decode = "not valid hex" in reason
+    assert refused_the_decode is (not vector["ok"]), (
+        f"{vector['name']}: oracle says decodes={vector['ok']}, "
+        f"this reader says decodes={not refused_the_decode} ({reason})"
+    )

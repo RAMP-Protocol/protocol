@@ -16,9 +16,11 @@ package helpers_test
 // the character after each underscore, and a proto field name is [a-z_][a-z0-9_]*.
 //
 // The second is hex, which is how Offer.signature and the acceptance signature arrive.
-// Go's hex.DecodeString and Python's bytes.fromhex refuse a sign, whitespace and an odd
-// length; JavaScript's parseInt accepts all three, so one language read a signature where
-// two read garbage.
+// Every language had its own leniency here and none of them matched: JavaScript's parseInt
+// accepts a sign, leading whitespace and a trailing tail, and Python's bytes.fromhex skips
+// ASCII whitespace BETWEEN bytes (CPython has done so since 3.7), so "00 ff" decoded to two
+// bytes there and to nothing in Go. The value is a peer's and carries no proto pattern
+// constraint, so the three had to be made to agree on what is a signature and what is not.
 //
 // Neither rule is captured from a round trip, because neither involves one — they are
 // pure string decisions. What the corpus does is make the three languages answer the same
@@ -96,6 +98,11 @@ var hexCases = []struct{ name, value string }{
 	{"leading_sign_plus", "+f"},
 	{"leading_space", " a"},
 	{"trailing_space", "a "},
+	// Whitespace BETWEEN bytes, with an even count on either side of it. The earlier two
+	// cases were passing in Python for the wrong reason — stripping left an odd length —
+	// so neither of them saw the divergence they were meant to catch.
+	{"embedded_space", "00 ff"},
+	{"embedded_tab", "00\tff"},
 	{"non_hex_letter", "zz"},
 	{"embedded_null", "0\x00"},
 }

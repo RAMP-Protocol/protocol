@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import base64
 import enum
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -348,9 +349,8 @@ class Verifier:
         sig_hex = offer.get("signature")
         if not isinstance(sig_hex, str):
             return "offer signature is missing"
-        try:
-            sig = bytes.fromhex(sig_hex)
-        except ValueError:
+        sig = _hex_bytes(sig_hex)
+        if sig is None:
             return "offer signature is not valid hex"
 
         payload = canonical_offer_payload(offer)
@@ -422,6 +422,21 @@ def jcs_acceptance_payload(
     return rfc8785.dumps({k: v for k, v in payload.items() if v != ""})
 
 
+#: The shape a hex-encoded signature may have. Checked BEFORE ``bytes.fromhex``, which
+#: skips ASCII whitespace BETWEEN bytes — CPython has done so since 3.7 — and would read
+#: ``"00 ff"`` as two bytes where Go's ``hex.DecodeString`` and the TypeScript decoder both
+#: refuse it. The value is a peer's and carries no proto pattern constraint, so the three
+#: languages have to agree on what is a signature and what is garbage.
+_HEX = re.compile(r"\A(?:[0-9a-fA-F]{2})*\Z")
+
+
+def _hex_bytes(value: str) -> bytes | None:
+    """Decode a hex signature, or ``None`` when it is not one."""
+    if not _HEX.match(value):
+        return None
+    return bytes.fromhex(value)
+
+
 def sign_offer_acceptance_jcs(
     *,
     seed: bytes,
@@ -457,9 +472,12 @@ def verify_offer_acceptance_jcs(
         requester_domain=requester_domain,
         idempotency_key=idempotency_key,
     )
+    signature = _hex_bytes(signature_hex)
+    if signature is None:
+        return False
     pub = base64.b64decode(pubkey_b64)
     try:
-        Ed25519PublicKey.from_public_bytes(pub).verify(bytes.fromhex(signature_hex), payload)
+        Ed25519PublicKey.from_public_bytes(pub).verify(signature, payload)
     except (InvalidSignature, ValueError):
         return False
     return True

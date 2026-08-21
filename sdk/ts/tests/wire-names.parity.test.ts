@@ -16,7 +16,7 @@
 // accepted all three, so this language read a signature where the other two read garbage.
 import { describe, expect, it } from "vitest";
 
-import { verifyOfferAcceptance } from "../src/acceptance.ts";
+import { createVerifier } from "../core/verifier.ts";
 import { snakeFromJsonName } from "../src/wire-names.ts";
 import vectorsFile from "../../go/helpers/testdata/wire-names-vectors.json";
 
@@ -46,30 +46,30 @@ describe("hex decoding refuses what the oracle refuses", () => {
 		expect(doc.hex_decode.some((v) => !v.ok)).toBe(true);
 	});
 
-	// Driven through a public face that decodes a signature, rather than a private
-	// helper: what matters is that a value the oracle calls garbage cannot verify here.
-	// A refused decode and a decode that simply does not match both answer false, so the
-	// accepted vectors are what make the refusals meaningful — they prove the face does
-	// reach the decoder.
+	// Driven through the Verifier, whose REJECTION REASON distinguishes the two outcomes:
+	// "offer signature is not valid hex" means the decode refused the value, and "offer
+	// signature invalid" means it decoded and did not match. Both languages already word it
+	// that way, so the corpus is asserted through a public face and nothing new is exported.
+	//
+	// The earlier version of this replay asserted only that verification returned false,
+	// which is true for every vector either way — reverting both hexToBytes copies to the
+	// lenient parseInt form left the whole suite green.
 	for (const v of doc.hex_decode) {
-		it(`${v.name} decodes: ${v.ok}`, async () => {
-			const keys = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
-				"sign",
-				"verify",
-			])) as CryptoKeyPair;
-			const verified = await verifyOfferAcceptance(
-				{
-					offerSig: "sig",
-					requesterId: "a",
-					requesterDomain: "agent.test",
-					idempotencyKey: "k",
-				},
-				v.hex,
-				keys.publicKey,
-			);
-			// Never true — the signature is not over these bytes. The assertion is that it
-			// RETURNS rather than throwing, for every input the oracle has an answer for.
-			expect(verified).toBe(false);
+		it(`${v.name}: decodes = ${v.ok}`, async () => {
+			const verifier = createVerifier("strict", {
+				resolve: async () => new Uint8Array(32) as Uint8Array<ArrayBuffer>,
+				now: () => 0,
+			});
+			const sorted = await verifier.sort([
+				{ exchange: "e.test", signature: v.hex, expires_at: "2099-01-01T00:00:00Z" },
+			]);
+			expect(sorted.verified).toHaveLength(0);
+			const reason = sorted.rejected[0]?.reason ?? "";
+			const refusedTheDecode = reason.includes("not valid hex");
+			expect(
+				refusedTheDecode,
+				`${v.name}: oracle says decodes=${v.ok}, this reader says decodes=${!refusedTheDecode} (${reason})`,
+			).toBe(!v.ok);
 		});
 	}
 });
