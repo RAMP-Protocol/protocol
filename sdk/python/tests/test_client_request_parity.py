@@ -129,6 +129,21 @@ def test_client_request_vector_set_nonempty() -> None:
     assert len(_VECTORS) > 0
 
 
+def test_one_verb_addresses_one_rpc() -> None:
+    """The ``verb`` column, which is the whole claim the three clients make to each other.
+
+    "The same verbs, with the same names" only means something if a verb names ONE RPC. A
+    client can export ``report_usage`` and address DisputeTransaction; the per-vector path
+    assertion below cannot see that, because it compares each vector to its own recorded
+    path. Grouping by verb is what catches one verb reaching two methods.
+    """
+    paths: dict[str, set[str]] = {}
+    for vector in _VECTORS:
+        paths.setdefault(vector["verb"], set()).add(vector["path"])
+    ambiguous = {verb: sorted(p) for verb, p in paths.items() if len(p) > 1}
+    assert not ambiguous, f"a verb addressing more than one RPC: {ambiguous}"
+
+
 @pytest.mark.parametrize("vector", _VECTORS, ids=[v["name"] for v in _VECTORS])
 def test_the_verb_addresses_the_same_rpc_and_stamps_the_same_envelope(
     vector: dict[str, Any],

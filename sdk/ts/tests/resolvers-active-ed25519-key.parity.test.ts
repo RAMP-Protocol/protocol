@@ -123,4 +123,15 @@ describe("sdk/ts activeEd25519Key matches the sdk/go active-key oracle", () => {
 			expect(withExpiry?.notAfter).toBe(Date.parse(v.expected_not_after));
 		});
 	}
+
+	it("every vector says what it is for", () => {
+		// The `note` column, which explains what each case is testing. Read here rather than
+		// left to a human: an unread column is one a later emitter can stop filling without
+		// anything noticing, and this one is what makes a failure legible — the label says
+		// which case broke, the note says what it was protecting.
+		const unexplained = c.vectors
+			.filter((v) => !String(v.note ?? "").trim())
+			.map((v) => v.label);
+		expect(unexplained).toEqual([]);
+	});
 });

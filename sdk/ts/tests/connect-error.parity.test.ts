@@ -45,6 +45,18 @@ describe("sdk/ts reads a Connect error envelope the way the sdk/go oracle does",
 		expect(vectors.length).toBeGreaterThan(0);
 	});
 
+	it("every vector records the status connect-go maps its code onto", () => {
+		// Recorded by the emitter and, until now, read by nobody — so the corpus carried a
+		// column that asserted nothing. It matters because this reader is reached from a
+		// non-2xx, and which non-2xx decides the failure CLASS when an envelope names no
+		// code of its own.
+		for (const v of vectors) {
+			expect(Number.isInteger(v.http_status), v.name).toBe(true);
+			expect(v.http_status, `${v.name}: code ${v.code}`).toBeGreaterThanOrEqual(400);
+			expect(v.http_status).toBeLessThan(600);
+		}
+	});
+
 	for (const v of vectors) {
 		it(`extracts the Go projection: ${v.name}`, () => {
 			const detail = errorDetailFrom(v.envelope);

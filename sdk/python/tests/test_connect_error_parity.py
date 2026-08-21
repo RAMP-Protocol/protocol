@@ -39,6 +39,16 @@ def test_reader_extracts_go_projection_from_the_envelope(vector: dict) -> None:
     detail = error_detail_from(vector["envelope"])
     expect = vector["expect"]
 
+    # The status connect-go maps this code onto. Recorded by the emitter and, until now,
+    # read by nobody — so the corpus carried a column that asserted nothing. It matters
+    # because the reader below is reached from a non-2xx, and which non-2xx decides the
+    # failure CLASS when an envelope names no code of its own.
+    assert isinstance(vector["http_status"], int)
+    assert 400 <= vector["http_status"] < 600, (
+        f"{vector['name']}: code {vector['code']!r} maps to {vector['http_status']}, "
+        "which is not an error status"
+    )
+
     if not expect["has_detail"]:
         assert detail is None, "an envelope carrying no ErrorDetail must read as none"
         return

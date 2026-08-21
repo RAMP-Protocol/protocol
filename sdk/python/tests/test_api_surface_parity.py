@@ -113,7 +113,10 @@ _TOP_TYPE_RE = re.compile(r"^type ([A-Z][A-Za-z0-9_]*)\b")
 _TOP_CONST_RE = re.compile(r"^const ([A-Z][A-Za-z0-9_]*)\b")
 _TOP_VAR_RE = re.compile(r"^var ([A-Z][A-Za-z0-9_]*)\b")
 _GROUP_OPEN_RE = re.compile(r"^(const|var) \($")
-_GROUP_ENTRY_RE = re.compile(r"^\t([A-Z][A-Za-z0-9_]*) ")
+# A group member, which go doc renders tab-indented. The trailing name may stand ALONE:
+# after the first line of an iota run every later constant is written as just its name, so
+# requiring a following token missed all but the first member of every enum-like type.
+_GROUP_ENTRY_RE = re.compile(r"^\t([A-Z][A-Za-z0-9_]*)(?:\s|$)")
 
 
 def _parse_go_doc(text: str) -> set[str]:
@@ -122,6 +125,14 @@ def _parse_go_doc(text: str) -> set[str]:
     Grouped ``const (...)`` / ``var (...)`` blocks are expanded (plain ``go doc``
     truncates them with ``...``). Methods (``func (recv T) M``) are NOT captured — they
     are part of their type, matching the top-level surface.
+
+    A const group is expanded WHEREVER it appears, and that is the part this originally got
+    wrong. ``go doc`` renders the constants of an enum-like type under that type, inside
+    TYPES rather than CONSTANTS, so a parser that only opened groups under CONSTANTS could
+    not see them: 46 exported members across the five packages — every CallErrorKind, every
+    FetchFailure, every AudienceVerdict, both core Modes — were outside the surface this
+    gate compares, and the gate exists precisely to refuse an export that is neither mapped
+    nor excluded.
     """
     syms: set[str] = set()
     section: str | None = None
@@ -132,18 +143,21 @@ def _parse_go_doc(text: str) -> set[str]:
             section = m.group(1)
             in_group = False
             continue
+        # A group is expanded in ANY section — see the docstring. Checked before the
+        # per-section branches, because the group's own members are what matter and the
+        # section only says where go doc chose to render them.
+        if _GROUP_OPEN_RE.match(line):
+            in_group = True
+            continue
+        if in_group:
+            if line == ")":
+                in_group = False
+                continue
+            gm = _GROUP_ENTRY_RE.match(line)
+            if gm:
+                syms.add(gm.group(1))
+            continue
         if section in ("CONSTANTS", "VARIABLES"):
-            if _GROUP_OPEN_RE.match(line):
-                in_group = True
-                continue
-            if in_group:
-                if line == ")":
-                    in_group = False
-                    continue
-                gm = _GROUP_ENTRY_RE.match(line)
-                if gm:
-                    syms.add(gm.group(1))
-                continue
             single = _TOP_CONST_RE.match(line) or _TOP_VAR_RE.match(line)
             if single:
                 syms.add(single.group(1))
