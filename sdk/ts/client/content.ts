@@ -13,7 +13,7 @@ import { AGENT_KEY_HEADER } from "../src/pop.ts";
 import { retrievalAuthFailureDetail } from "../src/errordetail.ts";
 import { RequestIDHeader } from "../src/wire.ts";
 import { IDENTITY_ENCODING, refuseUnrequestedEncoding } from "./transport.ts";
-import { requireScheme, skipSSRF, ssrfGuard } from "../resolvers/http.ts";
+import { requireScheme, skipSSRF, ssrfGuard, SsrfBlockedError } from "../resolvers/http.ts";
 import { RampCallError } from "./errors.ts";
 import { concat } from "./send.ts";
 
@@ -146,7 +146,7 @@ export async function fetchContent(
 			// host chosen by another party, so the address pin applies in every case.
 			dispatcher: opts.dispatcher ?? sharedContentDispatcher(),
 		}).catch((cause: unknown) => {
-			throw new RampCallError({ kind: "unreachable", op, cause: redact(cause) });
+			throw dialFailure(op, cause);
 		});
 
 		// Before either branch reads a byte, refusal included: its 4 KiB bound is the
@@ -185,7 +185,7 @@ function vetDialable(op: string, signedURL: string): void {
 		requireScheme(signedURL);
 	} catch (cause) {
 		// The URL is not echoed: it carries a live credential in its query.
-		throw new RampCallError({ kind: "unreachable", op, cause: redact(cause) });
+		throw dialFailure(op, cause);
 	}
 }
 
@@ -383,9 +383,35 @@ function headerValue(
 // delivery fetch that query IS the credential, and on a refused redirect it is the
 // credential of a URL the FIRST HOP chose, so a message carrying it leaks even when this
 // module's own wording is already redacted.
+//
+// It returns a fresh Error rather than wrapping, which is the point: attaching the original
+// as a `cause` would put the URL straight back into anything that walks the chain. So the
+// CLASS has to be read off the original before it is discarded — see dialFailure.
 function redact(cause: unknown): Error {
 	const message = cause instanceof Error ? cause.message : String(cause);
 	return new Error(message.replace(/\bhttps?:\/\/\S+/gi, "<url redacted>"));
+}
+
+// dialFailure classifies what the dial raised, then redacts it.
+//
+// The order matters and used to be the other way round. Redacting first replaced the cause
+// with a fresh Error, so an address-pin refusal — a verdict about where this URL points,
+// which will refuse identically forever — was indistinguishable from a momentary network
+// blip and reported as retryable. The class is read while the original is still in hand;
+// only the message survives into the failure.
+function dialFailure(op: string, cause: unknown): RampCallError {
+	const refusedByTheGuard =
+		cause instanceof SsrfBlockedError ||
+		(cause as { cause?: unknown })?.cause instanceof SsrfBlockedError;
+	return new RampCallError({
+		// A guard refusal is unreachable rather than not_sent, matching what Go answers for
+		// the same condition: there it surfaces through the RoundTripper, so the client
+		// reads it as a dial that did not happen. Both mean nothing was sent.
+		kind: "unreachable",
+		op,
+		...(refusedByTheGuard ? { reason: "ssrf_guard" } : {}),
+		cause: redact(cause),
+	});
 }
 
 // The delivery leg's dispatcher, guarded like every host chosen by another party and

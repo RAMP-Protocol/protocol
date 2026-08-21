@@ -144,6 +144,16 @@ export function malformed(op: string, cause: unknown): RampCallError {
  * reported rather than mirrored by hand.
  */
 const STATUS_CODES: Readonly<Record<number, string>> = {
+	// A 3xx reached this client only because the send refused to follow it, and every leg
+	// refuses. That is a server that did not answer the call, not one that declined it —
+	// which is what all three failure taxonomies say a redirect is. connect-go maps these
+	// to CodeUnknown, but it never sees one: its transport follows redirects, so the row is
+	// unreachable there rather than decided.
+	301: "unavailable",
+	302: "unavailable",
+	303: "unavailable",
+	307: "unavailable",
+	308: "unavailable",
 	400: "internal",
 	401: "unauthenticated",
 	403: "permission_denied",

@@ -323,12 +323,25 @@ class BrokerClient(_Face):
 def _fetch_inputs(
     config: ClientConfig, signed_url: str
 ) -> tuple[dict[str, str], float, int]:
-    """The proof headers, the deadline and the body cap for one delivery fetch.
+    """The proof headers, what is LEFT of the deadline, and the body cap for one fetch.
 
-    The deadline covers proof minting as well as the round trip: minting may call out to a
-    custody backend bounded only by that backend's own client, and a timeout covering the
-    round trip alone would leave "bounds one content fetch" untrue against a degraded
-    custody service. A batch pays that cost once per item.
+    The deadline covers proof minting as well as the round trip. Minting may call out to a
+    custody backend bounded only by that backend's own client, so a timeout applied to the
+    round trip alone leaves "bounds one content fetch" untrue against a degraded custody
+    service — the call simply takes as long as signing takes, and then starts its own full
+    budget on top. Measured before this: a 0.5 s budget against a 3 s signer completed at
+    3.0 s.
+
+    So the clock starts here and what is returned is the REMAINDER. A budget already spent
+    on signing is not signable in time, which is the answer Go gives for the same condition
+    — its Fetch runs one context across both halves, and a ProofSigner that never answers
+    returns FetchNotSignable on the configured deadline.
+
+    It does not INTERRUPT minting: ``sign_agent_binding`` takes no deadline, so a signer
+    that never returns still never returns. What this bounds is the total, which is the
+    property that was untrue — the round trip used to start a fresh full budget on top of
+    whatever signing had already spent. The TypeScript client's RPC leg is bounded the same
+    way and for the same reason.
     """
     if config.signer is None:
         raise CallError(
@@ -339,6 +352,8 @@ def _fetch_inputs(
                 "— the same key the request is signed with"
             ),
         )
+    budget = config.content_timeout_sec or DEFAULT_CONTENT_TIMEOUT_SEC
+    started = time.monotonic()
     window = config.proof_window or clock_window(_now, DEFAULT_PROOF_WINDOW_SEC)
     headers = proof_headers(
         signed_url,
@@ -346,11 +361,14 @@ def _fetch_inputs(
         window=window,
         request_id=config.request_id,
     )
-    return (
-        headers,
-        config.content_timeout_sec or DEFAULT_CONTENT_TIMEOUT_SEC,
-        config.max_content_bytes or DEFAULT_MAX_CONTENT_BYTES,
-    )
+    remaining = budget - (time.monotonic() - started)
+    if remaining <= 0:
+        raise CallError(
+            CallErrorKind.NOT_SIGNABLE,
+            "fetch content",
+            cause=f"minting the proof of possession took the whole {budget}s budget",
+        )
+    return (headers, remaining, config.max_content_bytes or DEFAULT_MAX_CONTENT_BYTES)
 
 
 def _now() -> float:

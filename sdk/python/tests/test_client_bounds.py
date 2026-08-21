@@ -21,6 +21,7 @@ import contextlib
 import http.server
 import socketserver
 import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -207,3 +208,32 @@ def test_the_broker_client_is_a_context_manager() -> None:
             return broker is not None
 
     assert asyncio.run(run()) is True
+
+
+def test_the_delivery_deadline_covers_proof_minting() -> None:
+    """The budget bounds the whole fetch, not the round trip after signing finished.
+
+    Minting may call out to a custody backend bounded only by that backend's own client, so
+    a timeout applied to the round trip alone left "bounds one content fetch" untrue: the
+    call took as long as signing took and then started a fresh full budget on top. Measured
+    before this at 3.0 s against a 0.5 s budget.
+
+    NOT_SIGNABLE, which is what Go answers for the same condition — its Fetch runs one
+    context across both halves. It does not interrupt signing; what it bounds is the total.
+    """
+
+    class _SlowSigner(SigningTransport):
+        def sign_agent_binding(self, *, url: str, window: Any) -> tuple[str, str, str]:
+            time.sleep(0.3)
+            return super().sign_agent_binding(url=url, window=window)
+
+    config = ClientConfig(
+        base_url="https://exchange.test",
+        requester=_REQUESTER,
+        signer=_SlowSigner(signer_seed=_SEED, keyid="agent.v1"),
+        content_timeout_sec=0.05,
+    )
+    with blocking.Client(config) as client, pytest.raises(CallError) as caught:
+        client.fetch("https://edge.test/x")
+    assert caught.value.kind is CallErrorKind.NOT_SIGNABLE
+    assert "budget" in str(caught.value)

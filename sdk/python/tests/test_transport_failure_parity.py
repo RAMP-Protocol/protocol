@@ -51,3 +51,15 @@ def test_an_answer_that_did_not_come_from_the_service(vector: dict[str, Any]) ->
     # The label and the consequence are pinned together: comparing only the string would
     # still pass if the two classes swapped meanings.
     assert (failure.kind is CallErrorKind.UNREACHABLE) is vector["retryable"]
+
+
+# A redirect this client refused to follow. Every leg refuses, so a 3xx reaching the decode
+# means the server did not answer the call rather than declining it — which is what all
+# three failure taxonomies already document a redirect as. It is not in the captured corpus
+# because connect-go never sees one: its transport follows redirects, so the row is
+# unreachable there rather than decided.
+@pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
+def test_a_refused_redirect_is_unreachable_not_refused(status: int) -> None:
+    with pytest.raises(CallError) as caught:
+        decode("discover", status, "", ResourceResponse)
+    assert caught.value.kind is CallErrorKind.UNREACHABLE

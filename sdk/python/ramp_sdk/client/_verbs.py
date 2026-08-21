@@ -167,8 +167,13 @@ def finish_discover(cfg: ClientConfig, plan: Plan, status: int, body: str) -> Di
         exchange=msg.exchange or "",
         # From the PARSED message, unlike the offers above: a rate limit is the SDK's own
         # answer to the caller rather than bytes a signature covers, so it goes through the
-        # schema like every other field. TypeScript hands back the parsed value too.
-        rate_limit=msg.rate_limit.model_dump() if msg.rate_limit is not None else None,
+        # schema like every other field.
+        #
+        # Dumped in JSON mode, which is what makes it the same value TypeScript hands back.
+        # Pydantic parses reset_at into a datetime, so a plain model_dump returns an object
+        # that is not JSON-serializable — a caller logging or forwarding the rate limit hits
+        # that — while the Zod schema keeps it the RFC 3339 string it arrived as.
+        rate_limit=msg.rate_limit.model_dump(mode="json") if msg.rate_limit is not None else None,
     )
 
 
