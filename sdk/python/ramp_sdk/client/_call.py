@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import ValidationError
 from wire.base import JSON_NAME_ALIAS_ERROR
 
+from ramp_sdk._jsondepth import _raw_nesting_depth
 from ramp_sdk.errordetail import error_detail_from
 from ramp_sdk.wire import (
     ConnectProtocolVersion,
@@ -207,7 +208,31 @@ def _schema_failure(op: str, exc: ValidationError, summary: str) -> CallError:
     return malformed(op, summary)
 
 
+#: How deep a peer's answer may nest.
+#:
+#: The same 32 the error-detail reader uses and the protocol sets for a stranger's JSON in
+#: ``AccountRegistration.data_schema``, so one number covers how deep any document this SDK
+#: did not write may be. The deepest instance in the whole conformance corpus is 5.
+_MAX_BODY_DEPTH = 32
+
+
 def _parse_json(op: str, status: int, body: str) -> Any:
+    # Depth BEFORE the parse, because ``json.loads`` descends recursively and aborts on a
+    # deep document by raising ``RecursionError`` — which is not a ``ValueError``, so the
+    # handler below never saw it, and not a failure this package says it raises. A 40 KB
+    # body, far under the read cap, threw an untyped exception out of every verb, on the
+    # success path as well as the error path.
+    #
+    # A check placed after the parse would be reached only by documents harmless enough to
+    # parse. The scan is lexical and shared with the registration-schema compiler, which
+    # documents the same trap; counting needs no recursion.
+    if _raw_nesting_depth(body.encode("utf-8", errors="replace")) > _MAX_BODY_DEPTH:
+        raise CallError(
+            CallErrorKind.MALFORMED,
+            op,
+            status=status,
+            cause=f"answer nests deeper than {_MAX_BODY_DEPTH} containers",
+        )
     try:
         return json.loads(body or "{}")
     except ValueError as exc:

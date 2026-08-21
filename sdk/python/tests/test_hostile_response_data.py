@@ -120,3 +120,44 @@ def test_a_call_on_a_closed_client_is_a_typed_refusal() -> None:
         with pytest.raises(CallError) as caught:
             call()
         assert caught.value.kind is CallErrorKind.NOT_SENT
+
+
+# The parse ABOVE the normalizer, which the previous round left unguarded. json.loads
+# descends recursively and raises RecursionError on a deep document — not a ValueError, so
+# the handler never caught it, and not a failure this package says it raises. A 40 KB body,
+# far under the 1 MiB read cap, threw an untyped exception out of every verb.
+#
+# Both status bands, because the parse runs before the status is consulted: this was
+# reachable on the SUCCESS path too, not only where a hostile peer is expected.
+@pytest.mark.parametrize("status", [200, 500])
+@pytest.mark.parametrize("depth", [5, 31, 33, 20_000])
+def test_a_deeply_nested_body_is_a_typed_failure(depth: int, status: int) -> None:
+    from ramp_sdk.client._call import decode
+    from ramp_sdk.client.errors import CallError
+    from wire.models import ResourceResponse
+
+    body = "[" * depth + "]" * depth
+    with pytest.raises(CallError):
+        decode("discover", status, body, ResourceResponse)
+
+
+def test_the_depth_bound_admits_every_real_message() -> None:
+    """The bound has to be above the contract, or it refuses conformant answers.
+
+    The deepest instance in the whole conformance corpus is 5 containers; the bound is 32,
+    the number the protocol already sets for a stranger's JSON.
+    """
+    import json
+    import pathlib
+
+    from ramp_sdk._jsondepth import _raw_nesting_depth
+    from ramp_sdk.client._call import _MAX_BODY_DEPTH
+
+    corpus = pathlib.Path(__file__).resolve().parents[3] / "conformance" / "corpus" / "cases.json"
+    deepest = max(
+        _raw_nesting_depth(json.dumps(case["json"]).encode())
+        for case in json.loads(corpus.read_text())
+    )
+    assert deepest < _MAX_BODY_DEPTH, (
+        f"the deepest contract instance nests {deepest} and the bound is {_MAX_BODY_DEPTH}"
+    )
