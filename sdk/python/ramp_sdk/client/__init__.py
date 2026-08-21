@@ -39,7 +39,12 @@ from ._call import (
     Validation,
     as_call_error,
 )
-from ._read import IDENTITY_ENCODING, bounded_chunks, rpc_headers
+from ._read import (
+    IDENTITY_ENCODING,
+    bounded_chunks,
+    refuse_unrequested_encoding,
+    rpc_headers,
+)
 from ._verbs import ClientConfig
 from .content import (
     DEFAULT_CONTENT_TIMEOUT_SEC,
@@ -143,6 +148,7 @@ class _Face:
                 timeout=plan.timeout,
                 follow_redirects=False,
             ) as response:
+                refuse_unrequested_encoding(plan.op, response)
                 read = bounded_chunks(plan.op, plan.max_bytes, response.status_code)
                 async for chunk in response.aiter_bytes():
                     read.add(chunk)
@@ -248,6 +254,7 @@ class Client(_Face):
                 timeout=timeout,
                 follow_redirects=False,
             ) as response:
+                refuse_unrequested_encoding(op, response)
                 if not response.is_success:
                     # A refusal body is a small JSON object carrying a reason token. It is
                     # TRUNCATED rather than refused: past the reason bound there is nothing

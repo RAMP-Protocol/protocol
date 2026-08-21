@@ -12,6 +12,7 @@ import type { Window } from "../core/window.ts";
 import { AGENT_KEY_HEADER } from "../src/pop.ts";
 import { retrievalAuthFailureDetail } from "../src/errordetail.ts";
 import { RequestIDHeader } from "../src/wire.ts";
+import { IDENTITY_ENCODING, refuseUnrequestedEncoding } from "./transport.ts";
 import { requireScheme, skipSSRF, ssrfGuard } from "../resolvers/http.ts";
 import { RampCallError } from "./errors.ts";
 import { concat } from "./send.ts";
@@ -125,6 +126,7 @@ export async function fetchContent(
 			[AGENT_KEY_HEADER]: proof.agentKey,
 			"signature-input": proof.signatureInput,
 			signature: proof.signature,
+			...IDENTITY_ENCODING,
 		};
 		// Stamped BESIDE the proof rather than covered by it: the correlation id
 		// identifies the request in two sets of logs, it authorises nothing. It matters on
@@ -146,6 +148,10 @@ export async function fetchContent(
 		}).catch((cause: unknown) => {
 			throw new RampCallError({ kind: "unreachable", op, cause: redact(cause) });
 		});
+
+		// Before either branch reads a byte, refusal included: its 4 KiB bound is the
+		// tightest here, so it is the one an unnegotiated coding overshoots furthest.
+		refuseUnrequestedEncoding(op, response.statusCode, response.headers);
 
 		if (response.statusCode < 200 || response.statusCode >= 300) {
 			throw await edgeRefusal(op, response.statusCode, response.body);

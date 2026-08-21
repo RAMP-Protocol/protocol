@@ -21,7 +21,12 @@ import { Agent, type Dispatcher, request as undiciRequest } from "undici";
 
 import { requireScheme, skipSSRF, ssrfGuard } from "../resolvers/http.ts";
 import { RampCallError } from "./errors.ts";
-import type { UnaryRequest, UnaryResponse, UnarySend } from "./transport.ts";
+import {
+	refuseUnrequestedEncoding,
+	type UnaryRequest,
+	type UnaryResponse,
+	type UnarySend,
+} from "./transport.ts";
 
 /** How the default send decides whether to dial through the SSRF guard. */
 export interface SendOptions {
@@ -63,6 +68,10 @@ export function createUnarySend(opts: SendOptions): UnarySend {
 			// the refusal is the absence of that interceptor rather than a setting.
 			maxRedirections: 0,
 		});
+		// Before a byte is read: a coding the client did not negotiate cannot be bounded,
+		// because a decoder expands a whole raw read at once. The headers are only visible
+		// here, which is why the check lives in the send rather than beside the decode.
+		refuseUnrequestedEncoding(req.op, response.statusCode, response.headers);
 		return {
 			status: response.statusCode,
 			body: await readBounded(response.body, req.maxBytes, req.op),

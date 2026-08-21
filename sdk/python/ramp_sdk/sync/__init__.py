@@ -19,7 +19,12 @@ import httpx
 
 from ramp_sdk.client import _fetch_inputs, _verbs
 from ramp_sdk.client._call import as_call_error
-from ramp_sdk.client._read import IDENTITY_ENCODING, bounded_chunks, rpc_headers
+from ramp_sdk.client._read import (
+    IDENTITY_ENCODING,
+    bounded_chunks,
+    refuse_unrequested_encoding,
+    rpc_headers,
+)
 from ramp_sdk.client._verbs import ClientConfig
 from ramp_sdk.client.content import (
     MAX_ERROR_BODY_BYTES,
@@ -93,6 +98,7 @@ class _Face:
                 timeout=plan.timeout,
                 follow_redirects=False,
             ) as response:
+                refuse_unrequested_encoding(plan.op, response)
                 read = bounded_chunks(plan.op, plan.max_bytes, response.status_code)
                 for chunk in response.iter_bytes():
                     read.add(chunk)
@@ -155,6 +161,7 @@ class Client(_Face):
                 timeout=timeout,
                 follow_redirects=False,
             ) as response:
+                refuse_unrequested_encoding(op, response)
                 if not response.is_success:
                     refusal = b""
                     for chunk in response.iter_bytes():

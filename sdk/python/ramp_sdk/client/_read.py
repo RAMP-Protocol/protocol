@@ -11,11 +11,17 @@ So every leg streams and stops one byte past the cap. Detected, never truncated:
 truncated content that looks whole is worse than a refusal, because the caller has no way
 to tell it is incomplete and on the delivery leg has already paid for it.
 
-``accept-encoding: identity`` rides along for the same reason. Bounding the decoded
-stream is already enough to hold memory, but asking for no coding at all means the cap
-counts the bytes on the wire as well, and it keeps the three languages reading the same
-answer: TypeScript's undici does not decode a content coding, so a client that accepted
-one would be handed octets it then blamed the peer for.
+Streaming alone is NOT enough, which is the part that took a second measurement to see.
+``iter_bytes()`` yields the decoded output of one raw read, and the gzip decoder expands a
+64 KiB raw chunk in a single unbounded ``zlib.decompress()`` — so a peer that gzips anyway
+materialises one chunk far past the cap before the running total can refuse it. Measured at
+70 MiB of growth against a 1 MiB cap.
+
+So the client negotiates ``accept-encoding: identity`` and REFUSES a coding it did not ask
+for. That check, not the running total, is what makes the bound hold at any chunk size: a
+coding on the response is the peer breaking a negotiation it answered. It also keeps the
+three languages reading the same answer — undici does not decode a content coding, so a
+client that accepted one would be handed octets it then blamed the peer for.
 """
 
 from __future__ import annotations
@@ -25,6 +31,8 @@ from typing import TYPE_CHECKING
 from .errors import CallError, CallErrorKind
 
 if TYPE_CHECKING:
+    import httpx
+
     from . import _verbs
 
 #: Asks the peer for no content coding. See the module docstring.
@@ -38,6 +46,31 @@ def over_cap(op: str, max_bytes: int, status: int | None = None) -> CallError:
         op,
         status=status,
         cause=f"body exceeds the {max_bytes} byte cap",
+    )
+
+
+def refuse_unrequested_encoding(op: str, response: httpx.Response) -> None:
+    """Refuse a response carrying a content coding the client did not ask for.
+
+    Every leg sends ``accept-encoding: identity``, so a coding here is the peer answering a
+    negotiation and then ignoring it. It is refused BEFORE the body is read, because that
+    is the only bound that holds at any chunk size: the decoder expands a whole raw read at
+    once, so a running total over decoded chunks can be overshot by however much one chunk
+    happens to inflate to.
+
+    ``identity`` itself is not a coding, and neither is an absent header.
+    """
+    coding = (response.headers.get("content-encoding") or "").strip().lower()
+    if coding in ("", "identity"):
+        return
+    raise CallError(
+        CallErrorKind.MALFORMED,
+        op,
+        status=response.status_code,
+        cause=(
+            f"peer answered with content-encoding {coding!r} after being asked for "
+            "identity; a coding this client did not negotiate cannot be read under a bound"
+        ),
     )
 
 

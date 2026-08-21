@@ -147,6 +147,7 @@ export async function unaryCall(opts: UnaryCallOptions): Promise<unknown> {
 	const headers: Record<string, string> = {
 		"content-type": ContentTypeJSON,
 		[ConnectProtocolVersionHeader]: ConnectProtocolVersion,
+		...IDENTITY_ENCODING,
 	};
 	// Stamped BEFORE the signature so the covered headers are written last and nothing
 	// here can be mistaken for part of the proof. The correlation id is not covered and is
@@ -233,6 +234,46 @@ async function signCall(
 function asCallError(op: string, cause: unknown): RampCallError {
 	if (cause instanceof RampCallError) return cause;
 	return new RampCallError({ kind: "unreachable", op, cause });
+}
+
+/**
+ * IDENTITY_ENCODING asks the peer for no content coding.
+ *
+ * Sending nothing is not the same thing: per RFC 9110 §12.5.3 an absent Accept-Encoding
+ * means ANY coding is acceptable, and undici does not decode one — so a gzipped answer
+ * would arrive as raw octets, fail to parse, and be reported as the peer's fault for
+ * something the peer was entitled to do.
+ */
+export const IDENTITY_ENCODING = { "accept-encoding": "identity" } as const;
+
+/**
+ * refuseUnrequestedEncoding refuses a response carrying a content coding we did not ask for.
+ *
+ * Every leg negotiates identity, so a coding here is the peer answering that negotiation
+ * and then ignoring it. It is refused BEFORE the body is read, which is the only bound
+ * that holds at any chunk size — a decoder expands a whole raw read at once, so a running
+ * total over decoded chunks can be overshot by however much one chunk inflates to. The
+ * same check, for the same reason, is what bounds the Python client.
+ *
+ * `identity` itself is not a coding, and neither is an absent header.
+ */
+export function refuseUnrequestedEncoding(
+	op: string,
+	status: number,
+	headers: Record<string, string | string[] | undefined>,
+): void {
+	const raw = headers["content-encoding"];
+	const coding = (Array.isArray(raw) ? raw.join(",") : (raw ?? "")).trim().toLowerCase();
+	if (coding === "" || coding === "identity") return;
+	throw new RampCallError({
+		kind: "malformed",
+		op,
+		status,
+		cause: new Error(
+			`peer answered with content-encoding "${coding}" after being asked for identity; ` +
+				"a coding this client did not negotiate cannot be read under a bound",
+		),
+	});
 }
 
 /**

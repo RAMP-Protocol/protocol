@@ -68,6 +68,35 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         return
 
 
+class _GzipAnyway(_Handler):
+    """Answers gzip whatever the client negotiated — a peer breaking its own answer."""
+
+    def _respond(self) -> None:
+        type(self).seen_accept_encoding = self.headers.get("accept-encoding")
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-encoding", "gzip")
+        self.send_header("content-length", str(len(_GZIPPED)))
+        self.end_headers()
+        with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+            self.wfile.write(_GZIPPED)
+
+    do_GET = _respond  # noqa: N815 - the name BaseHTTPRequestHandler dispatches on
+    do_POST = _respond  # noqa: N815
+
+
+@pytest.fixture
+def gzipping_server() -> Iterator[str]:
+    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), _GzipAnyway)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 @pytest.fixture
 def oversized_server() -> Iterator[str]:
     _Handler.seen_accept_encoding = None
@@ -117,14 +146,35 @@ def test_the_broker_leg_refuses_an_oversized_answer(oversized_server: str) -> No
     assert caught.value.kind is CallErrorKind.TOO_LARGE
 
 
-def test_no_content_coding_is_accepted_so_the_cap_counts_wire_bytes(
-    oversized_server: str,
-) -> None:
-    # The amplifier this closes: httpx's own default is "gzip, deflate", so without an
-    # explicit identity the peer may send 200 KB that becomes 200 MB inside the client.
+def test_the_client_negotiates_identity(oversized_server: str) -> None:
+    # httpx's own default is "gzip, deflate", so without an explicit identity the peer is
+    # invited to send 200 KB that becomes 200 MB inside the client.
     with blocking.Client(_config(oversized_server)) as client, pytest.raises(CallError):
         client.discover({"exchange": "exchange.test"})
     assert _Handler.seen_accept_encoding == "identity"
+
+
+def test_a_coding_the_client_did_not_negotiate_is_refused(gzipping_server: str) -> None:
+    """The peer answers ``identity`` with gzip anyway — the case a running total cannot hold.
+
+    Refused as MALFORMED rather than TOO_LARGE, and refused BEFORE the body is read: the
+    decoder expands a whole raw read at once, so by the time a decoded chunk could be
+    counted the memory is already spent.
+    """
+    with blocking.Client(_config(gzipping_server)) as client, pytest.raises(CallError) as caught:
+        client.discover({"exchange": "exchange.test"})
+    assert caught.value.kind is CallErrorKind.MALFORMED
+    assert "content-encoding" in str(caught.value)
+
+
+def test_the_async_face_refuses_it_too(gzipping_server: str) -> None:
+    async def run() -> CallError:
+        async with Client(_config(gzipping_server)) as client:
+            with pytest.raises(CallError) as caught:
+                await client.discover({"exchange": "exchange.test"})
+            return caught.value
+
+    assert asyncio.run(run()).kind is CallErrorKind.MALFORMED
 
 
 def test_an_injected_client_is_not_closed_by_the_sdk(oversized_server: str) -> None:
