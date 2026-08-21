@@ -112,6 +112,47 @@ describe("discover", () => {
 		});
 	});
 
+	// The rate-limit standing had NO test in this language, which is how the two ports
+	// drifted apart on it unnoticed. Every member but one is what the schema decoded — the
+	// same two normalizations Go's decode performs, so all three agree — and reset_at is
+	// the exception, because it is the one the Python parse cannot return unchanged and so
+	// the one both ports take from the wire.
+	it("reports the decoded rate limit, and the peer's own spelling of reset_at", async () => {
+		const { send } = recordingSend({
+			ver: "1.0",
+			exchange: "exchange.test",
+			rate_limit: {
+				// proto3 JSON lets an int32 travel as a string, so this needs no hostile peer.
+				limit: "300",
+				remaining: 299,
+				reset_at: "2099-01-01T00:00:00.123Z",
+				vendor_extra: "x",
+			},
+		});
+		const client = createClient("https://exchange.test", { requester: REQUESTER, send });
+
+		const result = await client.discover({ exchange: "exchange.test" });
+
+		expect(result.rateLimit).toBeDefined();
+		expect(result.rateLimit?.["limit"], "a string-spelled int32 reached the caller").toBe(
+			300,
+		);
+		expect(result.rateLimit?.["remaining"]).toBe(299);
+		expect(
+			result.rateLimit,
+			"an undeclared member reached the caller",
+		).not.toHaveProperty("vendor_extra");
+		// Not ".123000Z", and not re-rendered to any other equivalent spelling.
+		expect(result.rateLimit?.["reset_at"]).toBe("2099-01-01T00:00:00.123Z");
+	});
+
+	it("reports no rate limit when the responder sent none", async () => {
+		const { send } = recordingSend({ ver: "1.0", exchange: "exchange.test" });
+		const client = createClient("https://exchange.test", { requester: REQUESTER, send });
+
+		expect((await client.discover({ exchange: "exchange.test" })).rateLimit).toBeUndefined();
+	});
+
 	it("keeps every requested URI's group and its typed reason", async () => {
 		const { offer, publicKey } = await signedOffer();
 		const { send } = recordingSend({

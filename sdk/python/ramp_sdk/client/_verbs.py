@@ -165,14 +165,21 @@ def finish_discover(cfg: ClientConfig, plan: Plan, status: int, body: str) -> Di
         # signature covers what the responder sent.
         groups=_discovered_groups(cfg.resolved_verifier(), plan.sent, raw),
         exchange=msg.exchange or "",
-        # From the RAW answer, like the offers above, once the parse has GATED it. Pydantic
-        # reads reset_at into a datetime and re-renders it on the way out, and the round
-        # trip is not the identity: ".123Z" comes back ".123000Z", nanosecond precision is
-        # truncated, and "+00:00" becomes "Z". Zod keeps whatever the Exchange sent. Handing
-        # back the parsed value therefore meant two languages reporting different rate
-        # limits for one answer — so the parse decides whether the field is WELL FORMED and
-        # the wire decides what it SAYS.
-        rate_limit=_raw_mapping(raw.get("rate_limit")) if msg.rate_limit is not None else None,
+        # From the PARSED answer, unlike the offers above, with one member excepted.
+        #
+        # Nothing here is signed, so the reason the offers are read raw does not reach this
+        # field, and the oracle settles what should: Go hands back the decoded message, so a
+        # string-spelled int32 arrives as a number and a member the schema does not declare
+        # is gone. TypeScript's parse does the same two things. A Python that answered from
+        # the wire was the odd one of the three — it handed back "300" where the other two
+        # said 300, and kept a vendor key they both dropped.
+        #
+        # reset_at is the exception because it is the one member the parse cannot return
+        # unchanged: Pydantic reads it into a datetime and re-renders it, and that round trip
+        # is not the identity — ".123Z" comes back ".123000Z", nanosecond precision is
+        # truncated, "+00:00" becomes "Z". TypeScript validates it as a plain string and
+        # hands back what it was given, so the peer's own spelling is what the two agree on.
+        rate_limit=_rate_limit(msg.rate_limit, raw.get("rate_limit")),
     )
 
 
@@ -499,9 +506,25 @@ def _stamp_envelope(
     return sent
 
 
-def _raw_mapping(value: Any) -> dict[str, Any] | None:
-    """The peer's own object, once its parsed twin has proved it well formed."""
-    return dict(value) if isinstance(value, dict) else None
+def _rate_limit(parsed: Any, wire: Any) -> dict[str, Any] | None:
+    """The decoded rate-limit standing, spelling reset_at the way the peer did.
+
+    Every other member comes from the parse, which is what the other two SDKs answer with:
+    an int32 the peer spelled as a string arrives as a number, and a member the schema does
+    not declare is gone. reset_at is taken from the wire because it is the only one the
+    parse cannot hand back unchanged.
+
+    The wire value is only used when it is a string, which the parse has already proved
+    well formed — a shape that disagrees with its own parsed twin does not get to decide
+    what this field says.
+    """
+    if parsed is None:
+        return None
+    standing: dict[str, Any] = parsed.model_dump(mode="json")
+    sent = wire.get("reset_at") if isinstance(wire, dict) else None
+    if isinstance(sent, str):
+        standing["reset_at"] = sent
+    return standing
 
 
 def _clone(op: str, message: dict[str, Any]) -> dict[str, Any]:

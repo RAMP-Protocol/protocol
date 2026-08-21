@@ -692,11 +692,11 @@ def test_fetch_proves_possession_of_the_signers_key_not_a_second_one(face: Face)
     )
 
 
-# A rate limit is handed back as the peer sent it, once the parse has GATED it. Pydantic
-# reads reset_at into a datetime and re-renders it, and that round trip is not the identity:
-# ".123Z" comes back ".123000Z", nanosecond precision is truncated, and "+00:00" becomes
-# "Z". Zod keeps whatever the Exchange sent, so handing back the parsed value meant two
-# languages reporting different rate limits for one answer.
+# reset_at is handed back as the peer spelled it, because it is the one member the parse
+# cannot return unchanged: Pydantic reads it into a datetime and re-renders it, and that
+# round trip is not the identity — ".123Z" comes back ".123000Z", nanosecond precision is
+# truncated, "+00:00" becomes "Z". TypeScript validates it as a plain string and hands back
+# what it was given, so the peer's own spelling is what the two agree on.
 @pytest.mark.parametrize(
     "reset_at",
     [
@@ -722,3 +722,28 @@ def test_a_rate_limit_is_handed_back_as_the_peer_sent_it(reset_at: str) -> None:
     result = _verbs.finish_discover(_verbs.ClientConfig(base_url="https://e.test"), plan, 200, body)
     assert result.rate_limit is not None
     assert result.rate_limit["reset_at"] == reset_at
+
+
+# Every OTHER member comes from the parse, which is what the other two SDKs answer with —
+# Go hands back the decoded message and TypeScript's schema coerces and strips the same two
+# ways. Answering from the wire made Python the odd one of the three: it said "300" where
+# they said 300, and kept a vendor key they both dropped.
+def test_a_rate_limits_other_members_are_the_decoded_ones() -> None:
+    from ramp_sdk.client import _verbs
+
+    plan = _verbs.Plan(
+        op="discover", url="u", body=b"", headers={}, timeout=1.0, max_bytes=1 << 20, sent={}
+    )
+    body = json.dumps(
+        {
+            "ver": "1.0",
+            "exchange": "exchange.test",
+            # proto3 JSON lets an int32 travel as a string, so this needs no hostile peer.
+            "rate_limit": {"limit": "300", "remaining": 299, "vendor_extra": "x"},
+        }
+    )
+    result = _verbs.finish_discover(_verbs.ClientConfig(base_url="https://e.test"), plan, 200, body)
+    assert result.rate_limit is not None
+    assert result.rate_limit["limit"] == 300, "a string-spelled int32 reached the caller"
+    assert result.rate_limit["remaining"] == 299
+    assert "vendor_extra" not in result.rate_limit, "an undeclared member reached the caller"
