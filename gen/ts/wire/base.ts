@@ -9,7 +9,7 @@
 //    `.strict()` (reject) or `.passthrough()` (retain).
 //
 // 2. parseWire is the parse entry point, and it holds the two things the wire needs that a
-//    bare schema cannot express: an unset message field arrives as `null`, and a
+//    bare schema cannot express: a `null` means the field has no value, and a
 //    lowerCamelCase answer is refused. See parseWire.
 //
 // Map and Struct fields keep their own value schema and are never walked into: their keys
@@ -58,15 +58,20 @@ export class WireNamingError extends Error {
  * true of the WIRE rather than of the message, so both live here — applied in one
  * schema-driven pass over the value, at every depth.
  *
- * **An unset message field arrives as `null`.** proto3 JSON with EmitUnpopulated — what a
- * RAMP Exchange serves — renders an unpopulated non-optional message field and a Struct as
- * `null` instead of omitting it, so `{"ext":null}` is the ordinary shape of a real response.
- * (An unset map renders `{}`, and an `optional` field is omitted outright; neither needs
- * anything from this pass.)
- * `null` and absence mean the same thing there, so a null on a message-typed field is
- * dropped and the field reads as unset. Pydantic renders the same fields as `X | None`, so
- * this is what keeps the two languages reading one wire. A null anywhere else is left for
- * the schema to reject.
+ * **A `null` means the field has no value.** The canonical wire is proto-JSON, and there a
+ * null is a field's default — for ANY field, not only a message-typed one. So a null is
+ * dropped wherever the schema does not require a value: the field then reads as unset, or
+ * takes the default the schema declares, which is what the oracle answers for the same
+ * bytes. Where the schema DOES require a value the null is left in place for it to refuse.
+ *
+ * Both halves are load-bearing. EmitUnpopulated — what a RAMP Exchange serves — renders an
+ * unpopulated non-optional message field as null rather than omitting it, so `{"ext":null}`
+ * is the ordinary shape of a real response. It renders an unset Timestamp that way too, and
+ * that is the case a narrower rule missed: the generator flattens a Timestamp to a string
+ * schema, so a test for "is this a message?" answered no and every response carrying an
+ * attestation without an attested-at, or a rate limit without a reset time, was refused
+ * outright. Pydantic spells all of these `X | None` and accepts the null, so reading
+ * presence rather than type is what keeps the two languages on one wire.
  *
  * **A lowerCamelCase answer is REFUSED.** The RAMP wire is snake_case proto-JSON and the
  * camelCase json_name alias is out of contract, so a conformant peer serves snake_case —
@@ -142,9 +147,10 @@ export function underWirePolicy(schema: unknown, value: unknown, path: string): 
 		}
 		const field = shape[key];
 		if (field === undefined) continue;
-		// EmitUnpopulated renders an unset message, map or Struct as null. Absent and null
-		// are the same state on this wire, so the field is left unset.
-		if (member === null && holdsMessage(field)) continue;
+		// A null is how proto-JSON spells "no value here". Absent and null are the same
+		// state, so a field the schema does not require is left unset and one it does
+		// require keeps the null for the schema to refuse.
+		if (member === null && mayBeUnset(field)) continue;
 		keep(out, key, underWirePolicy(field, member, join(path, key)));
 	}
 	return out;
@@ -179,10 +185,30 @@ function unwrapped(schema: z.ZodTypeAny): z.ZodTypeAny {
 	}
 }
 
-/** Whether a field holds a message or a map — the two things proto3 JSON renders as null. */
-function holdsMessage(field: z.ZodTypeAny): boolean {
-	const core = unwrapped(field);
-	return core instanceof z.ZodObject || core instanceof z.ZodRecord;
+/**
+ * Whether the schema would accept this field carrying no value at all.
+ *
+ * This is the whole test for whether a null may be dropped, and it is deliberately a
+ * question about PRESENCE rather than about type. The predicate it replaced asked whether
+ * the field held a message or a map, which reads as the same question and is not: the
+ * generator FLATTENS the well-known types, so a google.protobuf.Timestamp — a message on
+ * the wire, rendered as null when unset like any other — arrives here as a plain string
+ * schema and failed a structural test for messages. Every response carrying one was refused.
+ *
+ * Optional and defaulted both count, and the default is the reason the two are not one
+ * check: dropping the null on a defaulted field lets the schema supply the default, which
+ * is exactly what the oracle answers for the same bytes.
+ */
+function mayBeUnset(field: z.ZodTypeAny): boolean {
+	let s = field;
+	for (;;) {
+		if (s instanceof z.ZodOptional || s instanceof z.ZodDefault) return true;
+		if (s instanceof z.ZodNullable) {
+			s = s.unwrap() as z.ZodTypeAny;
+			continue;
+		}
+		return false;
+	}
 }
 
 function join(path: string, key: string): string {

@@ -475,7 +475,7 @@ export function parseMessage<T>(
  * parseUnderWirePolicy runs the generated schema seam and turns its one refusal into this
  * tier's typed failure.
  *
- * The wire policy — an unset message field arrives as null, and the lowerCamelCase
+ * The wire policy — a null means the field has no value, and the lowerCamelCase
  * json_name alias is refused at every depth — belongs to the schemas, so it lives with
  * them in gen/ts/wire/base.ts and this tier only names what a refusal MEANS to a caller.
  * Every parse of a generated schema in this SDK goes through here; a bare `safeParse`

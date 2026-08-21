@@ -2,13 +2,17 @@
 
 Mirrors ``gen/ts/tests/wire_policy.test.ts``.
 
-Two rules. An unset message field arrives as ``null`` — proto3 JSON with EmitUnpopulated
-renders it rather than omitting it — and a lowerCamelCase answer is refused rather than
-silently validated into a message with every multiword field missing.
+Two rules. A ``null`` means the field has no value — the canonical wire is proto-JSON,
+where that is true of any field and not only a message-typed one — and a lowerCamelCase
+answer is refused rather than silently validated into a message with every multiword field
+missing.
 
-Python needs no walk for either: ``X | None`` is already how the generated models spell a
-message field, and every nested model inherits ``WireModel``, so the refusal recurses by
-inheritance. The TypeScript twin has to do both itself, which is why its file is longer.
+Python needs no walk for either: ``X | None`` is already how the generated models spell
+every field that may be unset, and every nested model inherits ``WireModel``, so the
+refusal recurses by inheritance. The TypeScript twin has to do both itself, which is why
+its file is longer — and why the null rule was wrong there and right here: it was written
+against fields that LOOK like messages, and the type generator flattens a timestamp to a
+string.
 """
 
 from __future__ import annotations

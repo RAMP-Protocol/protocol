@@ -11,14 +11,25 @@ request before; both now speak the Connect-unary JSON form the protocol's unary 
 are fully described by. Six consequences reach anyone re-pinning, and none of them
 moves a field, a message or an encoding — `buf breaking` reports nothing.
 
-An **unset message field may arrive as `null`**, and the TypeScript wire policy now
-accepts it. proto3 JSON with `EmitUnpopulated` — what `connectserver`'s codec emits, and
-therefore what a RAMP Exchange serves — renders an unpopulated **non-optional message
-field and a `Struct`** as `null` rather than omitting it, so `{"ext":null}` is the ordinary
-shape of a real response. (An unset **map** renders `{}`, and an unset `optional` message
-field is omitted outright; only the first two are `null`.) Every generated Zod schema
-rejected `null`, which meant a TypeScript consumer could not read a conformant answer at
-all. Pydantic already spelled those fields `X | None`.
+A **`null` means the field has no value**, and the TypeScript wire policy now reads it
+that way. The canonical wire is proto-JSON, where a null is a field's default — for **any**
+field, not only a message-typed one — so the policy drops it wherever the schema does not
+require a value, and leaves it for the schema to refuse where it does. `EmitUnpopulated` —
+what `connectserver`'s codec emits, and therefore what a RAMP Exchange serves — renders an
+unpopulated non-optional field as `null` rather than omitting it, so `{"ext":null}` is the
+ordinary shape of a real response. (An unset **map** renders `{}`, and an unset `optional`
+field is omitted outright.) Every generated Zod schema rejected `null`, which meant a
+TypeScript consumer could not read a conformant answer at all. Pydantic already spelled
+those fields `X | None`.
+
+An earlier form of this note said only a message field and a `Struct` arrive as `null`.
+That described what the codec emits and was read as a bound on what a client must accept,
+which it is not: an unset `google.protobuf.Timestamp` arrives as `null` too, and because
+the type generator flattens it to a string schema, a rule written for message-typed fields
+refused it. An attestation without an `attested_at`, or a rate limit without a `reset_at` —
+both conformant, neither carrying a validation rule that requires the field — took the
+whole answer down for a TypeScript reader while Go and Python read it. The rule now asks
+about presence rather than type, and a shared corpus pins it in all three languages.
 
 Where that policy lives matters to a consumer: the schemas themselves are unchanged, and
 `parseWire()` in `wire/base.ts` is what applies it — together with the naming refusal

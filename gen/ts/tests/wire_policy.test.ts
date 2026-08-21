@@ -1,10 +1,15 @@
 // The wire policy the generated schemas are parsed under — gen/ts/wire/base.ts.
 // Mirrors gen/python/tests/test_wire_policy.py.
 //
-// Two rules, both applied at every depth: an unset message field arrives as `null` (proto3
-// JSON with EmitUnpopulated renders it rather than omitting it), and a lowerCamelCase
-// answer is refused rather than silently parsed into a message with every multiword field
-// missing.
+// Two rules, both applied at every depth: a `null` means the field has no value — the
+// canonical wire is proto-JSON, where that is true of any field, so it is dropped wherever
+// the schema does not require a value — and a lowerCamelCase answer is refused rather than
+// silently parsed into a message with every multiword field missing.
+//
+// The corpus that holds the first rule across all three languages is replayed separately,
+// in sdk/ts/tests/wire-null.parity.test.ts. This file owns the cases a corpus of server
+// bodies cannot reach: a null inside an open map, which is a value and must survive, and
+// the promise that the caller's own object is never mutated.
 import { describe, it, expect } from "vitest";
 
 import { parseWire, WireNamingError } from "../wire/base.ts";
