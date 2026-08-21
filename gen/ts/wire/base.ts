@@ -131,7 +131,11 @@ export function underWirePolicy(schema: unknown, value: unknown, path: string): 
 		if (!Object.hasOwn(shape, key)) {
 			const name = snakeFromJsonName(key);
 			if (name !== key && Object.hasOwn(shape, name)) throw new WireNamingError(key, path);
-			out[key] = member; // unknown to this pin; the schema strips it
+			// defineProperty, not assignment: a key named "__proto__" would replace this
+			// object's prototype and create no member, so the value would never be walked
+			// and the schema would then read declared keys back through the prototype
+			// chain — accepting nested camelCase the depth check is here to refuse.
+			keep(out, key, member); // unknown to this pin; the schema strips it
 			continue;
 		}
 		const field = shape[key];
@@ -139,9 +143,20 @@ export function underWirePolicy(schema: unknown, value: unknown, path: string): 
 		// EmitUnpopulated renders an unset message, map or Struct as null. Absent and null
 		// are the same state on this wire, so the field is left unset.
 		if (member === null && holdsMessage(field)) continue;
-		out[key] = underWirePolicy(field, member, join(path, key));
+		keep(out, key, underWirePolicy(field, member, join(path, key)));
 	}
 	return out;
+}
+
+/** keep writes a member, including one whose name is an inherited property of every
+ * object. See the call sites: a plain assignment to "__proto__" sets a prototype. */
+function keep(out: Record<string, unknown>, key: string, value: unknown): void {
+	Object.defineProperty(out, key, {
+		value,
+		enumerable: true,
+		writable: true,
+		configurable: true,
+	});
 }
 
 /** Peel the wrapper kinds that decorate a field without changing what it holds. Only the

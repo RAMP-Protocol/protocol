@@ -114,4 +114,16 @@ describe("a lowerCamelCase answer is refused", () => {
     );
     expect(parseWire(OfferSchema, raw).success).toBe(true);
   });
+
+  // And it cannot smuggle a message past the depth check. Writing that key with a plain
+  // assignment set the walk's own output prototype instead of creating a member: the value
+  // was never walked, and Zod then read the declared keys back THROUGH the prototype chain
+  // — so a camelCase items[] inside it parsed, with transaction_id empty, which is the
+  // outcome the depth check exists to prevent.
+  it("and cannot carry a message the walk never inspected", () => {
+    const raw = JSON.parse('{"ver":"1.0","__proto__":{"items":[{"transactionId":"txn-1"}]}}');
+    const parsed = parseWire<{ items?: unknown[] }>(TransactionResponseSchema, raw);
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.items).toBeUndefined();
+  });
 });
