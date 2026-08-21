@@ -14,8 +14,9 @@ import { describe, expect, it } from "vitest";
 
 import { fetchContent } from "../client/content.ts";
 import { RampCallError } from "../client/errors.ts";
+import { createClient } from "../client/index.ts";
 import { createUnarySend } from "../client/send.ts";
-import type { UnaryRequest } from "../client/transport.ts";
+import { unaryCall, type UnaryRequest } from "../client/transport.ts";
 
 const RPC_PATH = "/ramp.v1.ExchangeService/DiscoverResources";
 
@@ -41,29 +42,70 @@ async function listening(): Promise<[Server, number]> {
 }
 
 describe("the guarded RPC leg refuses plaintext", () => {
+	// Driven through unaryCall, which is where the gate lives. It sits ABOVE the send on
+	// purpose: `send` is an injectable option, so a gate inside the default dial would
+	// leave with it — see the injected-send case below.
+	const target = (baseURL: string) => ({
+		baseURL,
+		service: "ramp.v1.ExchangeService",
+		method: "DiscoverResources",
+	});
+
 	it("does not dial http, and nothing reaches the listener", async () => {
 		const [server, port] = await listening();
 		let hits = 0;
 		server.on("request", () => {
 			hits += 1;
 		});
-		const send = createUnarySend({ guarded: true });
 		await expect(
-			send(unaryRequest(`http://127.0.0.1:${port}${RPC_PATH}`)),
+			unaryCall({
+				op: "discover",
+				target: target(`http://127.0.0.1:${port}`),
+				message: {},
+				send: createUnarySend({ guarded: true }),
+				guarded: true,
+			}),
 		).rejects.toThrow(/scheme/i);
 		expect(hits, "a signed request reached the listener over plaintext").toBe(0);
 		server.close();
 	});
 
 	it("refuses a scheme that is not http at all", async () => {
-		const send = createUnarySend({ guarded: true });
-		await expect(send(unaryRequest("ftp://example.test/x"))).rejects.toThrow(/scheme/i);
+		await expect(
+			unaryCall({
+				op: "discover",
+				target: target("ftp://example.test"),
+				message: {},
+				send: createUnarySend({ guarded: true }),
+				guarded: true,
+			}),
+		).rejects.toThrow(/scheme/i);
+	});
+
+	// The finding this arrangement closes: guardedSend is a documented option, and while
+	// the gate lived inside createUnarySend, supplying one removed it. A signed usage
+	// report reached http://issuer.test.
+	it("and an injected send cannot reach a plaintext endpoint either", async () => {
+		let dialed = "";
+		const client = createClient("https://exchange.test", {
+			requester: { id: "a", domain: "agent.test", type: "REQUESTER_TYPE_AGENT" },
+			endpointResolver: { resolveEndpoint: async (h: string) => `http://${h}` },
+			guardedSend: async (req) => {
+				dialed = req.url;
+				return { status: 200, body: JSON.stringify({ ver: "1.0", report_id: "r" }) };
+			},
+		});
+		await expect(
+			client.reportUsage({ exchange: "issuer.test", transaction_id: "t-1" }),
+		).rejects.toThrow(/scheme/i);
+		expect(dialed, "the injected send was reached over plaintext").toBe("");
 	});
 
 	it("but the configured home Exchange keeps its plain transport, as in Go", async () => {
 		const [server, port] = await listening();
-		const send = createUnarySend({ guarded: false });
-		const response = await send(unaryRequest(`http://127.0.0.1:${port}${RPC_PATH}`));
+		const response = await createUnarySend({ guarded: false })(
+			unaryRequest(`http://127.0.0.1:${port}${RPC_PATH}`),
+		);
 		expect(response.status).toBe(200);
 		server.close();
 	});

@@ -15,6 +15,7 @@ import { signOutbound } from "../core/signing-transport.ts";
 import type { Window } from "../core/window.ts";
 import { errorDetailFrom } from "../src/errordetail.ts";
 import { parseWire, WireNamingError } from "../../../gen/ts/wire/base.ts";
+import { requireScheme } from "../resolvers/http.ts";
 import {
 	ConnectProtocolVersion,
 	ConnectProtocolVersionHeader,
@@ -71,6 +72,12 @@ export interface UnaryResponse {
  * An implementation MUST honour `signal`: the tier above sets the call deadline on it and
  * has no other way to stop a send that never returns. The shipped send passes it to undici.
  *
+ * What an implementation is NOT responsible for is the scheme: `unaryCall` refuses a URL it
+ * will not dial before this is ever called, so a send cannot admit one by omission. What it
+ * DOES take on by replacing the shipped send is the dial-time address pin — the check that
+ * a hostname resolves somewhere public — which the default composes and an injected send
+ * must compose for itself if it needs one.
+ *
  * An implementation MUST NOT follow redirects. Following one would re-sign the caller's
  * request for a target the peer chose, after the endpoint check had already passed — a
  * 3xx is an answer to be reported, never a hop to take. It MUST also refuse to read past
@@ -103,6 +110,10 @@ export interface UnaryCallOptions {
 	/** The request message, already validated by its generated schema. */
 	message: unknown;
 	send: UnarySend;
+	/** Whether this leg dials a host another party named — an offer-derived Exchange. The
+	 * scheme is gated here rather than inside the send, so replacing the send cannot
+	 * remove it. */
+	guarded?: boolean;
 	signer?: CallSigner;
 	requestId?: () => string;
 	maxBytes?: number;
@@ -143,6 +154,12 @@ export function rpcURL(target: UnaryTarget): string {
  */
 export async function unaryCall(opts: UnaryCallOptions): Promise<unknown> {
 	const url = rpcURL(opts.target);
+	// The scheme, before anything is built for this call. It sits ABOVE the send because
+	// `send` is an injectable option: a caller that supplies one replaces the dial, and a
+	// gate living inside the default send would leave with it. Go states the same rule the
+	// other way round — a caller hands over what sits UNDER the guard, never what replaces
+	// it — and the delivery leg already gates here rather than at its dispatcher.
+	if (opts.guarded === true) requireScheme(url);
 	const body = encodeBody(opts.op, opts.message);
 	const headers: Record<string, string> = {
 		"content-type": ContentTypeJSON,

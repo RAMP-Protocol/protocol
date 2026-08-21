@@ -7,11 +7,17 @@
 // following a 3xx would either replay that credential at a host the peer chose or mint a
 // fresh one for it. A 3xx is an answer to report, never a hop to take.
 //
-// The SSRF guard is composed here and cannot be handed in already built: a caller
-// supplies what sits UNDER it, never what replaces it. That matters most on the
-// offer-derived leg, where the caller names a domain, the manifest it serves names an
-// endpoint, and a signed call then goes there — without the guard one hop down, that is
-// a signed request aimed at an arbitrary internal address.
+// The address pin is composed here rather than accepted already built: this factory takes
+// what sits UNDER it, never what replaces it. It matters most on the offer-derived leg,
+// where the caller names a domain, the manifest it serves names an endpoint, and a signed
+// call then goes there — without the pin one hop down, that is a signed request aimed at
+// an arbitrary internal address.
+//
+// A caller CAN replace this whole factory, by passing their own UnarySend to the client.
+// That takes the address pin with it, which is the same latitude the Python client gives
+// an injected httpx client and more than Go gives at all. What it does NOT take is the
+// scheme gate: that lives in unaryCall, above the send, so no injected dial reaches a
+// plaintext endpoint carrying a signature.
 //
 // An edge runtime with no undici injects its own send. That is the same escape hatch the
 // resolver tier offers, and the same obligations come with it: no redirects, and no
@@ -19,7 +25,7 @@
 
 import { Agent, type Dispatcher, request as undiciRequest } from "undici";
 
-import { requireScheme, skipSSRF, ssrfGuard } from "../resolvers/http.ts";
+import { skipSSRF, ssrfGuard } from "../resolvers/http.ts";
 import { RampCallError } from "./errors.ts";
 import {
 	refuseUnrequestedEncoding,
@@ -53,11 +59,6 @@ export function createUnarySend(opts: SendOptions): UnarySend {
 	const dispatcher: Dispatcher =
 		opts.guarded && !skipSSRF() ? new Agent({ connect: ssrfGuard() }) : new Agent();
 	return async (req: UnaryRequest): Promise<UnaryResponse> => {
-		// The scheme, before the dial. ssrfGuard above is the connector — it decides what
-		// a hostname may resolve to and never sees a scheme, because by then the URL is
-		// already a host and a port. Without this the guarded legs, whose host another
-		// party named, would carry the RFC 9421 signature over plaintext http.
-		if (opts.guarded) requireScheme(req.url);
 		const response = await undiciRequest(req.url, {
 			method: "POST",
 			headers: req.headers,

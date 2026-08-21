@@ -1091,6 +1091,19 @@ Worth knowing what "strict" buys, because it is not what it buys in Go: the gene
 schema carries FIELD-level rules only, while the cross-field CEL rules stay
 server-authoritative. The two checks share a name and not a scope.
 
+**How much of the guard a caller may replace differs, and the scheme gate is the part
+none of them may.** Go is strictest: `WithGuardedBaseTransport` takes what sits UNDER the
+guard, and `NewGuardedTransport` says outright that the guard is not a default a caller may
+replace — the only way out is the deployment-level `SKIP_SSRF` / `ALLOW_INSECURE` opt-out.
+Both ports are more permissive: an injected `UnarySend` in TypeScript, or an injected
+`httpx` client in Python, replaces the dial and takes the ADDRESS PIN with it. That is
+deliberate — a caller who replaced the transport replaced it, and both languages need an
+injectable dial far more than Go does, whose `httptest` seam is a `*http.Transport` — but it
+is a real difference and it is why the scheme gate does not live in the dial. It sits above
+it, in `unaryCall` and in the content leg's own pre-flight, so no injected send reaches a
+plaintext endpoint carrying a signature. A signature over plaintext is not a latitude any
+of the three offers.
+
 **The client's transport splits in two, and which leg is guarded is the same in all
 three.** A plain transport carries the configured home Exchange and the Broker — an
 operator that points the SDK at a private origin chose that address — and an

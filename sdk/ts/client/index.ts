@@ -211,13 +211,15 @@ async function call(
 	service: string,
 	method: string,
 	message: unknown,
-	send: UnarySend,
+	guarded: boolean,
 ): Promise<unknown> {
 	return unaryCall({
 		target: { baseURL, service, method },
 		op,
 		message,
-		send,
+		// The leg decides the dial AND the gate together, so the two cannot drift apart.
+		send: guarded ? r.guardedSend : r.send,
+		guarded,
 		...(r.signer !== undefined ? { signer: r.signer } : {}),
 		...(r.opts.requestId !== undefined ? { requestId: r.opts.requestId } : {}),
 		maxBytes: r.opts.maxRPCReadBytes ?? DEFAULT_MAX_RPC_READ_BYTES,
@@ -307,7 +309,7 @@ async function discover(
 		EXCHANGE_SERVICE,
 		"DiscoverResources",
 		sent,
-		r.send,
+		false,
 	);
 	const msg = parseMessage<Record<string, unknown>>(op, raw, ResourceResponseSchema);
 	return {
@@ -423,7 +425,7 @@ async function brokerResolve(
 		);
 	}
 	validateRequest(op, sent, DiscoveryRequestSchema, r.opts.validation ?? "strict");
-	const raw = await call(r, op, baseURL, BROKER_SERVICE, "Resolve", sent, r.send);
+	const raw = await call(r, op, baseURL, BROKER_SERVICE, "Resolve", sent, false);
 	const msg = parseMessage<Record<string, unknown>>(op, raw, DiscoveryResponseSchema);
 	// Read from the RAW answer for the same reason discover does: a parse normalizes, and
 	// a signature covers what the responder sent.
@@ -532,7 +534,7 @@ async function execute(
 		EXCHANGE_SERVICE,
 		"ExecuteTransaction",
 		request,
-		r.send,
+		false,
 	);
 	return parseMessage(op, raw, TransactionResponseSchema);
 }
@@ -576,7 +578,7 @@ async function reportUsage(
 		EXCHANGE_SERVICE,
 		"ReportUsage",
 		sent,
-		r.guardedSend,
+		true,
 	);
 	return parseMessage(op, raw, UsageReportResponseSchema);
 }
@@ -613,7 +615,7 @@ async function dispute(
 		EXCHANGE_SERVICE,
 		"DisputeTransaction",
 		sent,
-		r.guardedSend,
+		true,
 	);
 	return parseMessage(op, raw, DisputeResponseSchema);
 }
