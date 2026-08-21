@@ -159,7 +159,22 @@ export async function unaryCall(opts: UnaryCallOptions): Promise<unknown> {
 	// gate living inside the default send would leave with it. Go states the same rule the
 	// other way round — a caller hands over what sits UNDER the guard, never what replaces
 	// it — and the delivery leg already gates here rather than at its dispatcher.
-	if (opts.guarded === true) requireScheme(url);
+	//
+	// Converted HERE rather than left to the catch below, because it runs before the try:
+	// refusing early is the point — a URL this client will not dial should cost no body
+	// encoding, no timer and no signature. requireScheme raises the resolvers' own
+	// SsrfBlockedError, which is deliberate, and this tier is what gives it a class. Every
+	// verb throws RampCallError and nothing else; an untyped throw here is one a caller
+	// branching on that contract drops silently.
+	if (opts.guarded === true) {
+		try {
+			requireScheme(url);
+		} catch (cause) {
+			// Unreachable, matching what the delivery leg answers for the identical refusal
+			// and what Go answers when the same check fires inside its RoundTripper.
+			throw new RampCallError({ kind: "unreachable", op: opts.op, cause });
+		}
+	}
 	const body = encodeBody(opts.op, opts.message);
 	const headers: Record<string, string> = {
 		"content-type": ContentTypeJSON,

@@ -41,6 +41,26 @@ async function listening(): Promise<[Server, number]> {
 	return [server, (server.address() as { port: number }).port];
 }
 
+/**
+ * Run something that must be refused, and assert the refusal is TYPED before handing it
+ * back for the caller-specific checks.
+ *
+ * `.rejects.toThrow(/scheme/i)` is satisfied by any Error, which is how a refusal that had
+ * stopped being a RampCallError passed this file unchanged. Every verb throws RampCallError
+ * and nothing else; a test for a security refusal has to hold that, not just the wording.
+ */
+async function refusalOf(run: () => Promise<unknown>): Promise<RampCallError> {
+	const caught = await run().then(
+		() => undefined,
+		(e: unknown) => e,
+	);
+	expect(caught, "expected a refusal, got a result").toBeDefined();
+	expect(caught).toBeInstanceOf(RampCallError);
+	const failure = caught as RampCallError;
+	expect(failure.kind).toBe("unreachable");
+	return failure;
+}
+
 describe("the guarded RPC leg refuses plaintext", () => {
 	// Driven through unaryCall, which is where the gate lives. It sits ABOVE the send on
 	// purpose: `send` is an injectable option, so a gate inside the default dial would
@@ -57,7 +77,7 @@ describe("the guarded RPC leg refuses plaintext", () => {
 		server.on("request", () => {
 			hits += 1;
 		});
-		await expect(
+		const failure = await refusalOf(() =>
 			unaryCall({
 				op: "discover",
 				target: target(`http://127.0.0.1:${port}`),
@@ -65,13 +85,14 @@ describe("the guarded RPC leg refuses plaintext", () => {
 				send: createUnarySend({ guarded: true }),
 				guarded: true,
 			}),
-		).rejects.toThrow(/scheme/i);
+		);
+		expect(String(failure.cause ?? "")).toMatch(/scheme/i);
 		expect(hits, "a signed request reached the listener over plaintext").toBe(0);
 		server.close();
 	});
 
 	it("refuses a scheme that is not http at all", async () => {
-		await expect(
+		const failure = await refusalOf(() =>
 			unaryCall({
 				op: "discover",
 				target: target("ftp://example.test"),
@@ -79,7 +100,8 @@ describe("the guarded RPC leg refuses plaintext", () => {
 				send: createUnarySend({ guarded: true }),
 				guarded: true,
 			}),
-		).rejects.toThrow(/scheme/i);
+		);
+		expect(String(failure.cause ?? "")).toMatch(/scheme/i);
 	});
 
 	// The finding this arrangement closes: guardedSend is a documented option, and while
@@ -95,9 +117,10 @@ describe("the guarded RPC leg refuses plaintext", () => {
 				return { status: 200, body: JSON.stringify({ ver: "1.0", report_id: "r" }) };
 			},
 		});
-		await expect(
+		const failure = await refusalOf(() =>
 			client.reportUsage({ exchange: "issuer.test", transaction_id: "t-1" }),
-		).rejects.toThrow(/scheme/i);
+		);
+		expect(String(failure.cause ?? "")).toMatch(/scheme/i);
 		expect(dialed, "the injected send was reached over plaintext").toBe("");
 	});
 
