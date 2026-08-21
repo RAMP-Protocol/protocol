@@ -184,9 +184,12 @@ def enumerate_python() -> set[str]:
     rather than in a namespace of ninety names. Reading each package's ``__all__`` is what
     keeps those in scope, the same way ``resolvers`` was brought in when it landed.
 
-    ``ramp_sdk.sync`` is read for the same reason and was missed for the same one: it is a
-    public face a caller imports by name, so a symbol that exists only there was invisible
-    to this gate — the blocking Client and BrokerClient among them.
+    ``ramp_sdk.sync`` is read for the same reason: it is a public face a caller imports by
+    name, so a symbol existing only there would be invisible to this gate. Today it adds
+    nothing — the blocking Client and BrokerClient carry the same names as their async
+    twins, which the aggregator already exports — and reading it anyway is what keeps that
+    true, because the alternative is discovering a sync-only export the day it ships. The
+    test below pins the fact rather than the effect.
     """
     import ramp_sdk
     from ramp_sdk import client, resolvers
@@ -575,3 +578,24 @@ def test_staleness_bites_on_a_map_entry_with_no_go_symbol() -> None:
         "go_exclusions": {},
     }
     assert any("helpers.GoneType" in f for f in staleness_failures(live, mapped_stale))
+
+
+def test_reading_the_sync_facade_is_load_bearing_or_it_is_not() -> None:
+    """Say which, out loud, instead of leaving a no-op looking like coverage.
+
+    ``ramp_sdk.sync`` deliberately mirrors the async names, so enumerating it adds nothing
+    TODAY. That is the fact worth pinning: if a symbol ever exists only on the blocking
+    face, this assertion fails and whoever added it learns the gate now covers them, rather
+    than the enumeration silently doing nothing forever.
+    """
+    import ramp_sdk
+    from ramp_sdk import client, resolvers
+    from ramp_sdk import sync as blocking
+
+    aggregated = set(ramp_sdk.__all__) | set(resolvers.__all__) | set(client.__all__)
+    sync_only = set(blocking.__all__) - aggregated
+    assert not sync_only, (
+        "the blocking facade now exports names the async face does not: "
+        f"{sorted(sync_only)}. They are in the parity surface — give each one a "
+        "symbol-map entry, and rewrite this test to say so."
+    )

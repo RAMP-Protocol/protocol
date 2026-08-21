@@ -68,6 +68,7 @@ var transportFailureCases = []struct {
 	{"gateway_500_html", http.StatusInternalServerError, "<html>500</html>", "text/html"},
 	{"throttled_429_empty", http.StatusTooManyRequests, "", "text/plain"},
 	{"not_found_404_html", http.StatusNotFound, "<html>404</html>", "text/html"},
+	{"forbidden_403_empty", http.StatusForbidden, "", "text/plain"},
 	{"unauthorized_401_empty", http.StatusUnauthorized, "", "text/plain"},
 	{"bad_request_400_text", http.StatusBadRequest, "malformed", "text/plain"},
 	// A JSON body that IS well-formed and carries no code: connect-go falls back to the

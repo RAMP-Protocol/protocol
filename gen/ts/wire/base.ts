@@ -59,8 +59,10 @@ export class WireNamingError extends Error {
  * schema-driven pass over the value, at every depth.
  *
  * **An unset message field arrives as `null`.** proto3 JSON with EmitUnpopulated — what a
- * RAMP Exchange serves — renders every unpopulated message, Struct and map as `null`
- * instead of omitting it, so `{"ext":null}` is the ordinary shape of a real response.
+ * RAMP Exchange serves — renders an unpopulated non-optional message field and a Struct as
+ * `null` instead of omitting it, so `{"ext":null}` is the ordinary shape of a real response.
+ * (An unset map renders `{}`, and an `optional` field is omitted outright; neither needs
+ * anything from this pass.)
  * `null` and absence mean the same thing there, so a null on a message-typed field is
  * dropped and the field reads as unset. Pydantic renders the same fields as `X | None`, so
  * this is what keeps the two languages reading one wire. A null anywhere else is left for

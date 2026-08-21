@@ -1062,16 +1062,22 @@ no parameter a configured origin could be passed as. (`Dispute` is the exception
 only because `DisputeRequest` carries no `exchange` field to read — it takes the domain
 as an argument and runs the identical checks.)
 
-Six checks precede the send, in order: refuse anything that is not a plain hostname,
-because the value is concatenated into a URL and a smuggled path would choose what gets
-fetched; resolve the endpoint from that host's own manifest, cached per host; require
-the endpoint to be that host or a subdomain of it, since the manifest is only as
-trustworthy as the host serving it and a dial-time address guard has no objection to an
-unrelated PUBLIC host — and require it AGAIN of whatever the endpoint resolver handed
-back, because that resolver is an injectable seam and this tier cannot make a signed call
-conditional on a stranger's implementation having remembered the rule; gate the scheme, so
-a signature never rides plaintext; dial through the SSRF guard, applied to the report
-itself and not only to the manifest fetch; and refuse redirects. The per-origin client pool that
+The destination is resolved from that host's own manifest, cached per host, and **six
+checks** stand between the caller's message and the wire, in this order.
+
+1. **It is a plain hostname.** The value is concatenated into a URL, so a smuggled path or
+   query would choose what gets fetched.
+2. **The advertised endpoint is that host or a subdomain of it.** The manifest is only as
+   trustworthy as the host serving it, and a dial-time address guard has no objection to an
+   unrelated PUBLIC host.
+3. **The same rule again, on whatever the endpoint resolver handed back.** That resolver is
+   an injectable seam, and this tier cannot make a SIGNED call conditional on a stranger's
+   implementation having remembered the rule. The same predicate both times, deliberately.
+4. **The scheme is one this SDK will dial.** Above the dial rather than inside it, so no
+   injected transport can remove it and no signature rides plaintext.
+5. **The dial goes through the address guard**, applied to the report itself and not only
+   to the manifest fetch.
+6. **A redirect is refused, never followed.** The per-origin client pool that
 follows is bounded and evicts least-recently-used, because which Exchanges appear is
 driven by incoming offers — an open-ended, caller-influenced key space.
 

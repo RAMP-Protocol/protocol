@@ -55,6 +55,15 @@
       "retryable": false
     },
     {
+      "name": "forbidden_403_empty",
+      "status": 403,
+      "body": "",
+      "content_type": "text/plain",
+      "kind": "refused",
+      "reason": "permission_denied",
+      "retryable": false
+    },
+    {
       "name": "unauthorized_401_empty",
       "status": 401,
       "body": "",

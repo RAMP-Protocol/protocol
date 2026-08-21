@@ -99,6 +99,17 @@ _CORPUS_SPECS: list[tuple[pathlib.Path, Callable[[Any], Any], str]] = [
         "connect-error-envelope",
     ),
     (
+        GO_CONNECT_TESTDATA / "transport-failure-vectors.json",
+        lambda d: d["transport_failures"],
+        "transport-failure",
+    ),
+    (
+        GO_TESTDATA / "wire-names-vectors.json",
+        lambda d: d["snake_from_json_name"],
+        "wire-names-snake",
+    ),
+    (GO_TESTDATA / "wire-names-vectors.json", lambda d: d["hex_decode"], "wire-names-hex"),
+    (
         GO_CONNECT_TESTDATA / "client-request-vectors.json",
         _vectors,
         "client-request",

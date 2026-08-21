@@ -15,10 +15,11 @@ import (
 // output. Connect's default protojson.MarshalOptions{} omits zero-valued
 // scalars, which loses an observable agents depend on: "the subscription-covered
 // offer carries a zero Cost.amount" cannot be asserted when the field is omitted
-// entirely from the response. A MESSAGE field is not omitted when unset — protojson
-// renders it as `null` under EmitUnpopulated, and so are Struct and map fields, which
-// is what a JSON client has to accept from a conformant RAMP server. Only an unpopulated
-// ONEOF member and an unset extension field are omitted outright.
+// entirely from the response. A non-optional MESSAGE field and a Struct are
+// not omitted when unset — protojson renders each as `null` under EmitUnpopulated, which is
+// what a JSON client has to accept from a conformant RAMP server. An unset MAP renders `{}`,
+// and a field declared `optional` is omitted outright along with an unpopulated oneof member
+// and an unset extension.
 //
 // Field names are snake_case (UseProtoNames=true) — the RAMP wire is snake_case
 // proto-JSON everywhere (proto field names, corpus, generated clients, and this

@@ -54,11 +54,13 @@ carries no wildcard, so an unlisted subpath failed with `ERR_PACKAGE_PATH_NOT_EX
 and had no deep-path workaround; `./resolvers` was listed and still unimportable for want
 of the dependency.
 
-Two new shared vector files pin the above and one existing file grew, all replayed by all
-three SDKs: `connect/testdata/transport-failure-vectors.json` (what class an answer that
-did NOT come from the service falls into, captured from a real `connect-go` client),
-`helpers/testdata/wire-names-vectors.json` (the two textual rules above), and
-`resolvers/testdata/content-fetch-vectors.json`. The `null` and naming rules are pinned
+Five shared vector files are new against the previous revision, all replayed by all three
+SDKs: `connect/testdata/{connect-error,client-request,transport-failure}-vectors.json`,
+`helpers/testdata/wire-names-vectors.json` and
+`resolvers/testdata/content-fetch-vectors.json`. The transport-failure set records what
+class an answer that did NOT come from the service falls into, captured from a real
+`connect-go` client rather than transcribed; the wire-names set pins the two textual rules
+above. The `null` and naming rules are pinned
 beside the generated types instead, in `gen/{ts,python}` — they belong to the schema seam
 every message routes through, not to one tier's corpus. The endpoint rule's existing
 corpus now replays through the CLIENT as well as the resolver in all three languages, which
