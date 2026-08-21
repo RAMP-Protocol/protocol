@@ -130,13 +130,38 @@ const OPEN_MAP_MEMBERS = new Set(["metadata"]);
  * proto's. The rewrite is textual and depends on protojson's spelling being invertible,
  * which the conformance suite proves for every field in the contract.
  */
-function protoNames(payload: unknown): unknown {
-	if (Array.isArray(payload)) return payload.map(protoNames);
+/**
+ * How deep a peer's error detail may nest.
+ *
+ * BOUNDED because the payload is a peer's and the reader runs on every non-2xx. Recursing
+ * to the engine's own stack limit turns a nested object into a RangeError thrown out of a
+ * library the caller never invoked, which is not one of the failures this package says it
+ * throws. A real ErrorDetail nests two deep; the bound is the same 32 the protocol already
+ * sets for a third party's JSON in AccountRegistration.data_schema, so one number covers
+ * "how deep may a stranger's document be".
+ */
+const MAX_DETAIL_DEPTH = 32;
+
+/** Thrown past MAX_DETAIL_DEPTH. Module-private: it never reaches a caller, because the
+ * reader answers "no detail" instead. */
+class TooDeep extends Error {}
+
+function protoNames(payload: unknown, budget = MAX_DETAIL_DEPTH): unknown {
+	if (budget <= 0) throw new TooDeep();
+	if (Array.isArray(payload)) return payload.map((v) => protoNames(v, budget - 1));
 	if (!isRecord(payload)) return payload;
 	const out: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(payload)) {
 		const name = snakeFromJsonName(key);
-		out[name] = OPEN_MAP_MEMBERS.has(name) ? value : protoNames(value);
+		const member = OPEN_MAP_MEMBERS.has(name) ? value : protoNames(value, budget - 1);
+		// defineProperty, not assignment: a key named "__proto__" would otherwise invoke
+		// the prototype setter and set this object's prototype instead of a member on it.
+		Object.defineProperty(out, name, {
+			value: member,
+			enumerable: true,
+			writable: true,
+			configurable: true,
+		});
 	}
 	return out;
 }
@@ -164,7 +189,17 @@ export function errorDetailFrom(err: unknown): ErrorDetail | null {
 		const value = entry["value"];
 		const payload = isRecord(debug) ? debug : isRecord(value) ? value : null;
 		if (payload === null) continue;
-		const parsed = ErrorDetailSchema.safeParse(protoNames(payload));
+		let normalized: unknown;
+		try {
+			normalized = protoNames(payload);
+		} catch (cause) {
+			// A detail entry that cannot be normalized is not an answer, and it came from a
+			// peer that just refused the call. The scan continues: `details` is a list, and
+			// an entry this reader cannot use says nothing about the next.
+			if (cause instanceof TooDeep) continue;
+			throw cause;
+		}
+		const parsed = ErrorDetailSchema.safeParse(normalized);
 		if (parsed.success) return parsed.data;
 	}
 	return null;

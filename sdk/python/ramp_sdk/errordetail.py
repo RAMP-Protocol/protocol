@@ -34,6 +34,7 @@ SDKs agree on is proto-JSON.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import ValidationError
@@ -51,7 +52,7 @@ from wire.models import (
 from ramp_sdk._wire_names import snake_from_json_name
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Mapping, Sequence
     from enum import Enum
 
 # The fully-qualified proto name Connect stamps on an ErrorDetail transport detail.
@@ -117,15 +118,37 @@ def _proto_names(payload: Any) -> Any:
     Values under an open map keep their keys verbatim: those are the emitter's, not the
     proto's. The rewrite is textual and depends on protojson's spelling being invertible,
     which the conformance suite proves for every field in the contract.
+
+    BOUNDED, because the payload is a peer's and this runs on every non-2xx. Recursing to
+    the interpreter's own limit turns a nested object into a ``RecursionError`` raised out
+    of a library the caller never invoked, which is not one of the failures this package
+    says it raises. A real ErrorDetail nests two deep; the bound is the same 32 the
+    protocol already sets for a third party's JSON in ``AccountRegistration.data_schema``,
+    so one number covers "how deep may a stranger's document be".
     """
+    return _proto_names_bounded(payload, _MAX_DETAIL_DEPTH)
+
+
+#: How deep a peer's error detail may nest. See :func:`_proto_names`.
+_MAX_DETAIL_DEPTH = 32
+
+
+class _TooDeepError(Exception):
+    """A detail payload nested past :data:`_MAX_DETAIL_DEPTH`. Module-private: it never
+    reaches a caller, because the reader answers "no detail" instead."""
+
+
+def _proto_names_bounded(payload: Any, budget: int) -> Any:
+    if budget <= 0:
+        raise _TooDeepError
     if isinstance(payload, list):
-        return [_proto_names(v) for v in payload]
+        return [_proto_names_bounded(v, budget - 1) for v in payload]
     if not isinstance(payload, dict):
         return payload
     out: dict[str, Any] = {}
     for key, value in payload.items():
-        name = snake_from_json_name(key)
-        out[name] = value if name in _OPEN_MAP_MEMBERS else _proto_names(value)
+        name = snake_from_json_name(key) if isinstance(key, str) else key
+        out[name] = value if name in _OPEN_MAP_MEMBERS else _proto_names_bounded(value, budget - 1)
     return out
 
 
@@ -147,6 +170,10 @@ def error_detail_from(err: Mapping[str, Any] | Iterable[Any]) -> ErrorDetail | N
     can supply — may be either. A snake_case object passes through it unchanged.
     """
     details = err.get("details", ()) if isinstance(err, dict) else err
+    if isinstance(details, (str, bytes)) or not isinstance(details, Iterable):
+        # `details` is the peer's. A value that is not a list of entries carries no detail,
+        # and iterating it would raise TypeError out of a reader that promises a value.
+        return None
     for entry in details:
         if not isinstance(entry, dict):
             continue
@@ -159,7 +186,7 @@ def error_detail_from(err: Mapping[str, Any] | Iterable[Any]) -> ErrorDetail | N
             continue
         try:
             return parse_error_detail(_proto_names(payload))
-        except ValidationError:
+        except (ValidationError, _TooDeepError):
             # A detail entry that does not decode is not an answer, and it came from a
             # peer that just refused the call — so it is exactly where a hostile one puts
             # something malformed. Raising here would replace the typed failure the caller

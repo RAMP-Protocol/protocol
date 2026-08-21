@@ -36,6 +36,37 @@ describe("a debug projection a peer chose", () => {
 	});
 });
 
+describe("a debug projection deeper than the reader's bound", () => {
+	// A real ErrorDetail nests two deep. The bound is the same 32 the protocol sets for a
+	// third party's JSON in AccountRegistration.data_schema.
+	for (const [depth, readable] of [
+		[2, true],
+		[30, true],
+		[4000, false],
+		[50_000, false],
+	] as Array<[number, boolean]>) {
+		it(`depth ${depth} is ${readable ? "read" : "not an answer"}`, () => {
+			const nested: Record<string, unknown> = {};
+			let cursor = nested;
+			for (let i = 0; i < depth; i += 1) {
+				cursor["a_b"] = {};
+				cursor = cursor["a_b"] as Record<string, unknown>;
+			}
+			// Recursing to the engine's stack limit throws a RangeError out of a reader
+			// that promises a value.
+			const detail = errorDetailFrom(envelope({ ...GOOD, extra: nested }) as never);
+			expect(detail !== null).toBe(readable);
+		});
+	}
+
+	it("a key named __proto__ inside one is a member, not a prototype", () => {
+		const payload = JSON.parse(
+			'{"details":[{"type":"ramp.v1.ErrorDetail","debug":{"domain":"d","message":"m","__proto__":{"x":1}}}]}',
+		) as unknown;
+		expect(errorDetailFrom(payload)?.domain).toBe("d");
+	});
+});
+
 describe("an offer-key resolver that throws", () => {
 	it("rejects one offer, not the whole answer", async () => {
 		// On a Broker fan-out the exchange comes off a relayed offer, so one Exchange whose

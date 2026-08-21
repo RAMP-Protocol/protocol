@@ -7,6 +7,8 @@ broke that, and each is reached from bytes a peer chose:
 
 * a ``debug`` projection that is a well-formed object but not an ErrorDetail — read on
   EVERY non-2xx, which is exactly where a hostile peer operates;
+* a ``debug`` projection nested deeper than the reader's recursion allows;
+* a ``details`` member that is not a list of entries at all;
 * an offer-key resolver that raises, which the shipped resolvers do on a network failure;
 * a wire key naming an inherited object member (``__proto__``, ``constructor``).
 
@@ -17,6 +19,8 @@ first two are shared, so the assertions are.
 from __future__ import annotations
 
 from typing import Any
+
+import pytest
 
 from ramp_sdk.core import Mode, Verifier
 from ramp_sdk.errordetail import error_detail_from, reason
@@ -66,3 +70,53 @@ def test_a_raising_key_resolver_rejects_one_offer_not_the_whole_answer() -> None
     assert not result.verified
     assert len(result.rejected) == 2
     assert "key endpoint unreachable" in result.rejected[0].reason
+
+
+# A real ErrorDetail nests two deep. The bound is the same 32 the protocol sets for a third
+# party's JSON in AccountRegistration.data_schema, so one number covers "how deep may a
+# stranger's document be".
+@pytest.mark.parametrize(
+    ("depth", "readable"),
+    [(2, True), (30, True), (1200, False), (20_000, False)],
+)
+def test_a_debug_projection_deeper_than_the_bound_is_not_an_answer(
+    depth: int, readable: bool
+) -> None:
+    nested: dict[str, Any] = {}
+    cursor = nested
+    for _ in range(depth):
+        cursor["a_b"] = {}
+        cursor = cursor["a_b"]
+    detail = error_detail_from(_envelope({**_GOOD, "extra": nested}))
+    assert (detail is not None) is readable, (
+        f"depth {depth}: recursing to the interpreter's limit raises out of a reader that "
+        "promises a value"
+    )
+
+
+@pytest.mark.parametrize("details", [None, 5, True, "a string"])
+def test_a_details_member_that_is_not_a_list_of_entries(details: Any) -> None:
+    # `details` is the peer's. Iterating a value that is not a list raised TypeError out of
+    # the reader, on the path every non-2xx takes.
+    assert error_detail_from({"details": details}) is None
+
+
+def test_a_call_on_a_closed_client_is_a_typed_refusal() -> None:
+    # httpx raises a bare RuntimeError here. Nothing was sent, which is what NOT_SENT means.
+    from ramp_sdk import sync as blocking
+    from ramp_sdk.client import ClientConfig
+    from ramp_sdk.client.errors import CallError, CallErrorKind
+    from ramp_sdk.signing_transport import SigningTransport
+
+    config = ClientConfig(
+        base_url="https://exchange.test",
+        requester={"id": "a", "domain": "agent.test", "type": "REQUESTER_TYPE_AGENT"},
+        signer=SigningTransport(signer_seed=bytes(range(32)), keyid="agent.v1"),
+    )
+    client = blocking.Client(config)
+    client.close()
+    for call in (lambda: client.discover({"exchange": "e.test"}),
+                 lambda: client.fetch("https://edge.test/x")):
+        with pytest.raises(CallError) as caught:
+            call()
+        assert caught.value.kind is CallErrorKind.NOT_SENT

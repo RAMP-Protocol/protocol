@@ -130,6 +130,16 @@ class _Face:
     async def __aexit__(self, *_exc: object) -> None:
         await self.aclose()
 
+    def _refuse_if_closed(self, op: str) -> None:
+        """A call on a client that has been closed is the caller's own mistake, and it is
+        still a call that did not happen — so it is reported the way every other one is.
+        httpx raises a bare RuntimeError here, which is not a failure this package says it
+        raises."""
+        if self._http.is_closed or self._guarded.is_closed:
+            raise CallError(
+                CallErrorKind.NOT_SENT, op, cause="the client has been closed"
+            )
+
     async def _send(self, plan: _verbs.Plan) -> tuple[int, str]:
         """Send one RPC and read its answer under the cap.
 
@@ -138,6 +148,7 @@ class _Face:
         allocation that already happened — two hundred kilobytes of gzip reach two hundred
         megabytes before it could fire. These peers include one an offer named.
         """
+        self._refuse_if_closed(plan.op)
         http = self._guarded if plan.guarded else self._http
         try:
             async with http.stream(
@@ -240,6 +251,7 @@ class Client(_Face):
         """
         headers, timeout, max_bytes = _fetch_inputs(self._config, signed_url)
         op = "fetch content"
+        self._refuse_if_closed(op)
         try:
             # Redirects are REFUSED. Following one would either replay a proof bound to
             # the old URL, which the edge's own check rejects, or hand a fresh proof of
