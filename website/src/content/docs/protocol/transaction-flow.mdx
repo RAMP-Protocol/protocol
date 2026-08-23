@@ -17,7 +17,7 @@ Without Broker (direct, single exchange):
 
 ## Multi-Hop Routing
 
-Multi-hop is the common case, not the exception. A request typically travels `Agent -> Broker -> ... -> Exchange`, and the broker layer may itself be more than one hop. The forwarding chain lives entirely in the HTTP layer as a **stack of [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421) HTTP Message Signatures** — there is no in-message hop list. Each party that originates or forwards the request adds **one** labeled signature (`Signature` / `Signature-Input`, e.g. `ramp-agent`, `ramp-broker-1`). Each forwarder's signature covers the request essentials (`@method`, `@authority`, `@path`, `Content-Digest`) **plus the previous hop's signature**, so the chain is ordered and tamper-evident: no hop can be reordered, dropped, or inserted without invalidating a downstream signature. The `keyid` on each signature names the signer; the Exchange resolves it at `{domain}/.well-known/ramp.json`, verifies **every** signature, and confirms the chain is contiguous. The ordered set of signatures *is* the forwarding chain.
+Multi-hop is the common case, not the exception. A request typically travels `Agent -> Broker -> ... -> Exchange`, and the broker layer may itself be more than one hop. The forwarding chain lives entirely in the HTTP layer as a **stack of [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421) HTTP Message Signatures** — there is no in-message hop list. Each party that originates or forwards the request adds **one** labeled signature (`Signature` / `Signature-Input`, e.g. `ramp-agent`, `ramp-broker-1`). Each forwarder's signature covers the request essentials (`@method`, `@authority`, `@path`, `Content-Digest`) **plus the previous hop's signature**, so the chain is ordered and tamper-evident: no hop can be reordered, dropped, or inserted without invalidating a downstream signature. The `keyid` on each signature is the key's RFC 7638 thumbprint; the Exchange resolves it in that hop's WBA directory at `{domain}/.well-known/http-message-signatures-directory` (the domain comes from the hop's covered `Signature-Agent` header), verifies **every** signature, and confirms the chain is contiguous. The ordered set of signatures *is* the forwarding chain.
 
 **Chain-depth caps.** Two fields bound how deep a chain may go:
 
@@ -54,12 +54,12 @@ Content-Type: application/json
 ```
 
 Key fields:
-- `requester.id` + `requester.domain` -- uniquely identifies the agent; the Exchange fetches the Ed25519 public key from `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) to verify the request's RFC 9421 HTTP Message Signature
+- `requester.id` + `requester.domain` -- uniquely identifies the agent; the Exchange fetches the Ed25519 public key from the signer's WBA directory at `{domain}/.well-known/http-message-signatures-directory` (the domain resolved from the covered `Signature-Agent` header) to verify the request's RFC 9421 HTTP Message Signature
 - `ResourceQuery.uris` -- the content URI(s) being requested
 - `acceptable_restrictions` -- the restrictions the agent is willing to accept, grouped by axis; axis `FUNCTION` carries the intended use (RAG, training, search, etc.)
 - `requester.scopes` -- entitlement scopes; `["*"]` means unrestricted public access
 - billing carries no request field: the Exchange resolves the caller's account (the `billing_ref` minted at `ExchangeService.Register`) from the verified request signature, never from anything the caller sends
-- request authentication -- an RFC 9421 HTTP Message Signature over the request (the agent's key is published at its `ramp.json`); when the request is forwarded, each hop adds its own labeled HTTP Message Signature, and the ordered stack of these header signatures is the forwarding chain (no in-message hop list)
+- request authentication -- an RFC 9421 HTTP Message Signature over the request (the agent's key is published in its WBA directory); when the request is forwarded, each hop adds its own labeled HTTP Message Signature, and the ordered stack of these header signatures is the forwarding chain (no in-message hop list)
 
 ### Response (`ResourceResponse`)
 

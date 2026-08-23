@@ -1902,7 +1902,7 @@ class OfferGroup(WireModel):
 class ResourceEntry(WireModel):
     attestations: list[ResourceAttestation] | None = Field(
         None,
-        description="Signed attestations about this resource entry.\n Same semantics as Offer.attestations — see ResourceAttestation message\n for verification levels and claim vocabulary. Attestations pushed via\n CatalogService are verified at push time: the Exchange checks that\n the attestation verifier is authorized to push for this provider\n (via catalog_contributors in the provider's WellKnownManifest) and validates the\n attestation signature against the verifier's public key from their\n /.well-known/ramp.json endpoint (WellKnownManifest, role determined\n by the verifier's operator).",
+        description="Signed attestations about this resource entry.\n Same semantics as Offer.attestations — see ResourceAttestation message\n for verification levels and claim vocabulary. Attestations pushed via\n CatalogService are verified at push time: the Exchange checks that\n the attestation verifier is authorized to push for this provider\n (via catalog_contributors in the provider's WellKnownManifest) and validates the\n attestation signature against the verifier's public key from its WBA\n directory (the JWK Set at /.well-known/http-message-signatures-directory;\n the keyid is the key's RFC 7638 thumbprint). The verifier's ramp.json\n carries only its role, determined by the verifier's operator.",
     )
     content_hash: str | None = Field(None, description='Content hash')
     content_id: str | None = Field(None, description='Content identifier')

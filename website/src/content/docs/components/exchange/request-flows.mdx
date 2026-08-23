@@ -68,7 +68,8 @@ func (h *ExchangeHandler) DiscoverResources(
     }
 
     // 2. Verify Requester identity (RFC 9421 HTTP Message Signature in the HTTP headers, Ed25519, domain-bound key).
-    //    Lookup the requester's public key via {domain}/.well-known/ramp.json.
+    //    Lookup the requester's public key in the WBA directory at
+    //    {domain}/.well-known/http-message-signatures-directory.
     //    The Exchange MUST verify the requester's HTTP Message Signature. Reject on failure.
     requester := req.Msg.Requester
     requesterPubKey, err := h.requesterKeys.LookupPublicKey(ctx, requester.Domain)
@@ -91,7 +92,8 @@ func (h *ExchangeHandler) DiscoverResources(
     //     adds ONE labeled signature (keyid names the signer) that covers the
     //     request essentials plus the previous hop's signature, so the ordered
     //     set of header signatures IS the chain and is tamper-evident.
-    //     verifyForwardingChain resolves each keyid via {domain}/.well-known/ramp.json,
+    //     verifyForwardingChain resolves each keyid in that hop's WBA directory
+    //     ({domain}/.well-known/http-message-signatures-directory),
     //     verifies every signature, and confirms the chain is contiguous.
     if err := h.verifyForwardingChain(ctx, req); err != nil {
         slog.Warn("forwarding signature chain verification failed",
@@ -238,7 +240,7 @@ func (h *ExchangeHandler) DiscoverResources(
 
 ### Requester Authentication
 
-Requester authentication uses an RFC 9421 HTTP Message Signature in the HTTP headers, signed with a domain-bound Ed25519 key. The `Requester.domain` field determines where the public key is published (`{domain}/.well-known/ramp.json`). The `Requester.id` identifies the specific entity within that domain. The requester's private key never leaves the requester.
+Requester authentication uses an RFC 9421 HTTP Message Signature in the HTTP headers, signed with a domain-bound Ed25519 key. The public key is published in the signer's WBA directory (`{domain}/.well-known/http-message-signatures-directory`); the verifier resolves that domain from the covered `Signature-Agent` header. The `Requester.id` identifies the specific entity within that domain. The requester's private key never leaves the requester.
 
 **Two onboarding paths:**
 
@@ -262,9 +264,9 @@ type RequesterRecord struct {
 
 The forwarding chain lives entirely in the HTTP layer as a **stack of RFC 9421 HTTP Message Signatures** — there is no `intermediaries` field on the message. Each party that originates or forwards a `ResourceQuery` or `TransactionRequest` adds **one** labeled signature (`Signature` / `Signature-Input`, e.g. `ramp-agent`, `ramp-broker-1`) to the request headers. Each forwarder's signature covers the request essentials (`@method`, `@authority`, `@path`, `Content-Digest`) **plus the previous hop's signature**, so the ordered set of header signatures *is* the chain and cannot be reordered, dropped, or extended undetectably. The Exchange MUST:
 
-1. **Verify the requester's (originating) RFC 9421 HTTP Message Signature** — proves the original requester authorized the request. The `keyid` names the signer; the Exchange resolves the public key via `{requester.domain}/.well-known/ramp.json` and verifies the Ed25519 signature.
+1. **Verify the requester's (originating) RFC 9421 HTTP Message Signature** — proves the original requester authorized the request. The `keyid` is the key's RFC 7638 thumbprint; the Exchange resolves the key in the requester's WBA directory at `{domain}/.well-known/http-message-signatures-directory` and verifies the Ed25519 signature.
 
-2. **Verify every forwarding signature in the stack** — proves each intermediary (e.g., Broker) handled the request. For each labeled signature, the Exchange resolves its `keyid` via `{domain}/.well-known/ramp.json`, verifies the Ed25519 signature, and confirms it covers the prior hop's signature so the chain is contiguous and ordered.
+2. **Verify every forwarding signature in the stack** — proves each intermediary (e.g., Broker) handled the request. For each labeled signature, the Exchange resolves its `keyid` in that hop's WBA directory at `{domain}/.well-known/http-message-signatures-directory`, verifies the Ed25519 signature, and confirms it covers the prior hop's signature so the chain is contiguous and ordered.
 
 All signatures must pass for the request to proceed. If any verification fails — or the chain is not contiguous — the Exchange rejects the request with `CodeUnauthenticated`.
 
@@ -276,10 +278,11 @@ When only the originating signature is present, the requester is calling the Exc
 //
 // verifyForwardingChain:
 //   1. Parses the Signature / Signature-Input headers into ordered, labeled hops.
-//   2. Verifies the originating (requester) signature against
-//      {requester.domain}/.well-known/ramp.json.
-//   3. For each subsequent labeled signature, resolves its keyid via
-//      {domain}/.well-known/ramp.json, verifies the Ed25519 signature, and
+//   2. Verifies the originating (requester) signature against the key in
+//      the requester's WBA directory at
+//      {domain}/.well-known/http-message-signatures-directory.
+//   3. For each subsequent labeled signature, resolves its keyid in that
+//      hop's WBA directory, verifies the Ed25519 signature, and
 //      confirms it covers the prior hop's signature (contiguous + ordered).
 //   4. Counts the hops against max_hops / max_intermediary_hops.
 // Any failure returns CodeUnauthenticated.

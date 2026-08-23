@@ -5234,9 +5234,10 @@ type ResourceEntry struct {
 	// CatalogService are verified at push time: the Exchange checks that
 	// the attestation verifier is authorized to push for this provider
 	// (via catalog_contributors in the provider's WellKnownManifest) and validates the
-	// attestation signature against the verifier's public key from their
-	// /.well-known/ramp.json endpoint (WellKnownManifest, role determined
-	// by the verifier's operator).
+	// attestation signature against the verifier's public key from its WBA
+	// directory (the JWK Set at /.well-known/http-message-signatures-directory;
+	// the keyid is the key's RFC 7638 thumbprint). The verifier's ramp.json
+	// carries only its role, determined by the verifier's operator.
 	Attestations []*ResourceAttestation `protobuf:"bytes,12,rep,name=attestations,proto3" json:"attestations,omitempty"`
 	// Publisher-declared licensing terms for this resource.
 	// See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST

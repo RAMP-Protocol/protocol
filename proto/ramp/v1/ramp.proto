@@ -295,7 +295,9 @@ message ResourceQuery {
   // its own signature over the request as received. A message that TERMINATES
   // at the Broker (DiscoveryRequest) is not forwarding: there the Broker is
   // the final recipient, and the agent signs the Broker's URL.
-  // The Exchange resolves each hop's key (keyid → domain → /.well-known/ramp.json),
+  // The Exchange resolves each hop's key in that hop's WBA directory — named by
+  // the hop's covered `Signature-Agent` header, with the keyid the key's
+  // RFC 7638 thumbprint; ramp.json carries no keys —
   // verifies every signature, and enforces RequestConstraints.max_hops /
   // WellKnownManifest.max_intermediary_hops by counting them. (Field 5 unused.)
 
@@ -2196,9 +2198,10 @@ message ResourceEntry {
   // CatalogService are verified at push time: the Exchange checks that
   // the attestation verifier is authorized to push for this provider
   // (via catalog_contributors in the provider's WellKnownManifest) and validates the
-  // attestation signature against the verifier's public key from their
-  // /.well-known/ramp.json endpoint (WellKnownManifest, role determined
-  // by the verifier's operator).
+  // attestation signature against the verifier's public key from its WBA
+  // directory (the JWK Set at /.well-known/http-message-signatures-directory;
+  // the keyid is the key's RFC 7638 thumbprint). The verifier's ramp.json
+  // carries only its role, determined by the verifier's operator.
   repeated ResourceAttestation attestations = 12;
 
   // Publisher-declared licensing terms for this resource.
@@ -2653,7 +2656,8 @@ message RequestConstraints {
 // an Exchange/Broker or a third party) hosts the agent's WellKnownManifest,
 // and the agent sets Requester.domain to that registry host
 // (e.g. "agent-7.registry.example"). The agent generates its own keypair; the
-// registry publishes the public half at {registry}/.well-known/ramp.json. The
+// registry publishes the public half in its WBA directory (the JWK Set at
+// {registry}/.well-known/http-message-signatures-directory). The
 // domain + well-known paradigm is preserved end to end.
 // ============================================================================
 

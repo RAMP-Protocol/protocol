@@ -303,7 +303,7 @@ Every Offer returned by `DiscoverResources` can carry `ResourceAttestation` entr
 
 At Level 1, your agent can re-compute the content hash from delivered bytes and compare it to the provider's signed claim. A mismatch is cryptographic proof that the delivered content differs from what was promised.
 
-At Level 2, an independent verification vendor (whose keys are published at `https://{verifier}/.well-known/ramp.json`) has crawled and measured the content. Your agent trusts the vendor's attestation without re-verifying.
+At Level 2, an independent verification vendor (whose keys are published in its WBA directory at `https://{verifier}/.well-known/http-message-signatures-directory`) has crawled and measured the content. Your agent trusts the vendor's attestation without re-verifying.
 
 ## Dispute Resolution
 

@@ -128,7 +128,7 @@ RAMP uses a two-layer signing model: the **agent's request signature** proves wh
 
 ### Request Authentication
 
-The `Requester` message carries identity and entitlements only (`id`, `domain`, `type`, `scopes`, optional `delegation`) — it has **no** signature field. The request is authenticated by an RFC 9421 HTTP Message Signature (alg=ed25519) computed over the whole HTTP request and carried in the headers. The Exchange verifies it against the public key published at `{requester.domain}/.well-known/ramp.json`.
+The `Requester` message carries identity and entitlements only (`id`, `domain`, `type`, `scopes`, optional `delegation`) — it has **no** signature field. The request is authenticated by an RFC 9421 HTTP Message Signature (alg=ed25519) computed over the whole HTTP request and carried in the headers. The Exchange verifies it against the public key published in the signer's WBA directory at `{domain}/.well-known/http-message-signatures-directory`, with the domain resolved from the covered `Signature-Agent` header.
 
 The Broker passes `Requester` through unchanged -- it never modifies the requester's identity, scopes, or delegation -- and adds its own forwarding signature in the headers (see below).
 
@@ -160,8 +160,8 @@ func (o *Broker) signHop(req *http.Request, priorSig string) {
 
 The Exchange verifies both layers:
 
-1. **Requester signature** -- verified against the public key at `{requester.domain}/.well-known/ramp.json`
-2. **The forwarding signature stack** -- each labeled RFC 9421 signature is verified against the public key at the forwarding party's domain (`{keyid-domain}/.well-known/ramp.json`), and the chained coverage is checked hop-by-hop.
+1. **Requester signature** -- verified against the public key in the agent's WBA directory at `{domain}/.well-known/http-message-signatures-directory` (domain from the covered `Signature-Agent` header, key selected by the `keyid` thumbprint)
+2. **The forwarding signature stack** -- each labeled RFC 9421 signature is verified against the public key in that hop's WBA directory (`{hop-domain}/.well-known/http-message-signatures-directory`), and the chained coverage is checked hop-by-hop.
 
 All signatures must pass. The Exchange counts the number of forwarding hops in the stack against `max_hops` / `max_intermediary_hops` and rejects requests that exceed the limit.
 
