@@ -1232,19 +1232,27 @@ worth keeping because the field will look attractive again.
 
 The two upstream drafts already own discovery, through channels with better
 properties than a manifest can offer. The WBA directory is resolved from the
-COVERED `Signature-Agent` header — a URI the signature itself protects — with
-the registered well-known path as the fallback, so the standard carries both
-the default location and the relocation mechanism
-(draft-meunier-http-message-signatures-directory). The Signature Agent Card has
-no canonical path anywhere: it lives at the agent's `client_id` URL, which IS
-the agent's resolvable identity (draft-meunier-webbotauth-registry).
+COVERED `Signature-Agent` header — a pointer the signature itself protects —
+with the registered well-known path as the fallback, so the discovery channel
+carries both the default location and the relocation mechanism
+(draft-meunier-http-message-signatures-directory). One qualification: RAMP
+profiles the older whole-header form of that channel. The covered value is a
+single bare or quoted origin; the current draft's sf-dictionary form
+(label-keyed members, per-member coverage, the `directory`/`jwks_uri`/`cimd`
+types) is deliberately not read — `TestSignatureAgent_dictionaryFormNotUnwrapped`
+pins the refusal, because a `data:` member would inline the directory and
+remove the fetch boundary key resolution depends on. Adopting the dictionary
+form is a separate cross-SDK migration decision, not part of this removal.
+The Signature Agent Card has no canonical path anywhere: it lives at the
+agent's `client_id` URL, which IS the agent's resolvable identity
+(draft-meunier-webbotauth-registry).
 
 A manifest-side pointer therefore has no state in which it carries load. A
 verifier may never prefer an uncovered, self-published field over the covered
 header, so the pointer cannot participate in verification; when it equals the
 canonical answer it says nothing; and when it differs, a participant that
-believes it becomes unverifiable, because verifiers follow the drafts, not the
-manifest. For the card specifically, the block's exact-same-origin rule also
+believes it becomes unverifiable, because verifiers follow the covered header,
+not the manifest. For the card specifically, the block's exact-same-origin rule also
 forbade what the draft permits — a card hosted wherever the `client_id` origin
 is — so the field could only ever describe co-hosted cards.
 
