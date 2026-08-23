@@ -65,8 +65,6 @@ This ties cryptographic identity to DNS ownership — if you control the domain,
 
 Signing keys are published in a dedicated WBA directory at `/.well-known/http-message-signatures-directory`, separate from the role manifest at `/.well-known/ramp.json`. It is a pure JWK Set (`Content-Type: application/jwk-set+json`): a `keys` array of Ed25519 JWKs plus an optional `revocation_url`. Each key is identified by its RFC 7638 thumbprint (the value carried as the RFC 9421 `keyid`), so the directory carries no `kid` labels. Every RAMP participant — agent, exchange, broker, publisher — serves one.
 
-A manifest **may** additionally advertise where it serves that directory, through the optional [`identity_documents`](/protocol/exchange-manifest/#identity-documents) block. That is discovery metadata for a consumer reading the manifest. **It is not part of signature verification**: the verification steps below resolve the directory from the covered `Signature-Agent` header and the canonical path above, and they do not read the manifest at all.
-
 ### WebBotAuth Compatibility (IETF)
 
 RAMP's authentication stack is automatically compatible with the IETF [WebBotAuth](https://datatracker.ietf.org/wg/webbotauth/about/) working group specification (standards track, targeting April 2026). Both use:

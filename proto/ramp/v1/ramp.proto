@@ -1652,8 +1652,6 @@ message Requester {
   // HTTP Message Signatures (alg=ed25519). The Requester's public keys are NOT
   // in ramp.json: they live in the WBA directory (WBAFile), and a verifier
   // resolves that directory from the COVERED `Signature-Agent` header.
-  // WellKnownManifest.identity_documents may ADVERTISE where that directory is
-  // served; advertising it is all it does.
 
   // Optional delegation — present when the requester acts on behalf of
   // another entity (user, organization, upstream agent).
@@ -2892,85 +2890,6 @@ message AccountRegistration {
   google.protobuf.Struct data_schema = 1;
 }
 
-// IdentityDocuments — where this participant serves its identity documents: its
-// Web Bot Auth directory and its Signature Agent Card. Discovery metadata only.
-// Publishing this block does not change how a request signature is verified: a
-// verifier still resolves the WBA directory from the COVERED `Signature-Agent`
-// header, exactly as before. Both members are RFC 3986 URI references, relative
-// or absolute, and a consumer resolves each against the URL it fetched this
-// manifest FROM — never against the self-asserted `domain` member, which would
-// let a hostile manifest validate itself; `endpoint` already carries the same
-// reasoning. After resolution the URL MUST be on the SAME ORIGIN as the manifest
-// — `https` scheme, equal hostname, equal effective port, where an omitted port
-// and `:443` are the same port — and MUST NOT carry userinfo. That is
-// deliberately stricter than the `endpoint` rule, which does allow a subdomain,
-// because the two fields fail differently: whoever takes over an `endpoint` host
-// misdirects calls they still cannot sign for, while whoever takes over an
-// identity-document host publishes their own keys and BECOMES this participant.
-// THE MANIFEST URL IS VETTED FIRST, on its own: it MUST be `https`, MUST name a
-// plain host, and MUST NOT carry userinfo. Those are refusals rather than
-// courtesies, because the checks on the resolved URL cannot stand in for them —
-// a base of `http://a.example/ramp.json` resolving to `https://a.example/doc`
-// passes every one of them, since the hostnames match and both sides fold to no
-// port. Accepting that means trusting a manifest that arrived unauthenticated,
-// which lets whoever rewrote that plaintext document name any path on the host
-// and have it served back over TLS from the legitimate origin. The path is
-// resolved by RFC 3986 5.2.2, 5.2.3 and 5.2.4, dot-segment removal included, and
-// a `..` that pops past the root removes nothing and leaves what follows in
-// place — an empty segment there SURVIVES.
-// Both the reference AND the URL it resolves against MUST be written in the
-// RFC 3986 character set — the unreserved characters, the gen-delims, the
-// sub-delims and `%` — with every percent-escape valid and no percent-encoded
-// dot anywhere in the string (`%2e`, `%2E`), mid-segment included and not only
-// at a segment boundary. A reference with no scheme MUST NOT carry a colon in
-// its FIRST path segment, the RFC 3986 path-noscheme rule, since that is
-// ambiguous with a scheme. An authority holds at most one colon: everything
-// after it is the port, and a NON-EMPTY port MUST be a number in 1-65535. An
-// empty port — a bare `:` with no digits — and a port equal to the scheme
-// default are both ELIDED rather than refused, which RFC 3986 6.2.3 licenses:
-// it lists `http://example.com:/` and `http://example.com:80/` as equivalent to
-// `http://example.com/`, so `https://a.example:/x` resolves to
-// `https://a.example/x`.
-// A reference that names an authority MUST name a non-empty one. The manifest
-// URL MUST NOT carry a fragment, having been fetched; a reference MAY carry
-// one and it is kept, but never a second, because RFC 3986 gives a reference a
-// single fragment that runs to the end of the string. The resolved query and
-// fragment are the substrings the author wrote, not a re-serialization of them,
-// and a component that is DEFINED BUT EMPTY KEEPS its delimiter: a reference of
-// `/x?` resolves to a URL ending in `?`, and one of `/x#` keeps the `#`. RFC
-// 3986 6.2.3 again, pointing the other way from the port: normalization "should
-// not remove delimiters when their associated component is empty", and two URIs
-// differing only by a trailing `#` are different regardless of the scheme.
-// Those are refusals, not repairs: this rule has to give the same verdict and
-// the same resolved string in every implementation, and the URL parsers
-// implementations reach for disagree about almost everything outside that
-// character set — one percent-encodes a literal `|` where another keeps it, one
-// silently strips a tab and reads an absolute reference as a relative path, one
-// decodes `%2e` and then removes the segment, which names a different document,
-// and one percent-encodes an apostrophe in a query where the others keep it.
-// An empty block means the same as no block. Key material and Signature Agent
-// Card contents are never copied in here, and the emergency
-// revocation list stays where it is, linked from the WBA directory
-// (WBAFile.revocation_url).
-message IdentityDocuments {
-  // URI reference to this participant's Web Bot Auth directory — the RFC 7517
-  // JWK Set described by WBAFile. Absent means fall back to the WBA-canonical
-  // path /.well-known/http-message-signatures-directory on the host that served
-  // this manifest, which is what consumers do today; publishing this member
-  // relocates that document rather than adding a lookup step.
-  optional string wba_directory = 1 [
-    (buf.validate.field).string.min_len = 1
-  ];
-
-  // URI reference to this participant's Signature Agent Card. Absence is NOT
-  // symmetric with wba_directory: it means NOT ADVERTISED, not "look elsewhere".
-  // RAMP defines no canonical path for this document, so a consumer MUST NOT
-  // guess one.
-  optional string signature_agent_card = 2 [
-    (buf.validate.field).string.min_len = 1
-  ];
-}
-
 // WellKnownManifest — RAMP commercial overlay, served at /.well-known/ramp.json
 // by every RAMP participant (agent, exchange, broker, publisher).
 //
@@ -3118,14 +3037,6 @@ message WellKnownManifest {
   optional string terms_digest = 31 [
     (buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$"
   ];
-
-  // Any role. Where this participant serves its identity documents — its WBA
-  // directory and its Signature Agent Card. Optional, and discovery metadata
-  // only: a verifier still resolves the WBA directory from the COVERED
-  // `Signature-Agent` header, so omitting the block keeps exactly today's
-  // behaviour. See IdentityDocuments for the URI-resolution and same-origin
-  // rules, and for why absence means different things on the two members.
-  optional IdentityDocuments identity_documents = 32;
 
   // Extension point
   google.protobuf.Struct ext = 15;

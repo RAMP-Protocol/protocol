@@ -59,7 +59,6 @@ from .hosts import (
     host_of,
     is_bare_domain,
     is_bare_host,
-    resolve_identity_document,
 )
 from .httpsig import (
     MultisigVerdict,
@@ -210,7 +209,6 @@ __all__ = [
     "parse_money",
     "reason",
     "registration_failure_detail",
-    "resolve_identity_document",
     "retrieval_auth_failure_detail",
     "scopes_subset",
     "sign_agent_binding",

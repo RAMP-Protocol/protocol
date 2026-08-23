@@ -40,33 +40,15 @@ The `ramp.json` file is served at `/.well-known/ramp.json` and carries a `WellKn
 
 ## An Agent Manifest
 
-An agent's manifest is much smaller. It is a role marker, plus the optional
-`identity_documents` block naming where the agent serves the documents that
-describe its identity:
+An agent's manifest is much smaller: a role marker. Its signing keys are not here — they live in the WBA directory described below, which a verifier resolves from the covered `Signature-Agent` header.
 
 ```json
 {
   "ver": "1.0",
   "role": "ROLE_AGENT",
-  "domain": "research-bot.example",
-  "identity_documents": {
-    "wba_directory": "/.well-known/http-message-signatures-directory",
-    "signature_agent_card": "/.well-known/signature-agent-card.json"
-  }
+  "domain": "research-bot.example"
 }
 ```
-
-Both members are URI references — relative, as above, or absolute. A consumer
-resolves each against the URL it fetched `ramp.json` from, and the result must be
-on the **exact same origin** as that URL: `https`, the same hostname, the same
-effective port, and no userinfo. A subdomain is refused, which is stricter than
-the rule for `endpoint`; [Identity documents](/protocol/exchange-manifest/#identity-documents)
-explains why.
-
-Omitting `wba_directory` keeps today's behaviour — a consumer falls back to the
-canonical path below on the host that served the manifest. Omitting
-`signature_agent_card` means the card is **not advertised**; RAMP defines no
-canonical path for it, so nothing may guess one.
 
 ## The WBA Directory
 

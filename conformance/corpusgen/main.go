@@ -117,15 +117,6 @@ func seeds() map[string]proto.Message {
 			Domain:      "exchange.example",
 			TermsUri:    proto.String("https://exchange.example/terms"),
 			TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
-			// Auto-fill never populates a nested message, so without this seed the
-			// only identity_documents coverage would be standalone IdentityDocuments
-			// cases — the block validating in isolation, never inside a manifest.
-			// Seeding it puts the block through canonical_test.go's proto-JSON
-			// round-trip on WellKnownManifest/valid.
-			IdentityDocuments: &rampv1.IdentityDocuments{
-				WbaDirectory:       proto.String("/.well-known/http-message-signatures-directory"),
-				SignatureAgentCard: proto.String("/.well-known/signature-agent-card.json"),
-			},
 		},
 		"TenantFeeRate":   &rampadminv1.TenantFeeRate{TenantId: "tenant-seed", FeeRateBps: 0},
 		"ReportingPolicy": &rampadminv1.ReportingPolicy{TenantId: "tenant-seed", RequiredFields: []string{"x"}},

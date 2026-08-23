@@ -124,7 +124,6 @@ The Exchange's offer-signing keys are **not** carried in `ramp.json`. They live 
 | `supported_profiles` | string[] | No | Domain extension profiles this Exchange conforms to (e.g., `["ramp-academic-v1", "ramp-news-v1"]`) |
 | `base_currency` | string | No | ISO 4217 currency code for all `unit_cost` values in offers (e.g., `"USD"`) |
 | `account_registration` | object | No | How to open an account here. Its `data_schema` is a JSON Schema (draft 2020-12) for the `registration_data` an agent sends to `Register`. Present means this Exchange enforces it **and accepts registration through the API**; absent means `registration_data` passes through uninspected. It must satisfy every rule in [Registration schema rules](#registration-schema-rules) below — self-contained and acyclic, 16KB, 32 containers deep, 10,000 evaluations of work, and a restricted `pattern` alphabet |
-| `identity_documents` | object | No | Where this participant serves its identity documents — `wba_directory` and `signature_agent_card`. Both are URI references resolved against the URL this manifest was fetched from, both **must resolve to the same origin** as that URL, and both must be written in the plain RFC 3986 character set — see [Identity documents](#identity-documents) |
 | `contact` | string | No | Contact email for integration inquiries |
 | `terms_uri` | string | No | Terms of service URL |
 | `terms_digest` | string | No | Digest of the document at `terms_uri`, in `method:hexdigest` form, pinning **which** terms document you are currently offering. A registration echoes it, the request signature covers that echo, and you record the accepted value with the account — which is what answers "which terms did this operator accept" after a later revision. Only allowed alongside `terms_uri`. Publishing it for the first time refuses every client that does not yet echo it, so treat it as a coordinated change |
@@ -289,146 +288,6 @@ local check that cannot run must not become a local veto. An **Exchange** that
 cannot compile its own configured schema is looking at a misconfiguration of its
 deployment, and must not advertise a schema it is not itself enforcing.
 
-### Identity documents
-
-`identity_documents` is optional, any role may publish it, and it says where this
-participant serves the two documents that describe its identity:
-
-```json
-{
-  "identity_documents": {
-    "wba_directory": "/.well-known/http-message-signatures-directory",
-    "signature_agent_card": "/.well-known/signature-agent-card.json"
-  }
-}
-```
-
-Both members are RFC 3986 **URI references** — relative or absolute, both work.
-A consumer resolves each against the URL it fetched `ramp.json` from, the same
-anchor the endpoint rule uses and for the same reason: `domain` is self-asserted,
-so anchoring to it would let a hostile manifest validate itself.
-
-**Absence means different things on the two members**, and that asymmetry is
-deliberate:
-
-- `wba_directory` absent → fall back to the canonical path
-  `/.well-known/http-message-signatures-directory` on the host that served the
-  manifest. That is what every consumer does today, so a participant that
-  publishes nothing keeps working unchanged.
-- `signature_agent_card` absent → **not advertised**. RAMP defines no canonical
-  path for that document, so a consumer must not guess one.
-- An empty block, `{}`, is the same as no block at all.
-
-This is **discovery metadata only**. Publishing it does not change how a request
-signature is verified — a verifier still resolves the WBA directory from the
-covered `Signature-Agent` header. The block relocates a document; it does not
-introduce a lookup step.
-
-#### The origin rule, and why it is stricter than `endpoint`
-
-After resolution the URL **MUST** be on the **exact same origin** as the manifest:
-the `https` scheme, an equal hostname, and an equal effective port (an omitted
-port and `:443` are the same port). It **MUST NOT** carry userinfo. A subdomain is
-**refused** — `https://keys.exchange.example/dir` is not a valid identity-document
-location for a manifest served from `https://exchange.example/.well-known/ramp.json`.
-
-That is stricter than the [endpoint rule](#endpoint-host-binding), which does
-allow a subdomain, because the two fields fail differently. If the host named by
-`endpoint` is taken over, an attacker receives signed calls that were addressed to
-the Exchange — bad, but they still cannot produce a valid signature as anybody
-else. If the host named by `wba_directory` is taken over, the attacker **becomes**
-the identity: they publish their own keys, and their signatures verify as the
-participant. A dangling DNS record on one unused subdomain is enough for that,
-without the participant ever losing control of the host that serves `ramp.json`.
-
-The subdomain allowance also buys nothing here. `endpoint` needs it because an
-Exchange's API is a live service that commonly runs on separate infrastructure.
-Identity documents are static JSON served next to a `/.well-known/ramp.json` the
-participant is already serving on that exact host, so the field's job is to
-relocate the **path**, not the host.
-
-The manifest URL itself is checked before anything is resolved against it: it must
-be `https`, name a plain host, and carry no userinfo. A base of
-`http://exchange.example/ramp.json` resolving to
-`https://exchange.example/dir` would pass every later check — the hostnames match
-and both sides fold to no port — and accepting it would mean trusting a manifest
-that arrived unauthenticated.
-
-The path is resolved by RFC 3986 §5.2.2, §5.2.3 and §5.2.4, dot-segment removal
-included. One corner is worth stating because URL libraries disagree about it: a
-`..` that pops past the root removes nothing and leaves what follows in place, so
-an empty segment there **survives**. `..//dir` against a base of `/ramp.json`
-resolves to `//dir`, not `/dir`.
-
-#### What a reference may be written with
-
-A reference is **refused** unless it is written entirely in the RFC 3986 character
-set: the unreserved characters, the gen-delims, the sub-delims, and `%`. On top of
-that:
-
-- every `%` **MUST** introduce two hex digits, so `%zz` is refused;
-- `%2e` and `%2E` are refused **anywhere in the string**, not only where they
-  would form a whole segment, because a percent-encoded dot is a dot segment
-  written so that dot-segment removal cannot see it. So `card%2ejson` is refused
-  along with `%2e%2e/card.json`. Refusing it everywhere costs nothing for the
-  values this field carries, and a rule that applied only at segment boundaries
-  would be harder to write identically in three languages — which is the whole
-  point;
-- a **non-empty** port **MUST** be a number in `1`-`65535`. An empty port — a bare
-  `:` with no digits — and a port equal to the scheme default are **elided**
-  rather than refused, so `https://a.example:/dir` resolves to
-  `https://a.example/dir`. RFC 3986 §6.2.3 licenses that: it lists
-  `http://example.com:/` and `http://example.com:80/` as equivalent to
-  `http://example.com/`;
-- an authority holds **at most one colon**. Everything after the first colon is
-  the port, so `exchange.example:8443:9` is refused by the port rule above rather
-  than read as a host named `exchange.example:8443`;
-- a reference that names an authority **MUST** name a non-empty one, so `//` and
-  `///dir` are refused;
-- the first segment of a reference with no scheme **MUST NOT** contain a colon,
-  which is the RFC 3986 `path-noscheme` rule;
-- a reference **MAY** carry a fragment and it is kept, but **never a second one**.
-  RFC 3986 gives a reference a single fragment running to the end of the string,
-  so `#a#b` is not a reference at all — a hash inside a fragment is written `%23`;
-- the manifest URL is held to **all of the above as well**, and additionally
-  **MUST NOT** carry a fragment. A fragment is never sent to a server, so the URL
-  a manifest was fetched from cannot meaningfully have one. That the reference
-  may carry one is the deliberate asymmetry: the base is a URL a document **was
-  fetched from**, while the reference is a value an author **wrote**, where a
-  fragment can name an entry inside the document it points at.
-
-The resolved query and fragment are the **substrings the author wrote**, not a
-re-serialization of them. The path is resolved per RFC 3986 §5.2, but the query
-and the fragment are copied across, because the three URL libraries re-encode
-them differently inside the character set above.
-
-A query or a fragment that is **defined but empty keeps its delimiter**. A
-reference of `/dir?` resolves to `https://a.example/dir?`, and one of `/dir#`
-resolves to `https://a.example/dir#`. This is RFC 3986 §6.2.3 pointing the other
-way from the port rule above: normalization "should not remove delimiters when
-their associated component is empty", and two URIs that differ only by a trailing
-`#` are considered different regardless of the scheme. `/dir?` and `/dir` are
-different request targets on the wire, and a server may answer them differently.
-
-A control character, a space, a backslash and any non-ASCII byte all fall outside
-the character set, so one rule covers them.
-
-These are refusals rather than repairs, and the reason is interoperability, not
-taste. Every implementation resolves this reference with whatever URL parser its
-language provides, and those parsers disagree about almost everything outside the
-character set above. One percent-encodes a literal `|` where another keeps it. One
-silently strips a tab, which turns an absolute reference to another host into what
-looks like a relative path — and with it every origin check the reference was
-supposed to face. One decodes `%2e` before removing dot segments, and so fetches a
-**different document** than the others do. One percent-encodes an apostrophe in a
-query where the others keep it. A refusal is the one answer every implementation
-can give identically; a divergent acceptance is not.
-
-So the practical guidance is short: write a plain path. Every value RAMP
-intends — `/.well-known/http-message-signatures-directory`, `card.json`,
-`../card.json`, `https://exchange.example/dir` — is unaffected by any of this.
-
-
 ## The Unified RAMP Well-Known File
 
 RAMP defines **one** well-known file. Every participant serves a `WellKnownManifest` at `/.well-known/ramp.json`; the `role` field says which participant it is.
@@ -437,7 +296,7 @@ RAMP defines **one** well-known file. Every participant serves a `WellKnownManif
 |---|---|---|
 | `ROLE_PUBLISHER` | Provider | Who is authorized to sell my content (signing keys live in my WBA directory) |
 | `ROLE_EXCHANGE` | Exchange | My endpoints, capabilities, and accepted verifiers (offer-signing keys live in my WBA directory) |
-| `ROLE_AGENT` | Agent / Broker | My role marker, and optionally `identity_documents` saying where my identity documents are served (my Ed25519 request-signing key lives in my WBA directory) |
+| `ROLE_AGENT` | Agent / Broker | My role marker (my Ed25519 request-signing key lives in my WBA directory) |
 
 A verification vendor has no dedicated role — it publishes under its operator's role (`ROLE_PUBLISHER` when self-attesting, `ROLE_EXCHANGE` for a standalone vendor); its keys go in its WBA directory and its claims schema in the manifest's `ext["ramp.attestation.claims_schema"]`.
 
@@ -514,7 +373,6 @@ message WellKnownManifest {
   optional string base_currency = 27;
   optional AccountRegistration account_registration = 30;  // how to open an account here
   optional string terms_digest = 31;                       // digest of the document at terms_uri
-  optional IdentityDocuments identity_documents = 32;      // where my identity documents are served
   google.protobuf.Struct ext = 15;
   // ... publisher-only fields (exchanges, catalog_contributors) omitted ...
 }

@@ -497,11 +497,6 @@
       "python": "RequestIDHeader",
       "ts": "RequestIDHeader"
     },
-    "helpers.ResolveIdentityDocument": {
-      "allowlist_reason": null,
-      "python": "resolve_identity_document",
-      "ts": "resolveIdentityDocument"
-    },
     "helpers.RetrievalAuthFailureDetail": {
       "allowlist_reason": null,
       "python": "retrieval_auth_failure_detail",

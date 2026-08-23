@@ -1222,200 +1222,37 @@ ownership of that fetch and the guard is that caller's to install — which is a
 different bargain from an option that quietly weakens a fetch the SDK still
 performs.
 
-## Identity documents are located, not inlined, and their origin rule is stricter than `endpoint`'s
+## `identity_documents` was removed before release: discovery is not the manifest's job
 
-`WellKnownManifest.identity_documents` names where a participant serves two
-documents: its Web Bot Auth directory and its Signature Agent Card. Both members
-are URI references, both are optional, and any role may publish the block.
+RAMP-243 briefly added an `identity_documents` block to `WellKnownManifest` —
+two URI references naming where a participant serves its WBA directory and its
+Signature Agent Card — together with a three-language same-origin resolver and
+a shared vector corpus. The block was removed, unreleased, and the reason is
+worth keeping because the field will look attractive again.
 
-This is not a return to the `keys_uri` / `jwks_uri` pointer pattern that "Inline
-keys instead of key-URI pointers" rejected. That section is about the
-now-superseded `WellKnownManifest.public_keys` shape, and the objection to a
-pointer was that verification would have to follow it — a second fetch on every
-verification path, and a second thing that can 404 or go stale. Nothing here
-changes what verification does. A verifier still resolves the WBA directory from
-the covered `Signature-Agent` header and the WBA-canonical path, exactly as
-before, and it does not read `ramp.json` at all. The block is discovery metadata
-for a consumer that already has the manifest in hand: it relocates a document's
-PATH rather than introducing a lookup step. Keys themselves are still never
-republished here.
+The two upstream drafts already own discovery, through channels with better
+properties than a manifest can offer. The WBA directory is resolved from the
+COVERED `Signature-Agent` header — a URI the signature itself protects — with
+the registered well-known path as the fallback, so the standard carries both
+the default location and the relocation mechanism
+(draft-meunier-http-message-signatures-directory). The Signature Agent Card has
+no canonical path anywhere: it lives at the agent's `client_id` URL, which IS
+the agent's resolvable identity (draft-meunier-webbotauth-registry).
 
-The absence semantics are deliberately asymmetric, which is what keeps the
-addition free of behaviour change. A missing `wba_directory` means the canonical
-path on the serving host — today's behaviour, so a participant that publishes
-nothing is unaffected. A missing `signature_agent_card` means NOT ADVERTISED,
-because RAMP defines no canonical path for that document; inventing a fallback
-would send consumers fetching a URL nobody agreed to serve.
+A manifest-side pointer therefore has no state in which it carries load. A
+verifier may never prefer an uncovered, self-published field over the covered
+header, so the pointer cannot participate in verification; when it equals the
+canonical answer it says nothing; and when it differs, a participant that
+believes it becomes unverifiable, because verifiers follow the drafts, not the
+manifest. For the card specifically, the block's exact-same-origin rule also
+forbade what the draft permits — a card hosted wherever the `client_id` origin
+is — so the field could only ever describe co-hosted cards.
 
-The resolved URL must be on the EXACT SAME ORIGIN as the manifest — `https`, equal
-hostname, equal effective port — and a subdomain is refused. That is stricter than
-the rule "Host anchoring compares host and port, but not scheme" describes for
-`endpoint`, and the difference is not an inconsistency. The two fields fail
-differently. If the host named by `endpoint` is taken over, an attacker receives
-signed calls that were addressed to the Exchange: bad, but they still cannot
-produce a valid signature as anybody else. If the host named by `wba_directory` is
-taken over, the attacker BECOMES the identity — they publish their own keys and
-their signatures verify as the participant. Subdomain takeover through a dangling
-DNS record is an ordinary failure, and it would be enough on its own, without the
-participant ever losing control of the host that serves `ramp.json`.
-
-The allowance also buys nothing here. `endpoint` needs a subdomain because an
-Exchange's API is a live service that commonly runs on separate infrastructure.
-Identity documents are static JSON served next to a `/.well-known/ramp.json` the
-participant is already serving on that exact host.
-
-Two smaller decisions follow from the same reasoning. The origin compared is the
-one the manifest was FETCHED FROM, not the self-asserted `domain` member — the
-argument already written out for `endpoint`, since a manifest that anchored to its
-own field could set that field to whatever it wanted. And the manifest URL itself
-is vetted before anything resolves against it: it must be `https`, name a plain
-host and carry no userinfo. Checking only the resolved side is not enough, because
-a base of `http://a.example/ramp.json` resolving to `https://a.example/doc` passes
-every later check — the hostnames match and both sides fold to no port — so
-accepting it would mean trusting a manifest that arrived unauthenticated.
-
-The SDK face is `ResolveIdentityDocument`, one shared golden corpus, three
-languages. It reuses `IsBareDomain` for the host shape rather than growing a new
-predicate, which also fixes the ordering the audience check already learned:
-U+212A KELVIN SIGN case-folds to a plain ASCII `k`, so a host compared after
-folding can match a name it is only imitating. The shape check runs first. The
-returned URL is canonical — host lowercased, a default port folded away — so all
-three SDKs answer with the same string rather than echoing however the manifest
-spelled the authority.
-
-## Three URL parsers cannot be made to agree, so untame references are refused
-
-The first version of `ResolveIdentityDocument` guarded the raw reference with
-regexes and then handed the actual resolution to whatever URL parser the language
-provided: Go's `net/url`, Python's `urljoin`, the WHATWG `URL` in TypeScript. The
-docstring promised that every SDK returns the same string for the same input. It
-was not true, and the golden corpus said nothing about it, because every one of
-its 35 cases used a reference written in plain, ordinary characters — and plain
-ordinary characters are exactly where the three parsers already agreed.
-
-The disagreements start immediately outside that set. Go percent-encodes a
-literal `|`, a `^` and a space; the other two keep them. Go refuses an invalid
-escape such as `%zz`; the other two accept it. Python and TypeScript silently
-strip a tab, which is worse than a formatting difference: a leading tab made the
-authority regex read an ABSOLUTE reference to another host as a relative path, so
-the https check, the userinfo check, the origin check and the port check were all
-skipped in one go. The WHATWG parser decodes `%2e` and then removes the dot
-segment, so `/%2e%2e/x` resolves to a DIFFERENT DOCUMENT than the other two
-fetch. None of these is a bug in any of the three parsers; they are three
-defensible readings of text RFC 3986 does not require anybody to accept.
-
-So the rule became: refuse the input rather than reproduce three parsers byte for
-byte. A reference — and the manifest URL it resolves against, which is checked
-just as strictly — must be written in the coarse RFC 3986 character set, with
-every percent-escape valid and no percent-encoded dot segment. A refusal ports
-cleanly to any language; a divergent acceptance does not, and chasing byte-exact
-agreement across three URL engines is an open-ended maintenance cost that grows
-with every runtime upgrade.
-
-The character set is deliberately COARSE — unreserved, gen-delims, sub-delims and
-`%` — and not the per-component `pchar` grammar, which would be the more obvious
-choice. `pchar` refuses `[` and `]`, and all three SDKs already agree on those:
-`/a[b]c` stays literal everywhere. Tightening to `pchar` would have refused a
-case that was never broken. The coarse set is the one that lands on the right
-side of every measured case, refusing exactly the characters that diverge.
-
-Two divergences were fixed instead of refused, because refusing would have cost
-more than it bought. Python alone failed to remove dot segments from an ABSOLUTE
-reference, because `urljoin` returns one untouched — but refusing dot segments
-outright would have broken `../card.json`, a form the field is specified to
-support, so Python now runs RFC 3986 §5.2.4 itself. And on the empty path, §6.2.3
-names `/` as the normalized form under a hierarchical scheme, so the WHATWG port
-returning `https://a.example/` was right and the Go oracle was the deviant; the
-oracle changed.
-
-Python stopped using `urljoin` altogether: it returns an ABSOLUTE reference with
-its dot segments intact, so `https://a.example/a/../x` joined against this base
-comes back unchanged where all three ports answer `https://a.example/x`. RFC 3986
-§5.2.2, §5.2.3 and §5.2.4 are written out in that port instead. An earlier note
-here argued from `urlparse` splitting `;params` off the last path segment and
-dropping an empty one — that behaviour has since changed in CPython, inside the
-range this SDK supports, so the reason above is the one that holds across it.
-
-Two rounds later the other two followed, and the reason is worth recording
-because each looked like the safe one at the time. Go's `net/url` drops the empty
-segment when a `..` pops past the root, where §5.2.4 keeps it: `..//x` against a
-base of `/ramp.json` is `//x`, because step 2C removes nothing from an empty
-output buffer and step 2E then moves the empty segment. Node's URL parser stops
-removing dot segments for the rest of a path once it meets a segment that BEGINS
-with a dot without being a dot segment, so `x/.x/..` came back as `/x/.x/..`
-where the answer is `/x/`. The second one is a Node deviation rather than a
-reading of the spec: the WHATWG path state classifies a segment as single-dot or
-double-dot from an explicit list, `.x` is on neither, so it is appended and the
-following `..` shortens the path.
-
-So all three now compute every component of the answer — path, query, fragment
-and authority — from the strings the author wrote. No URL library decides any
-part of the output. That is the rule, and it is worth stating as a rule rather
-than as three fixes: a library parser is written to be useful to a browser, not
-to agree with two other languages, and each of these was found only after a
-corpus said the three agreed.
-
-Two of them were found after the rule was written down, which is the part worth
-keeping. Python still took the resolved PATH from `urlsplit`, which is not a
-substring reader: it deletes every tab, carriage return and line feed anywhere in
-the string, so it answered `/ramp.json` for a path the other two answer with the
-tab still in it. The three agreed only because the tame character-set check
-refuses those bytes earlier in the call — a check written to keep three parsers
-in agreement, quietly load-bearing for a second job that no test named.
-
-The AUTHORITY was the last component to follow, and it shows why the rule is
-worth stating as a rule. Go read it with `net/url`'s `Hostname()` and `Port()`,
-which split on the LAST colon. `a.example:8443:9` therefore put `a.example:8443`
-in the host half, and `IsBareDomain` accepts that — its pattern admits an
-optional port, so it cannot tell a host from a host that already carries one.
-Every origin check downstream then ran against a hostname that was not one.
-
-Nothing caught it, because the input was refused anyway: `url.Parse` itself
-returns an error for a doubled colon. That error is new in Go 1.26, it is gated
-by the `urlstrictcolons` GODEBUG setting, and the default for that setting comes
-from the `go` directive in the MAIN module of the consuming program. A consumer
-on `go 1.25` gets the lenient parse and an accepting answer, out of the same
-source that refuses it here — while the two ports, reading the authority off the
-raw string, refuse it either way. An oracle that emits the corpus two other
-languages replay cannot hold a verdict that depends on the consumer's toolchain.
-Go now reads the authority off the raw string too, splitting on the FIRST colon,
-with the four checks in one function called once per side, as both ports already
-did.
-
-The durable lesson is not about URLs. A parity corpus proves parity only over the
-inputs it contains, and a corpus assembled from realistic values will contain
-only realistic values — which is precisely the region where independent
-implementations already agree. What caught this was a differential sweep:
-thousands of base/reference pairs, most of them nonsense, run through all three
-implementations and compared. It found three divergence classes that no reviewer
-had named, including one the first round of fixes had not closed.
-
-The sweep then made the same mistake one level up. It was a scratch script, run
-once and thrown away, and its alphabet dropped every ASCII byte into a PATH and
-nowhere else — never a query, never a fragment, never a base carrying dot
-segments or a second colon. A later round found four more divergence classes, and
-three of them a wider alphabet would have caught. A corpus assembled from
-realistic values contains only realistic values; a sweep written from one
-position covers only that position.
-
-So the sweep is no longer a script. `sdk/go/helpers/gen_identity_document_sweep_vectors_test.go`
-emits `testdata/identity-document-sweep-vectors.json`, both ports replay it, and
-`sdk/python/tests/test_corpus_replay_completeness.py` makes replaying it in all
-three languages mandatory. Nothing has to be remembered after the next Go, CPython
-or Node upgrade changes a URL parser.
-
-It sits beside the hand-written corpus rather than replacing it, and the two
-answer different questions. The hand-written one carries the verdict its author
-INTENDED and refuses to emit when the real face disagrees, so it catches "the
-behaviour changed". The sweep records whatever Go answers, because no author can
-declare a verdict for thousands of machine-made inputs, so it catches "the three
-implementations answer differently". A diff in the sweep file means something
-moved; whether it broke is a question for the intent corpus.
-
-One thing the fix did not change is the authority rebuild at the end of each
-port, which reassembles the output from the already-checked base host and port
-instead of taking it from the join. It reads like a formatting convenience and it
-is not: on the bypassed-check path above it was the only thing that kept the
-result on the manifest's origin. Both ports now say so in a comment, because a
-later reader tidying it away would remove a defence without noticing there was
-one.
+If RAMP later needs to link a participant to its card, the draft-aligned datum
+is the agent's `client_id`, a single URL that needs no resolution rule at all.
+The durable engineering lessons from the resolver work stand independent of
+the feature that prompted them: a parity corpus proves parity only over the
+inputs it holds, three URL parsers cannot be reconciled outside a coarse
+character set, and a guard must be checked against inputs rather than the
+assembly's own output. They are kept in the project memory rather than here,
+since the code that taught them never merged.

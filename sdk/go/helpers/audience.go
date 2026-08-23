@@ -173,13 +173,10 @@ func CheckAudience(self string, claimed ...string) (AudienceVerdict, error) {
 // "The audience match is exact; the endpoint rule is not" in
 // docs/design-history.md for why the two rules differ at all.
 func normalizeDomain(v string) string {
-	// splitHostPort, shared with the identity-document rule, splits on the FIRST
-	// colon. This used to split on the last one. Nothing reaches the difference:
-	// CheckAudience only calls this on values IsBareDomain has already accepted,
-	// and those hold at most one colon. One function name should not carry two
-	// rules, though — both ports were moved to the first colon already, and
-	// their docstrings say this function reproduces the Go oracle exactly.
-	host, port := splitHostPort(v)
+	host, port := v, ""
+	if i := strings.LastIndex(v, ":"); i >= 0 {
+		host, port = v[:i], v[i+1:]
+	}
 	host = strings.ToLower(host)
 	// A schemeless domain is read as https everywhere in this SDK, so 443 spelled
 	// out and 443 left implicit are the same port. Any other port is kept, 80
