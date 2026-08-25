@@ -60,11 +60,16 @@ class SigningTransport:
         """``signature_agent`` is the signer's own WBA directory URL.
 
         Signature-Agent is a COVERED wire component: the sign seam always binds
-        its value (empty included) into the signature base, and when non-empty
-        the header itself is attached so the verifier resolves the signer's
-        keys against that directory. Always-stamp-when-configured is the client
-        shape — Python has no relay path, so the Go relay's set-if-absent guard
-        (core.WithSignatureAgent) has no analogue here.
+        its value (empty included) into the signature base, and the header is
+        always attached carrying that same value — empty included. Binding it
+        without sending it is not binding it, because the verifier rebuilds the
+        base from the request it received and refuses one whose covered name has
+        nothing on the wire under it. When non-empty it is also how the verifier
+        resolves the signer's keys against that directory.
+
+        Always-stamp is the client shape — Python has no relay path, so the Go
+        relay's set-if-absent guard (core.WithSignatureAgent) has no analogue
+        here.
         """
         self._signer_seed = signer_seed
         self._keyid = keyid
@@ -146,13 +151,28 @@ class SigningTransport:
             expires=expires,
             signature_agent=self._signature_agent,
         )
-        headers = {
-            "content-digest": signed.content_digest,
-            "signature-input": signed.signature_input,
-            "signature": signed.signature,
-        }
-        # The covered set binds signature-agent unconditionally (empty included);
-        # the header itself travels only when a directory is configured.
-        if self._signature_agent:
-            headers["signature-agent"] = self._signature_agent
-        return SignedOutbound(method=method, url=url, body=body, headers=headers)
+        # EVERY covered header is emitted, at exactly the value that entered the
+        # signature base — empty values included. A verifier rebuilds the base from the
+        # request it received, so a value bound but never sent is not bound at all: it
+        # reads the covered names off signature-input, finds nothing on the wire under
+        # one of them, and refuses. Measured: the covered set binds authorization and
+        # signature-agent unconditionally, and a request carrying neither is answered
+        # `header "authorization" missing from request` by every conformant verifier —
+        # so the ports agreed byte-for-byte with the oracle on what they signed and
+        # could not complete a single call.
+        #
+        # Emitting the SIGNED value rather than defaulting to empty is what makes this
+        # safe to merge over a caller's own headers: the value is the one already in
+        # the base, so restating it can never overwrite a real Authorization.
+        return SignedOutbound(
+            method=method,
+            url=url,
+            body=body,
+            headers={
+                "content-digest": signed.content_digest,
+                "signature-input": signed.signature_input,
+                "signature": signed.signature,
+                "authorization": authorization,
+                "signature-agent": self._signature_agent,
+            },
+        )

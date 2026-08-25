@@ -875,6 +875,42 @@ autolink pass could not see into. All of it is deleted. `protoc-gen-rampvocab` a
 `gen/go/vocab` stay — they are a real Go-SDK surface the conformance suite uses
 (`pricingunits.IsRegistered`).
 
+## A covered header the peer never receives is not bound
+
+The RFC 9421 covered set is fixed and unconditional: `@method`, `@target-uri`,
+`content-digest`, `authorization` and `signature-agent` are bound into the signature base
+whether or not they carry a value. Binding the empty ones is deliberate — it stops a later
+injection piggy-backing an existing signature.
+
+What that implies about the WIRE took a working system to notice. A verifier rebuilds the
+base from the request it received, so it reads the covered names off `signature-input` and
+requires each to be present; the Go verifier reads them with `Values` rather than `Get`
+precisely so an explicitly-empty header is distinguishable from an absent one, and the Go
+signer sets the empty header so it reaches the wire. Both ports bound the same two values
+and attached neither. Every signed RPC was refused with `header "authorization" missing
+from request`, and fixing only that one surfaced the identical failure on
+`signature-agent` — one mechanism with two instances.
+
+The rule is stated now, in one sentence both ports implement: **a signing face emits every
+covered header at exactly the value that entered the signature base, empty values
+included.** Emitting the signed value rather than defaulting to empty is what makes it safe
+to merge over a caller's own headers — the value is already in the base, so restating it
+cannot overwrite a real `Authorization` with an empty one.
+
+The durable part is not the dropped header; it is what the gates were measuring. Every
+corpus pinned what was **signed** — the base string, the parameters, the resulting
+signature — and nothing pinned what was **sent**. All three languages agreed byte-for-byte
+on the signature while two of them could not complete a single call, so every parity gate
+passed throughout. This is the same shape as the corpus rows that named a file and read
+none of its columns: a gate that measures the half of the claim that was never in doubt.
+
+`sign-request-vectors.json` gained an `emitted_headers` column for it — the header set a
+signed request carries, captured from the oracle and compared by all three as a whole map
+rather than key by key. Membership assertions are what let two missing headers ship
+invisibly. The corpus already carried both input shapes, including the no-directory signer
+with an empty `signature_agent`, so the static-bootstrap instance is pinned by the same
+column rather than by a second case someone has to remember.
+
 ## SDK layering: a dial-free trust core, a vetted-client I/O tier
 
 The three SDKs (`sdk/go`, `sdk/ts`, `sdk/python`) are split into a **pure trust

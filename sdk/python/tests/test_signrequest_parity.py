@@ -79,6 +79,45 @@ def test_sign_request_vector_file_exists_and_covers_empty_authorization() -> Non
 
 
 @pytest.mark.parametrize("vector", _VECTORS, ids=[v["name"] for v in _VECTORS])
+def test_sign_outbound_emits_the_header_set_the_oracle_emits(
+    vector: dict[str, object],
+) -> None:
+    """The headers a signed request CARRIES, compared as a whole map.
+
+    Every other assertion in this file says what was SIGNED. ``emitted_headers`` says
+    what is SENT, and the two are different claims. A verifier rebuilds the signature
+    base from the request it received, so a covered value bound but never sent is not
+    bound at all: it reads the covered names off ``signature-input``, finds nothing on
+    the wire under one of them, and refuses.
+
+    This port bound ``authorization`` and ``signature-agent`` into the base and attached
+    neither, so it agreed byte-for-byte with the oracle on the base, the parameters and
+    the signature — every gate this repo had — while no signed call could complete. A
+    conformant verifier answered ``header "authorization" missing from request``.
+
+    Compared as a MAP, not key by key. Membership assertions are what let that ship;
+    only a whole-set comparison notices the next header to go missing.
+    """
+    from ramp_sdk.signing_transport import SigningTransport
+
+    created, expires = int(vector["created"]), int(vector["expires"])  # type: ignore[call-overload]
+    transport = SigningTransport(
+        signer_seed=bytes.fromhex(str(vector["signer_seed_hex"])),
+        keyid=str(vector["keyid"]),
+        signature_agent=str(vector["signature_agent"]),
+        window=lambda: (created, expires),
+    )
+    signed = transport.sign_outbound(
+        method=str(vector["method"]),
+        url=str(vector["url"]),
+        body=bytes.fromhex(str(vector["body_hex"])),
+        authorization=str(vector["authorization"]),
+    )
+    emitted = {name.lower(): value for name, value in signed.headers.items()}
+    assert emitted == vector["emitted_headers"]
+
+
+@pytest.mark.parametrize("vector", _VECTORS, ids=[v["name"] for v in _VECTORS])
 def test_sign_request_produces_byte_identical_signature(vector: dict[str, object]) -> None:
     # Enumerated fixed request: method, absolute URL,
     # body→content-digest, authorization value, created, expires. created/expires

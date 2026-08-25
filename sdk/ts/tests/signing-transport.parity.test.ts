@@ -61,7 +61,16 @@ type SignRequestVector = {
   content_digest: string;
   signature_input: string;
   signature: string;
+  /** The header set a signed request CARRIES, lowercased — what is SENT, as
+   * against every other field here, which records what was SIGNED. */
+  emitted_headers: Record<string, string>;
 };
+
+/** Lowercase the header names so the comparison is against the oracle's own
+ * spelling rather than this port's casing choice. */
+function lowerKeys(h: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(h).map(([k, v]) => [k.toLowerCase(), v]));
+}
 
 type MultisigHop = { keyid: string; pubkey_b64url: string; seed_hex: string };
 type MultisigChainVector = {
@@ -248,6 +257,21 @@ describe("signOutbound returns the RFC 9421 header set byte-identical to the Go 
       expect(out.headers["content-digest"]).toBe(v.content_digest);
       expect(out.headers["signature-input"]).toBe(v.signature_input);
       expect(out.headers.signature).toBe(v.signature);
+
+      // The WHOLE emitted set, compared as a map rather than key by key.
+      //
+      // Every assertion above says what was SIGNED; emitted_headers says what is
+      // SENT, and the two are different claims. A verifier rebuilds the base from
+      // the request it received, so a covered value bound but never sent is not
+      // bound: it reads the covered names off signature-input, finds nothing under
+      // one of them, and refuses. This port bound authorization and signature-agent
+      // and attached neither, so it matched the oracle byte-for-byte on all three
+      // fields above and could not complete a single signed call.
+      //
+      // Membership assertions are what let that ship. A map comparison is what
+      // notices the next header to go missing.
+      expect(lowerKeys(out.headers)).toEqual(v.emitted_headers);
+
       // Transport-neutral core forwards the body untouched.
       expect(bytesEqual(out.body, body)).toBe(true);
     });

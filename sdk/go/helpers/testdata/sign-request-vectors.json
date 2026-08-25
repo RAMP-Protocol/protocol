@@ -15,7 +15,14 @@
       "content_digest": "sha-256=:LC7ZJEfUXoccpH/7ie7YQ53oZUqVqCOpVjtOe4fHvfg=:",
       "signature_base": "\"@method\": POST\n\"@target-uri\": https://broker.example/ramp.v1.BrokerService/Fetch\n\"content-digest\": sha-256=:LC7ZJEfUXoccpH/7ie7YQ53oZUqVqCOpVjtOe4fHvfg=:\n\"authorization\": Bearer token-123\n\"signature-agent\": https://agent.example\n\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"mcp.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600",
       "signature_input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"mcp.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600",
-      "signature": "sig1=:4Sr8GUPnD8j9rN8Dy1/g6VbMzVBPIfZoBALNgJkLfv22Q8fvUqFzki4iXyJz308uG66k4Io2Eczc23rf7GddCg==:"
+      "signature": "sig1=:4Sr8GUPnD8j9rN8Dy1/g6VbMzVBPIfZoBALNgJkLfv22Q8fvUqFzki4iXyJz308uG66k4Io2Eczc23rf7GddCg==:",
+      "emitted_headers": {
+        "authorization": "Bearer token-123",
+        "content-digest": "sha-256=:LC7ZJEfUXoccpH/7ie7YQ53oZUqVqCOpVjtOe4fHvfg=:",
+        "signature": "sig1=:4Sr8GUPnD8j9rN8Dy1/g6VbMzVBPIfZoBALNgJkLfv22Q8fvUqFzki4iXyJz308uG66k4Io2Eczc23rf7GddCg==:",
+        "signature-agent": "https://agent.example",
+        "signature-input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"mcp.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600"
+      }
     },
     {
       "name": "post_empty_authorization_bound",
@@ -32,7 +39,14 @@
       "content_digest": "sha-256=:aMcs/yVBJDEdGJoNVijbTFPQEOduCYgZWzCBIw5eTyg=:",
       "signature_base": "\"@method\": POST\n\"@target-uri\": https://broker.example/ramp.v1.BrokerService/Fetch?trace=1\n\"content-digest\": sha-256=:aMcs/yVBJDEdGJoNVijbTFPQEOduCYgZWzCBIw5eTyg=:\n\"authorization\": \n\"signature-agent\": \n\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"mcp.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600",
       "signature_input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"mcp.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600",
-      "signature": "sig1=:XIDFrhY3OBnd+g1ptlqA1PnempKprJIfgJ30tVRV/XYH6ABDIgTrGRZRX7VFXSRiegh4/WhHcBZf6/lazrYVCQ==:"
+      "signature": "sig1=:XIDFrhY3OBnd+g1ptlqA1PnempKprJIfgJ30tVRV/XYH6ABDIgTrGRZRX7VFXSRiegh4/WhHcBZf6/lazrYVCQ==:",
+      "emitted_headers": {
+        "authorization": "",
+        "content-digest": "sha-256=:aMcs/yVBJDEdGJoNVijbTFPQEOduCYgZWzCBIw5eTyg=:",
+        "signature": "sig1=:XIDFrhY3OBnd+g1ptlqA1PnempKprJIfgJ30tVRV/XYH6ABDIgTrGRZRX7VFXSRiegh4/WhHcBZf6/lazrYVCQ==:",
+        "signature-agent": "",
+        "signature-input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"mcp.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600"
+      }
     }
   ]
 }

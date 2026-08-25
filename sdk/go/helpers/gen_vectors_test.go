@@ -282,6 +282,16 @@ type signRequestVector struct {
 	SignatureBase  string `json:"signature_base"`
 	SignatureInput string `json:"signature_input"`
 	Signature      string `json:"signature"`
+	// EmittedHeaders is the header set a signed request CARRIES, lowercased.
+	//
+	// Every other field here records what was SIGNED. This one records what is
+	// SENT, and the two are different claims: the covered set binds authorization
+	// and signature-agent unconditionally, empty values included, so a verifier
+	// needs them present on the wire to rebuild the base and refuses the request
+	// when they are absent. A port can agree byte-for-byte on the signature and
+	// still be unable to complete a single call, which is exactly what happened
+	// while nothing recorded this.
+	EmittedHeaders map[string]string `json:"emitted_headers"`
 }
 
 // acceptanceVector mirrors the AcceptanceVector shape the py parity test reads.
@@ -663,6 +673,13 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 		if err != nil {
 			t.Fatalf("%s: build base: %v", s.name, err)
 		}
+		// The request was built bare, so what it carries after signing IS the
+		// signer's contribution — nothing pre-set leaks in except the two covered
+		// values the spec supplies, which a signed request must carry anyway.
+		emitted := make(map[string]string, len(req.Header))
+		for name := range req.Header {
+			emitted[strings.ToLower(name)] = req.Header.Get(name)
+		}
 		out = append(out, signRequestVector{
 			Name:           s.name,
 			Method:         s.method,
@@ -679,6 +696,7 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 			SignatureBase:  base,
 			SignatureInput: req.Header.Get("Signature-Input"),
 			Signature:      req.Header.Get("Signature"),
+			EmittedHeaders: emitted,
 		})
 	}
 	return out

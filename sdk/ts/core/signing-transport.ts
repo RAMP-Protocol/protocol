@@ -112,12 +112,26 @@ export async function signOutbound(
 		? await appendSignature(o.privKey, prior, signOpts)
 		: await signRequest(o.privKey, signOpts);
 
+	// EVERY covered header is emitted, at exactly the value that entered the signature
+	// base — empty values included. A verifier rebuilds the base from the request it
+	// received, so a value bound but never sent is not bound at all: it reads the covered
+	// names off signature-input, finds nothing on the wire under one of them, and refuses.
+	// Measured: the covered set binds authorization and signature-agent unconditionally,
+	// and a request carrying neither is answered `header "authorization" missing from
+	// request` by every conformant verifier — so the ports agreed byte-for-byte with the
+	// oracle on what they signed and could not complete a single call.
+	//
+	// Emitting the SIGNED value rather than defaulting to empty is what makes this safe
+	// under createSigningTransport's merge below: that wrapper reads the incoming
+	// authorization and computes signatureAgent set-if-absent, then passes both in here,
+	// so restating them can never overwrite a real value with an empty one.
 	const headers: Record<string, string> = {
 		"content-digest": signed.contentDigest,
 		"signature-input": signed.signatureInput,
 		signature: signed.signature,
+		authorization: o.authorization,
+		[SignatureAgentHeader]: o.signatureAgent,
 	};
-	if (o.signatureAgent !== "") headers[SignatureAgentHeader] = o.signatureAgent;
 	return { headers, body: o.body };
 }
 
