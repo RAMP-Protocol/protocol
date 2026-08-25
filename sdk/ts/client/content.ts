@@ -11,9 +11,11 @@ import { signInbound } from "../core/sign.ts";
 import type { Window } from "../core/window.ts";
 import { AGENT_KEY_HEADER } from "../src/pop.ts";
 import { retrievalAuthFailureDetail } from "../src/errordetail.ts";
+import { escapePair } from "../src/host-ref.ts";
+import { MAX_BODY_DEPTH, rawNestingDepth } from "../src/jsondepth.ts";
 import { RequestIDHeader } from "../src/wire.ts";
 import { IDENTITY_ENCODING, refuseUnrequestedEncoding } from "./transport.ts";
-import { requireScheme, skipSSRF, ssrfGuard, SsrfBlockedError } from "../resolvers/http.ts";
+import { requireScheme, skipSSRF, ssrfGuard } from "../resolvers/http.ts";
 import { RampCallError } from "./errors.ts";
 import { concat, reclaim } from "./send.ts";
 
@@ -55,6 +57,11 @@ const EDGE_REASON_TOKEN = /^[a-z][a-z0-9_]{0,63}$/;
  * not the fetched resource: the field is a stable grouping key for tooling, so it names
  * the tier that refused. */
 const EDGE_ERROR_DOMAIN = "ramp.v1.Edge";
+
+/** The range a TCP port has. A delivery URL naming one outside it names nothing
+ * reachable, whatever a URL parser makes of the value. */
+const MIN_PORT = 1;
+const MAX_PORT = 65535;
 
 /** type "/" subtype over RFC 9110's token characters, lowercased. */
 const MEDIA_TYPE_SHAPE = /^[!#$%&'*+.^_`|~0-9a-z-]+\/[!#$%&'*+.^_`|~0-9a-z-]+$/;
@@ -201,22 +208,70 @@ export async function fetchContent(
  * vetDialable refuses a delivery URL this SDK will not dial, before anything is spent on
  * it — which is what makes mintProof's "after the URL has been accepted as dialable" true.
  *
- * The dispatcher's guard is the CONNECTOR: it decides what a hostname may resolve to and
- * never sees a scheme, because by then the URL is already a host and a port. A delivery URL
- * names a host another party chose, carries a live credential in its query and presents a
- * proof of possession of the agent's key in a header, so plaintext here hands both to
- * anyone on the path.
+ * THE VALUE'S OWN FAULTS ARE MALFORMED; the dial's refusals are unreachable. That split is
+ * the rule all three languages state, and it is stated rather than delegated to whichever
+ * URL parser the language ships — the three parsers disagree about what "unparseable" even
+ * means, and a class that changes with the parser is not a contract. Measured before this:
+ * every refusal here answered unreachable, so a URL that can never parse sat in the
+ * retryable class, and it wore the address guard's own reason while doing it.
  *
- * Reported as unreachable, matching Go: there the same refusal comes out of the transport,
- * where Fetch reads it as a dial that did not happen.
+ * A value fault is: the URL does not parse, it names no scheme or no host, it names a port
+ * outside the range a port has, it carries a malformed percent-escape where a parse would
+ * unescape one, or it does not re-serialize to itself (mintProof's check, which runs next).
+ * Each will refuse identically forever, so a caller must fix the value.
+ *
+ * The dial's are the rest. The dispatcher's guard is the CONNECTOR: it decides what a
+ * hostname may resolve to and never sees a scheme, because by then the URL is already a
+ * host and a port. A delivery URL names a host another party chose, carries a live
+ * credential in its query and presents a proof of possession of the agent's key in a
+ * header, so plaintext here hands both to anyone on the path. Reported as unreachable,
+ * matching Go: there the same refusal comes out of the transport, where Fetch reads it as
+ * a dial that did not happen.
+ *
+ * The URL is never echoed, on either side: it carries a live credential in its query.
  */
 function vetDialable(op: string, signedURL: string): void {
+	let parsed: URL;
+	try {
+		// WHATWG `new URL` with no base rejects a value naming no scheme, and one naming no
+		// host, in the same throw — which is the rule's first two clauses together rather
+		// than a parser quirk being inherited.
+		parsed = new URL(signedURL);
+	} catch {
+		throw malformedURL(op, "url is unparseable, or names no scheme or no host");
+	}
+	// A port outside the range a port has. WHATWG rejects a non-numeric one and one past
+	// 65535, and admits 0 — which is a port nothing listens on. Checked rather than left to
+	// the parse, because the rule is the rule and not whatever each language's parser
+	// happens to refuse; Go and Python check the same range over their own parsers.
+	if (parsed.port !== "") {
+		const port = Number(parsed.port);
+		if (!Number.isInteger(port) || port < MIN_PORT || port > MAX_PORT) {
+			throw malformedURL(op, `url names a port outside ${MIN_PORT}-${MAX_PORT}`);
+		}
+	}
+	// Read PER COMPONENT, the way the host rule already reads it: a malformed escape is
+	// refused in a path and in a fragment, and admitted in a query, which a parse does not
+	// unescape — and a delivery URL's query is exactly where a credential lives. The
+	// predicate is the host rule's own, imported rather than restated.
+	if (escapePair.test(parsed.pathname) || escapePair.test(parsed.hash)) {
+		throw malformedURL(op, "url carries a malformed percent-escape");
+	}
 	try {
 		requireScheme(signedURL);
 	} catch (cause) {
-		// The URL is not echoed: it carries a live credential in its query.
 		throw dialFailure(op, cause);
 	}
+}
+
+// malformedURL names a fault in the VALUE without naming the value: a delivery URL's query
+// is a live credential, and this reaches a log.
+function malformedURL(op: string, what: string): RampCallError {
+	return new RampCallError({
+		kind: "malformed",
+		op,
+		cause: new Error(`${what} (value withheld: it carries a live credential)`),
+	});
 }
 
 /** The three proof header values one bound fetch presents. */
@@ -320,6 +375,16 @@ function retrievalAuthFailureDetailOrUndefined(token: string) {
 
 // edgeReason pulls the edge's own refusal token out of a rejection body. The edge answers
 // {"error": "...", "reason": "..."} on a binding failure; anything else yields "".
+//
+// Bounded at the same depth the response reader bounds, and for the same reason: the two
+// JSON clients must answer one thing for a document neither of them wrote. The 4 KiB cap
+// above does not bound the nesting — 4 KiB of "[" nests four thousand deep — and Python's
+// parser raises out of a reader that promises a value at a depth that varies by release.
+//
+// A body past the bound yields "" rather than a new failure: the fetch has already been
+// refused by the edge, and the token is the one part of that refusal the SDK does not own.
+// Falling back to the failure class is what this reader already answers for any body it
+// cannot interpret.
 async function edgeReason(body: AsyncIterable<Uint8Array>): Promise<string> {
 	let text: string;
 	try {
@@ -327,6 +392,7 @@ async function edgeReason(body: AsyncIterable<Uint8Array>): Promise<string> {
 	} catch {
 		return "";
 	}
+	if (rawNestingDepth(text) > MAX_BODY_DEPTH) return "";
 	try {
 		const payload: unknown = JSON.parse(text);
 		const reason =
@@ -422,24 +488,27 @@ function redact(cause: unknown): Error {
 	return new Error(message.replace(/\bhttps?:\/\/\S+/gi, "<url redacted>"));
 }
 
-// dialFailure classifies what the dial raised, then redacts it.
+// dialFailure is what a refusal of the DIAL answers, redacted.
 //
-// The order matters and used to be the other way round. Redacting first replaced the cause
-// with a fresh Error, so an address-pin refusal — a verdict about where this URL points,
-// which will refuse identically forever — was indistinguishable from a momentary network
-// blip and reported as retryable. The class is read while the original is still in hand;
-// only the message survives into the failure.
+// It carries NO reason. `reason` holds the peer's own refusal token, and a dial that was
+// refused reached no peer — there is nothing for it to carry. This leg used to mint
+// "ssrf_guard" here, which put the SDK's own verdict in a field documented across all
+// three languages as the peer's; `not_canonical_wire_naming` says outright that it is the
+// one place that happens. The shared corpus records `unreachable` for these rows, which is
+// what Go and Python already answered.
+//
+// What that costs is worth naming: an address-pin refusal is a verdict about where this URL
+// points and will refuse identically forever, while a momentary blip will not, and after
+// this the two are indistinguishable to a caller. None of the three SDKs distinguishes
+// them, so the answer is now the same everywhere rather than better in one — telling them
+// apart is a change to the shared taxonomy, not to this function.
 function dialFailure(op: string, cause: unknown): RampCallError {
-	const refusedByTheGuard =
-		cause instanceof SsrfBlockedError ||
-		(cause as { cause?: unknown })?.cause instanceof SsrfBlockedError;
 	return new RampCallError({
 		// A guard refusal is unreachable rather than not_sent, matching what Go answers for
 		// the same condition: there it surfaces through the RoundTripper, so the client
 		// reads it as a dial that did not happen. Both mean nothing was sent.
 		kind: "unreachable",
 		op,
-		...(refusedByTheGuard ? { reason: "ssrf_guard" } : {}),
 		cause: redact(cause),
 	});
 }

@@ -65,6 +65,63 @@ type contentFetchVector struct {
 	MIMEType string `json:"mime_type"`
 }
 
+// urlRefusalVector is one delivery URL this leg declines before it dials, and the class
+// it declines with.
+//
+// It is a SEPARATE list because it records a different question. The answers above are
+// read from a server's reply; these are reached with no reply at all, and the split that
+// matters is which of them is the URL's own fault — permanent, the caller must fix the
+// value — and which is a dial that did not happen and may happen later. Those two land in
+// different failure classes, and a port that folds them together puts a value that can
+// never work into the retryable half.
+type urlRefusalVector struct {
+	Name string `json:"name"`
+	//: The URL handed to the fetch. Synthetic: a real delivery URL's query is a live
+	//: credential and this file is committed.
+	URL string `json:"url"`
+	//: The failure class, in the shared vocabulary.
+	Failure string `json:"failure"`
+	//: What a caller branches on.
+	ReasonOf string `json:"reason_of"`
+}
+
+// urlRefusalCases enumerate the delivery URLs refused before any dial. None of them
+// reaches the network: a parse failure and the round-trip check run before the request
+// exists, and the scheme guard sits above the dial in the RoundTripper.
+func urlRefusalCases() []struct {
+	name string
+	url  string
+} {
+	return []struct {
+		name string
+		url  string
+	}{
+		// A value no parser can read. The class is the whole message: redaction itself
+		// needs a parseable value, so nothing about it is safe to name.
+		{"unparseable_escape", "https://edge.test/%zz"},
+		{"unparseable_ipv6_bracket", "https://[::1/asset"},
+		// Parseable, and unusable for a reason a parse does not see. Which side of the
+		// line each of these falls on is the whole reason this list is captured rather
+		// than described.
+		{"out_of_range_port", "https://edge.test:99999999999/asset"},
+		// Zero parses as a port everywhere and is one nowhere. It is checked rather than
+		// left to the parse, because the rule is the rule and not whatever each language's
+		// parser happens to refuse.
+		{"zero_port", "https://edge.test:0/asset"},
+		// Parseable, but names no scheme — which is not the same thing, and the two
+		// have no reason to share a class.
+		{"schemeless_host_and_path", "edge.test/asset"},
+		{"relative_path_only", "/asset"},
+		// A scheme this SDK will not carry a proof of possession over.
+		{"plaintext_scheme", "http://edge.test/asset"},
+		{"non_http_scheme", "ftp://edge.test/asset"},
+		// A URL that does not survive re-serialization: the proof covers @target-uri as
+		// the verbatim string while the request line carries what it re-serializes to, so
+		// the edge could only answer an undifferentiated 403.
+		{"not_round_trip_stable", "https://edge.test/a b/asset"},
+	}
+}
+
 // contentFetchCases enumerate the delivery answers whose reading must not drift.
 func contentFetchCases() []struct {
 	name        string
@@ -120,11 +177,21 @@ func contentFetchCases() []struct {
 // TestGenerateContentFetchVectors emits the content-leg golden corpus.
 func TestGenerateContentFetchVectors(t *testing.T) {
 	path := filepath.Join("testdata", "content-fetch-vectors.json")
+	// Built in statements rather than inline, and the URL refusals FIRST: the two builders
+	// want opposite environments — the reading vectors stand the guards down to reach a
+	// loopback server, the URL refusals need them up to reach the scheme gate at all — and
+	// the evaluation order of a composite literal's values is not somewhere to hide that.
+	urlRefusals := buildURLRefusalVectors(t)
+	vectors := buildContentFetchVectors(t)
 	doc := map[string]any{
 		"note": "Delivery answers and what a client must read out of them, derived by " +
 			"driving the real ContentFetcher. `reason` is the edge's own token, repeated " +
-			"only when it is token-shaped; `reason_of` is what a caller branches on.",
-		"vectors": buildContentFetchVectors(t),
+			"only when it is token-shaped; `reason_of` is what a caller branches on. " +
+			"`url_refusals` records the other half: URLs declined before any dial, and " +
+			"which of them is the URL's own permanent fault rather than a dial that did " +
+			"not happen.",
+		"vectors":      vectors,
+		"url_refusals": urlRefusals,
 	}
 	if os.Getenv("RAMP_UPDATE_VECTORS") == "1" {
 		if err := vectorio.Write(path, doc); err != nil {
@@ -139,6 +206,34 @@ func TestGenerateContentFetchVectors(t *testing.T) {
 	if stale {
 		t.Fatalf("%s is stale; re-run with RAMP_UPDATE_VECTORS=1 to regenerate", path)
 	}
+}
+
+func buildURLRefusalVectors(t *testing.T) []urlRefusalVector {
+	t.Helper()
+	// Both guards UP, which is the default and the point: the scheme gate is what refuses
+	// a plaintext or non-http delivery URL, and standing it down would record the class of
+	// a case that never ran. Nothing here dials, so the address pin never resolves a name.
+	t.Setenv("SKIP_SSRF", "")
+	t.Setenv("ALLOW_INSECURE", "")
+	fetcher := NewContentFetcher(ContentFetchOptions{})
+	out := make([]urlRefusalVector, 0, len(urlRefusalCases()))
+	for _, c := range urlRefusalCases() {
+		_, err := fetcher.Fetch(context.Background(), c.url, stubProofSigner{})
+		if err == nil {
+			t.Fatalf("%s: %q was not refused", c.name, c.url)
+		}
+		var ferr *FetchError
+		if !errors.As(err, &ferr) {
+			t.Fatalf("%s: fetch failed with an untyped error: %v", c.name, err)
+		}
+		out = append(out, urlRefusalVector{
+			Name:     c.name,
+			URL:      c.url,
+			Failure:  ferr.Failure.String(),
+			ReasonOf: ferr.ReasonOf(),
+		})
+	}
+	return out
 }
 
 func buildContentFetchVectors(t *testing.T) []contentFetchVector {

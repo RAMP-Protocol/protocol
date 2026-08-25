@@ -1,5 +1,61 @@
 {
-  "note": "Delivery answers and what a client must read out of them, derived by driving the real ContentFetcher. `reason` is the edge's own token, repeated only when it is token-shaped; `reason_of` is what a caller branches on.",
+  "note": "Delivery answers and what a client must read out of them, derived by driving the real ContentFetcher. `reason` is the edge's own token, repeated only when it is token-shaped; `reason_of` is what a caller branches on. `url_refusals` records the other half: URLs declined before any dial, and which of them is the URL's own permanent fault rather than a dial that did not happen.",
+  "url_refusals": [
+    {
+      "name": "unparseable_escape",
+      "url": "https://edge.test/%zz",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    },
+    {
+      "name": "unparseable_ipv6_bracket",
+      "url": "https://[::1/asset",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    },
+    {
+      "name": "out_of_range_port",
+      "url": "https://edge.test:99999999999/asset",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    },
+    {
+      "name": "zero_port",
+      "url": "https://edge.test:0/asset",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    },
+    {
+      "name": "schemeless_host_and_path",
+      "url": "edge.test/asset",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    },
+    {
+      "name": "relative_path_only",
+      "url": "/asset",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    },
+    {
+      "name": "plaintext_scheme",
+      "url": "http://edge.test/asset",
+      "failure": "unreachable",
+      "reason_of": "unreachable"
+    },
+    {
+      "name": "non_http_scheme",
+      "url": "ftp://edge.test/asset",
+      "failure": "unreachable",
+      "reason_of": "unreachable"
+    },
+    {
+      "name": "not_round_trip_stable",
+      "url": "https://edge.test/a b/asset",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    }
+  ],
   "vectors": [
     {
       "name": "ok_plain_text",

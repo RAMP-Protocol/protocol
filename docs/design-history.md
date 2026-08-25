@@ -1081,11 +1081,11 @@ checks** stand between the caller's message and the wire, in this order.
 follows is bounded and evicts least-recently-used, because which Exchanges appear is
 driven by incoming offers — an open-ended, caller-influenced key space.
 
-## Two client defaults where the ports differ from Go on purpose
+## Three client defaults where the ports differ from Go on purpose
 
 Go is the oracle and the ports mirror it, so a difference that survives review has to be
-written down or it reads as drift. Two survive, and neither is an API-surface divergence —
-both are behaviour, so they live here rather than in `sdk/parity/symbol-map.json`, whose
+written down or it reads as drift. Three survive, and none is an API-surface divergence —
+all are behaviour, so they live here rather than in `sdk/parity/symbol-map.json`, whose
 allowlist is a shrink-only ratchet over SYMBOLS.
 
 **Outbound request validation defaults ON in TypeScript and Python, and OFF in Go.** These
@@ -1109,6 +1109,29 @@ is a real difference and it is why the scheme gate does not live in the dial. It
 it, in `unaryCall` and in the content leg's own pre-flight, so no injected send reaches a
 plaintext endpoint carrying a signature. A signature over plaintext is not a latitude any
 of the three offers.
+
+**The two JSON clients bound how deep an answer may nest; Go does not.** A response body
+is refused past 32 nested containers in TypeScript and Python — the number the protocol
+already sets for a stranger's JSON in `AccountRegistration.data_schema`, so one value
+covers how deep any document these SDKs did not write may be. Go's client inherits
+protojson's own limit, which is around ten thousand, and is left alone.
+
+The ports need a bound at all because their parsers descend into a document and answer for
+a deep one in a way that is not a verdict: Python's raises `RecursionError`, which is
+neither what a malformed document raises nor a failure the package says it raises, and how
+much nesting it survives is a property of the interpreter release rather than a decision.
+The lesson recorded above under the registration schema applies directly — a bound that
+comes from a runtime's remaining stack is not a bound. TypeScript's parser does not
+overflow, and takes the same number anyway: two clients answering differently about one
+body is the state that produces the bugs, and which of them a caller happens to be holding
+is not something a peer can know.
+
+What it costs, stated plainly because the cost is real: `ext` is a
+`google.protobuf.Struct` and nothing in the contract bounds its nesting, so an Exchange may
+serve a conformant answer deeper than this. The Go client reads it and the other two refuse
+it. Both readers of one wire is the shape this file exists to record, and moving the number
+into the contract — which would make it one rule for every implementation rather than two —
+is the change that would close it rather than document it.
 
 **The client's transport splits in two, and which leg is guarded is the same in all
 three.** A plain transport carries the configured home Exchange and the Broker — an
@@ -1248,6 +1271,51 @@ One consequence for the cross-language surface: Go's `SignAgentBinding` takes a
 The parity map records them as counterparts because the face exists in both, but
 the custody posture differs — the Go seam exists precisely so the SDK never holds
 key material, and closing that gap belongs with the TypeScript/Python client work.
+
+## A delivery URL's own faults are malformed; the dial's refusals are unreachable
+
+The content leg refuses a signed delivery URL for two quite different reasons, and a caller
+acts on them oppositely: a fault in the VALUE will refuse identically forever and the
+caller must fix it, while a refusal of the DIAL may not refuse next time. All three SDKs
+had the split, and all three drew it in a different place — in both directions. One value
+was a permanent verdict in one language and a retryable dial failure in the other two;
+another was the reverse.
+
+The cause was that the line had never been *stated*. Each language let its own URL parser
+decide what "unparseable" meant, and the three disagree: Go's `net/url` rejects a malformed
+percent-escape and accepts a reference naming no scheme, WHATWG `new URL` rejects the
+schemeless reference and accepts the bad escape, and `httpx` accepts both — so Python
+minted a proof and dialled for a URL Go refused locally, and its answer then depended on
+whether the host resolved. A classification that changes with the resolver is not a
+classification.
+
+This is the same shape as the `Content-Type` reduction recorded earlier in this file, and
+it takes the same fix. The rule is stated instead. A value fault is: the URL does not
+parse, it names no scheme or no host, it names a port outside 1-65535, it carries a
+malformed percent-escape where a parse would unescape one, or it does not re-serialize to
+itself. Everything else — a scheme this SDK will not carry a proof over, an address the
+guard refuses, a peer that never answers — is the dial's, and unreachable. The escape check
+is read per component, admitting one in a query, exactly as the host rule already reads it:
+a query is not unescaped at parse time, and a delivery URL's query is where the credential
+lives.
+
+The HOST rule is deliberately untouched. Its own corpus pins what a bare host may say, and
+this is the delivery leg vetting a value it is about to dial — a different question about a
+different value.
+
+`sdk/go/resolvers/testdata/content-fetch-vectors.json` gained a second list for this, and
+it is captured from the real fetcher rather than described, so the three answers are held
+by the same mechanism that holds the reading of an answer.
+
+**A refused dial carries no reason token.** TypeScript minted `ssrf_guard` on the delivery
+leg, which no other language produced and which put the SDK's own verdict in a field
+documented in all three as the peer's own refusal token —
+`not_canonical_wire_naming` says outright that it is the one place that happens. It is
+gone. The cost is worth naming: an address-pin refusal is a verdict about where a URL
+points and a momentary blip is not, and nothing in the failure now tells those apart. None
+of the three distinguished them, so the answer is the same everywhere rather than better in
+one; distinguishing them means adding a value to the shared taxonomy, not a token in one
+language.
 
 ## Bounds on a leg that dials wherever an offer points
 

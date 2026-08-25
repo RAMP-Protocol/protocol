@@ -29,7 +29,9 @@ from ramp_sdk.client import Client, ClientConfig
 from ramp_sdk.signing_transport import SigningTransport
 from ramp_sdk.client.errors import CallError, CallErrorKind
 
-_VECTORS = load_json(GO_RESOLVERS_TESTDATA / "content-fetch-vectors.json")["vectors"]
+_DOC = load_json(GO_RESOLVERS_TESTDATA / "content-fetch-vectors.json")
+_VECTORS = _DOC["vectors"]
+_URL_REFUSALS = _DOC["url_refusals"]
 
 _AGENT_SEED = bytes(range(32))
 
@@ -83,3 +85,33 @@ def test_reader_extracts_go_projection(vector: dict[str, Any]) -> None:
     # The empty token is the SDK declining to repeat what the publisher wrote.
     assert (err.reason or "") == vector["reason"]
     assert err.reason_of() == vector["reason_of"]
+
+
+def test_url_refusal_vector_set_nonempty() -> None:
+    assert len(_URL_REFUSALS) > 0
+
+
+# The other half of this leg: URLs declined before any dial, and which of them is the
+# VALUE's own permanent fault rather than a dial that did not happen. The three languages
+# each shipped a different answer here, in both directions — the rule is stated now rather
+# than left to whichever URL parser the language happens to ship, and this is where it is
+# held. No transport is injected: nothing on these paths reaches one.
+@pytest.mark.parametrize(
+    "vector", _URL_REFUSALS, ids=[v["name"] for v in _URL_REFUSALS]
+)
+def test_a_url_the_leg_will_not_dial_is_classified_the_way_the_oracle_classifies_it(
+    vector: dict[str, Any],
+) -> None:
+    client = Client(
+        ClientConfig(
+            base_url="https://exchange.test",
+            signer=SigningTransport(signer_seed=_AGENT_SEED, keyid="agent.v1"),
+        )
+    )
+    with pytest.raises(CallError) as excinfo:
+        asyncio.run(client.fetch(vector["url"]))
+    err = excinfo.value
+    assert err.kind is _FAILURE_KINDS[vector["failure"]]
+    assert err.reason_of() == vector["reason_of"]
+    # The refusal reaches a log, and a delivery URL's query is a live credential.
+    assert vector["url"] not in str(err)

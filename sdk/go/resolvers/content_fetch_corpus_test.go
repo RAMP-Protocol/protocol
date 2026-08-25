@@ -30,7 +30,8 @@ func TestContentFetchCorpusReplay(t *testing.T) {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	var doc struct {
-		Vectors []contentFetchVector `json:"vectors"`
+		Vectors     []contentFetchVector `json:"vectors"`
+		URLRefusals []urlRefusalVector   `json:"url_refusals"`
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		t.Fatalf("parse %s: %v", path, err)
@@ -38,6 +39,35 @@ func TestContentFetchCorpusReplay(t *testing.T) {
 	if len(doc.Vectors) == 0 {
 		t.Fatalf("%s carries no vectors — the replay would assert nothing", path)
 	}
+	if len(doc.URLRefusals) == 0 {
+		t.Fatalf("%s carries no url_refusals — the replay would assert nothing", path)
+	}
+
+	// The URL refusals FIRST, with both guards UP: the scheme gate is what refuses a
+	// plaintext or non-http delivery URL, and the reading vectors below stand it down to
+	// reach a loopback server. Nothing here dials.
+	t.Run("url_refusals", func(t *testing.T) {
+		t.Setenv("SKIP_SSRF", "")
+		t.Setenv("ALLOW_INSECURE", "")
+		fetcher := NewContentFetcher(ContentFetchOptions{})
+		for _, v := range doc.URLRefusals {
+			t.Run(v.Name, func(t *testing.T) {
+				_, err := fetcher.Fetch(context.Background(), v.URL, stubProofSigner{})
+				var ferr *FetchError
+				if !errors.As(err, &ferr) {
+					t.Fatalf("want a typed FetchError, got %v", err)
+				}
+				// The split the corpus exists to hold: a fault in the VALUE is malformed
+				// and permanent, a refusal of the DIAL is unreachable and may not be.
+				if got := ferr.Failure.String(); got != v.Failure {
+					t.Errorf("failure = %q, want %q", got, v.Failure)
+				}
+				if got := ferr.ReasonOf(); got != v.ReasonOf {
+					t.Errorf("reason_of = %q, want %q", got, v.ReasonOf)
+				}
+			})
+		}
+	})
 
 	t.Setenv("SKIP_SSRF", "true")
 	t.Setenv("ALLOW_INSECURE", "true")

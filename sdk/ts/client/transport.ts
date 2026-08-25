@@ -14,6 +14,7 @@
 import { signOutbound } from "../core/signing-transport.ts";
 import type { Window } from "../core/window.ts";
 import { errorDetailFrom } from "../src/errordetail.ts";
+import { MAX_BODY_DEPTH, rawNestingDepth } from "../src/jsondepth.ts";
 import { parseWire, WireNamingError } from "../../../gen/ts/wire/base.ts";
 import { requireScheme } from "../resolvers/http.ts";
 import {
@@ -338,6 +339,23 @@ export function decodeResponse(op: string, response: UnaryResponse): unknown {
 }
 
 function parseJSON(op: string, response: UnaryResponse): unknown {
+	// Depth BEFORE the parse, and the bound is a CONTRACT rather than a property of this
+	// runtime. V8's JSON parser is iterative, so nothing here overflows a stack the way
+	// Python's reader does — but "how deep may a document this client did not write be" has
+	// to be one answer for both JSON clients, or a peer's answer is readable in one and
+	// refused in the other, and nothing says which is right. Go is not bounded here and
+	// deliberately so; docs/design-history.md records the difference.
+	//
+	// The scan is lexical and shared with the registration-schema compiler, which reaches
+	// for it against a runtime that does overflow. Counting needs no recursion.
+	if (rawNestingDepth(response.body) > MAX_BODY_DEPTH) {
+		throw new RampCallError({
+			kind: "malformed",
+			op,
+			status: response.status,
+			cause: new Error(`answer nests deeper than ${MAX_BODY_DEPTH} containers`),
+		});
+	}
 	try {
 		return JSON.parse(response.body === "" ? "{}" : response.body);
 	} catch (cause) {

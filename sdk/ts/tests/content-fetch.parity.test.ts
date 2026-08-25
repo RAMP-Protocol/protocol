@@ -33,7 +33,18 @@ type ContentFetchVector = {
 	reason_of: string;
 	mime_type: string;
 };
-const vectors = (vectorsFile as { vectors: ContentFetchVector[] }).vectors;
+type URLRefusalVector = {
+	name: string;
+	url: string;
+	failure: string;
+	reason_of: string;
+};
+const doc = vectorsFile as {
+	vectors: ContentFetchVector[];
+	url_refusals: URLRefusalVector[];
+};
+const vectors = doc.vectors;
+const urlRefusals = doc.url_refusals;
 
 // The Go failure classes this leg produces, and the shared kind each is spelled as.
 const FAILURE_KINDS: Record<string, CallErrorKind> = {
@@ -107,4 +118,29 @@ describe("sdk/ts reads a delivery answer the way the sdk/go oracle does", () => 
 			);
 		}
 	});
+});
+
+// The other half of this leg: URLs declined before any dial, and which of them is the
+// VALUE's own permanent fault rather than a dial that did not happen. The three languages
+// each shipped a different answer here, in both directions — the rule is stated now rather
+// than left to whichever URL parser the language happens to ship, and this is where it is
+// held. No dispatcher is injected: nothing on these paths reaches one.
+describe("sdk/ts declines a URL the way the sdk/go oracle declines it", () => {
+	it("url-refusal vector set is non-empty", () => {
+		expect(urlRefusals.length).toBeGreaterThan(0);
+	});
+
+	for (const v of urlRefusals) {
+		it(`${v.name}: ${v.failure}`, async () => {
+			const err = (await fetchContent(v.url, {
+				keyPair: await agentKeys(),
+			}).catch((e: unknown) => e)) as RampCallError;
+
+			expect(err).toBeInstanceOf(RampCallError);
+			expect(err.kind).toBe(FAILURE_KINDS[v.failure]);
+			expect(err.reasonOf()).toBe(v.reason_of);
+			// The refusal reaches a log, and a delivery URL's query is a live credential.
+			expect(String(err.cause ?? "")).not.toContain(v.url);
+		});
+	}
 });

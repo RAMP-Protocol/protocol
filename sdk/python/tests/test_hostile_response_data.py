@@ -18,8 +18,10 @@ first two are shared, so the assertions are.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
+import httpx
 import pytest
 
 from ramp_sdk.core import Mode, Verifier
@@ -122,23 +124,103 @@ def test_a_call_on_a_closed_client_is_a_typed_refusal() -> None:
         assert caught.value.kind is CallErrorKind.NOT_SENT
 
 
-# The parse ABOVE the normalizer, which the previous round left unguarded. json.loads
+def _response_nesting(total: int) -> str:
+    """A CONFORMANT ResourceResponse body whose deepest container is ``total`` deep.
+
+    The root object is one, ``ext`` is two, and each further object adds one.
+
+    ``ext`` is the carrier because it is a ``google.protobuf.Struct``: how deep it goes is
+    the peer's choice and nothing in the contract bounds it, which is what makes this the
+    reachable shape rather than a contrived one. A bare array is malformed at every depth,
+    so a test built on one asserts a typed failure the schema produces on its own — true
+    whatever the bound is set to, which is how this pair of assertions used to pass with the
+    number mutated to anything at all.
+    """
+    nested: dict[str, Any] = {}
+    cursor = nested
+    for _ in range(total - 2):
+        cursor["k"] = {}
+        cursor = cursor["k"]
+    return json.dumps({"ver": "1.0", "exchange": "e.test", "ext": nested})
+
+
+def test_a_body_at_the_depth_bound_is_read() -> None:
+    from ramp_sdk._jsondepth import _MAX_BODY_DEPTH
+    from ramp_sdk.client._call import decode
+    from wire.models import ResourceResponse
+
+    msg = decode("discover", 200, _response_nesting(_MAX_BODY_DEPTH), ResourceResponse)
+    assert msg.exchange == "e.test"
+
+
+# One container past the bound, refused FOR ITS DEPTH rather than for anything else about
+# it — which is what makes the number load-bearing. Both status bands, because the parse
+# runs before the status is consulted: this is reachable on the SUCCESS path too, not only
+# where a hostile peer is expected.
+@pytest.mark.parametrize("status", [200, 500])
+def test_a_body_one_past_the_depth_bound_is_refused_for_its_depth(status: int) -> None:
+    from ramp_sdk._jsondepth import _MAX_BODY_DEPTH
+    from ramp_sdk.client._call import decode
+    from ramp_sdk.client.errors import CallError
+
+    from wire.models import ResourceResponse
+
+    with pytest.raises(CallError) as caught:
+        decode("discover", status, _response_nesting(_MAX_BODY_DEPTH + 1), ResourceResponse)
+    assert f"deeper than {_MAX_BODY_DEPTH}" in str(caught.value)
+
+
+# The parse ABOVE the normalizer, which an earlier round left unguarded. json.loads
 # descends recursively and raises RecursionError on a deep document — not a ValueError, so
 # the handler never caught it, and not a failure this package says it raises. A 40 KB body,
 # far under the 1 MiB read cap, threw an untyped exception out of every verb.
-#
-# Both status bands, because the parse runs before the status is consulted: this was
-# reachable on the SUCCESS path too, not only where a hostile peer is expected.
 @pytest.mark.parametrize("status", [200, 500])
-@pytest.mark.parametrize("depth", [5, 31, 33, 20_000])
-def test_a_deeply_nested_body_is_a_typed_failure(depth: int, status: int) -> None:
+def test_a_body_deep_enough_to_exhaust_the_parser_is_still_typed(status: int) -> None:
     from ramp_sdk.client._call import decode
     from ramp_sdk.client.errors import CallError
     from wire.models import ResourceResponse
 
-    body = "[" * depth + "]" * depth
+    body = "[" * 20_000 + "]" * 20_000
     with pytest.raises(CallError):
         decode("discover", status, body, ResourceResponse)
+
+
+# The delivery leg's own reader of a peer's bytes, which the response reader's guard did
+# not cover. Driven through the FULL verb rather than the reader, because what broke was the
+# contract the verb states: every one of them raises CallError and nothing else. The body is
+# 2400 bytes, well under the 4 KiB refusal cap — the cap bounds the SIZE and says nothing
+# about the nesting, and how much nesting a parser survives is a property of the release
+# rather than a verdict. Measured: this raised RecursionError out of Client.fetch on one
+# supported interpreter and decoded fine on the next.
+def test_a_deeply_nested_refusal_body_is_a_typed_failure_with_no_token() -> None:
+    from ramp_sdk import sync as blocking
+    from ramp_sdk.client import ClientConfig
+    from ramp_sdk.client.errors import CallError, CallErrorKind
+    from ramp_sdk.signing_transport import SigningTransport
+
+    # A WELL-FORMED refusal carrying a token the SDK would otherwise repeat, with the
+    # nesting beside it. That is what separates the guard from the absence of one: drop the
+    # guard and this body still parses on a release whose limit it does not reach, and the
+    # token comes back.
+    depth = 1200
+    hostile = ('{"reason":"url_expired","x":' + "[" * depth + "]" * depth + "}").encode()
+    assert len(hostile) < 4 << 10, "the point is that the size cap does not bound the nesting"
+
+    def respond(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        return httpx.Response(403, content=hostile)
+
+    config = ClientConfig(
+        base_url="https://exchange.test",
+        requester={"id": "a", "domain": "agent.test", "type": "REQUESTER_TYPE_AGENT"},
+        signer=SigningTransport(signer_seed=bytes(range(32)), keyid="agent.v1"),
+    )
+    client = blocking.Client(config, http=httpx.Client(transport=httpx.MockTransport(respond)))
+    with pytest.raises(CallError) as caught:
+        client.fetch("https://edge.test/x")
+    # The edge said no, so the class is the SDK's own — and the token, which is the one part
+    # of a refusal the SDK does not own, is absent rather than invented.
+    assert caught.value.kind is CallErrorKind.REFUSED
+    assert caught.value.reason is None
 
 
 def test_the_depth_bound_admits_every_real_message() -> None:
@@ -147,11 +229,9 @@ def test_the_depth_bound_admits_every_real_message() -> None:
     The deepest instance in the whole conformance corpus is 5 containers; the bound is 32,
     the number the protocol already sets for a stranger's JSON.
     """
-    import json
     import pathlib
 
-    from ramp_sdk._jsondepth import _raw_nesting_depth
-    from ramp_sdk.client._call import _MAX_BODY_DEPTH
+    from ramp_sdk._jsondepth import _MAX_BODY_DEPTH, _raw_nesting_depth
 
     corpus = pathlib.Path(__file__).resolve().parents[3] / "conformance" / "corpus" / "cases.json"
     deepest = max(

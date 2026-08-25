@@ -123,11 +123,17 @@ describe("a redirect on the DELIVERY leg", () => {
 });
 
 describe("a dial the guard refused", () => {
-	// The class is read off the original cause BEFORE redaction. Redacting first replaced
-	// it with a fresh Error, so an address-pin refusal — a verdict about where this URL
-	// points, which will refuse identically forever — was indistinguishable from a
-	// momentary blip.
-	it("is named, and still does not echo the credential", async () => {
+	// It carries NO reason, which is what the shared corpus records and what Go and Python
+	// already answered: `reason` holds the PEER's own refusal token, and a dial the guard
+	// refused reached no peer. This leg used to mint "ssrf_guard" here.
+	//
+	// What that costs is worth stating where the assertion used to be: an address-pin
+	// refusal is a verdict about where this URL points and will refuse identically forever,
+	// while a momentary blip will not, and nothing in the failure now tells a caller which
+	// it was. No SDK of the three distinguishes them, so the answer is the same everywhere
+	// rather than better in one — telling them apart means adding a value to the shared
+	// taxonomy, not a token in one language.
+	it("is unreachable and carries no token, and still does not echo the credential", async () => {
 		const keys = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
 			"sign",
 			"verify",
@@ -139,9 +145,11 @@ describe("a dial the guard refused", () => {
 		).catch((e: unknown) => e)) as RampCallError;
 
 		expect(failure).toBeInstanceOf(RampCallError);
-		expect(failure.reason, "the guard's verdict was flattened into a plain failure").toBe(
-			"ssrf_guard",
-		);
+		expect(failure.kind).toBe("unreachable");
+		expect(
+			failure.reason,
+			"an SDK verdict was put in the field that carries the peer's token",
+		).toBeUndefined();
 		expect(String(failure.cause ?? "")).not.toContain("live-credential-value");
 	});
 });

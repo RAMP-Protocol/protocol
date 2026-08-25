@@ -11,11 +11,22 @@ documents harmless enough to parse — precisely the ones that did not need it.
 
 So the scan is lexical and runs first. Counting needs no recursion.
 
-Two callers today: the registration-schema compiler, reading a schema out of a third
-party's manifest, and the client's response reader, reading whatever a peer answered.
+Three callers today: the registration-schema compiler, reading a schema out of a third
+party's manifest, and both of the client's readers of a peer's own bytes — the response
+reader and the delivery edge's refusal reader.
 """
 
 from __future__ import annotations
+
+#: How deep a document this SDK did not write may nest.
+#:
+#: The same 32 the error-detail reader uses and the protocol sets for a stranger's JSON in
+#: ``AccountRegistration.data_schema``, so one number covers how deep any such document may
+#: be. The deepest instance in the whole conformance corpus is 5.
+#:
+#: It lives beside the scan rather than at either call site, because a bound stated twice is
+#: a bound two readers can disagree about.
+_MAX_BODY_DEPTH = 32
 
 _QUOTE = 0x22
 _BACKSLASH = 0x5C

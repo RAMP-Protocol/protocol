@@ -16,6 +16,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from ramp_sdk._hostref import _BAD_ESCAPE
+from ramp_sdk._jsondepth import _MAX_BODY_DEPTH, _raw_nesting_depth
 from ramp_sdk.errordetail import retrieval_auth_failure_detail
 from ramp_sdk.pop import AGENT_KEY_HEADER
 from ramp_sdk.wire import RequestIDHeader
@@ -76,6 +78,23 @@ _MEDIA_TYPE_SHAPE = re.compile(r"^[!#$%&'*+.^_`|~0-9a-z-]+/[!#$%&'*+.^_`|~0-9a-z
 
 _OP = "fetch content"
 
+# The range a TCP port has. A delivery URL naming one outside it names nothing reachable,
+# whatever a URL parser makes of the value.
+_MIN_PORT = 1
+_MAX_PORT = 65535
+
+
+def _bad_port() -> CallError:
+    """The refusal for a delivery URL naming a port outside the range a port has."""
+    return CallError(
+        CallErrorKind.MALFORMED,
+        _OP,
+        cause=(
+            f"url names a port outside {_MIN_PORT}-{_MAX_PORT} "
+            "(value withheld: it carries a live credential)"
+        ),
+    )
+
 
 @dataclass(frozen=True)
 class Content:
@@ -133,10 +152,24 @@ def proof_headers(
 def vet_signed_url(signed_url: str) -> None:
     """Refuse a delivery URL that cannot be used, before a proof is minted for it.
 
-    Two refusals, both of which Go and TypeScript already make.
+    THE VALUE'S OWN FAULTS ARE REFUSED HERE; the dial's refusals are the dial's. That split
+    is the rule all three languages state, and it is stated rather than delegated to
+    whichever URL parser the language ships — the three parsers disagree about what
+    "unparseable" even means, and a class that changes with the parser is not a contract.
+    Measured before this: one value was a permanent verdict in one language and a retryable
+    dial failure in the other two, and the disagreement ran in both directions.
 
-    A value that is not a URL at all is a caller error, and naming it here is the only
-    place it can be named: everything downstream treats the string as opaque bytes.
+    A value fault is: the URL does not parse, it names no scheme or no host, it names a
+    port outside the range a port has, it carries a malformed percent-escape where a parse
+    would unescape one, or it does not re-serialize to itself. Each will refuse identically
+    forever, so a caller must fix the value. A scheme this SDK will not carry a proof over,
+    an address the guard refuses and a peer that never answers are all the DIAL's, and
+    reported as unreachable.
+
+    The escape check is read PER COMPONENT, the way the host rule already reads it: a
+    malformed escape is refused in a path and in a fragment, and admitted in a query, which
+    a parse does not unescape — and a delivery URL's query is exactly where a credential
+    lives. The predicate is the host rule's own, imported rather than restated.
 
     A URL that does not RE-SERIALIZE to itself is the subtler one. The proof covers
     ``@target-uri`` as the verbatim string while the request line carries whatever the URL
@@ -163,6 +196,30 @@ def vet_signed_url(signed_url: str) -> None:
             CallErrorKind.MALFORMED,
             _OP,
             cause="url names no scheme or no host (value withheld: it carries a live credential)",
+        )
+    # A port outside the range a port has. httpx checks only that it is digits, so
+    # ":99999999999" parses and would then be refused a layer later as a dial that did not
+    # happen — the same misfiling, on the same reasoning: no value with this port will ever
+    # reach anything. ``urlsplit(...).port`` raises for the range and returns None for an
+    # absent one. The HOST rule is deliberately left alone, because its own corpus pins what
+    # a bare host may say; this is the delivery leg vetting a value it is about to dial.
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise _bad_port() from exc
+    if port is not None and not _MIN_PORT <= port <= _MAX_PORT:
+        # urlsplit admits 0, which is not a port anything listens on. Checked rather than
+        # left to the parse, because the rule is the rule and not whatever this parser
+        # happens to refuse.
+        raise _bad_port()
+    if _BAD_ESCAPE.search(parsed.path) or _BAD_ESCAPE.search(parsed.fragment):
+        raise CallError(
+            CallErrorKind.MALFORMED,
+            _OP,
+            cause=(
+                "url carries a malformed percent-escape "
+                "(value withheld: it carries a live credential)"
+            ),
         )
     if reserialized != signed_url:
         raise CallError(
@@ -250,7 +307,23 @@ def _typed_reason(token: str) -> Any:
 
 def _edge_reason(body: bytes) -> str:
     """Pull the edge's own refusal token out of a rejection body. The edge answers
-    ``{"error": "...", "reason": "..."}`` on a binding failure; anything else yields ""."""
+    ``{"error": "...", "reason": "..."}`` on a binding failure; anything else yields "".
+
+    Depth BEFORE the parse, for the reason the RPC reader states: ``json.loads`` descends
+    recursively and aborts on a deep document by raising ``RecursionError``, which is not a
+    ``ValueError`` — so the handler below never saw it — and not a failure this package says
+    it raises. The 4 KiB cap above does not bound it: 4 KiB of ``[`` nests four thousand
+    deep, and how much of that an interpreter survives is a property of the interpreter
+    rather than a verdict. Measured: the same body raised out of ``Client.fetch`` untyped on
+    one supported release and decoded fine on the next.
+
+    A body past the bound yields "" rather than a new failure: the fetch has already been
+    refused by the edge, and the token is the one part of that refusal the SDK does not own.
+    Falling back to the failure class is what this reader already answers for any body it
+    cannot interpret.
+    """
+    if _raw_nesting_depth(body) > _MAX_BODY_DEPTH:
+        return ""
     try:
         payload = json.loads(body or b"{}")
     except ValueError:

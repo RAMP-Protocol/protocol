@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import ValidationError
 from wire.base import JSON_NAME_ALIAS_ERROR
 
-from ramp_sdk._jsondepth import _raw_nesting_depth
+from ramp_sdk._jsondepth import _MAX_BODY_DEPTH, _raw_nesting_depth
 from ramp_sdk.errordetail import error_detail_from
 from ramp_sdk.wire import (
     ConnectProtocolVersion,
@@ -229,14 +229,6 @@ def _schema_failure(op: str, exc: ValidationError, summary: str) -> CallError:
             CallErrorKind.MALFORMED, op, reason=NOT_CANONICAL_WIRE_NAMING, cause=str(exc)
         )
     return malformed(op, summary)
-
-
-#: How deep a peer's answer may nest.
-#:
-#: The same 32 the error-detail reader uses and the protocol sets for a stranger's JSON in
-#: ``AccountRegistration.data_schema``, so one number covers how deep any document this SDK
-#: did not write may be. The deepest instance in the whole conformance corpus is 5.
-_MAX_BODY_DEPTH = 32
 
 
 def _parse_json(op: str, status: int, body: str) -> Any:

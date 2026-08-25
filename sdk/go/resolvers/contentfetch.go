@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +40,10 @@ const DefaultMaxContentBytes int64 = 8 << 20
 // reason is parsed out of it. The payload is a small JSON object; anything past
 // this is not a refusal that can be interpreted.
 const maxErrorBodyBytes int64 = 4 << 10
+
+// maxPort is the largest value a TCP port can take. A delivery URL naming one
+// outside the range names nothing reachable, whatever a URL parser makes of it.
+const maxPort = 65535
 
 // defaultContentMIMEType is what a body with no usable Content-Type is labelled.
 // Guessing from the bytes would be worse: the caller is told what the publisher
@@ -267,6 +272,35 @@ func (f *ContentFetcher) request(ctx context.Context, op, signedURL string, sign
 		return nil, &FetchError{
 			Failure: FetchMalformed, Op: op,
 			Err: errors.New("delivery url is not parseable (value withheld: it carries a live credential)"),
+		}
+	}
+	// A value that PARSES and still names no scheme or no host. net/url accepts
+	// "edge.test/asset" and "/asset" as relative references, so nothing above catches
+	// them, and the transport would refuse them a layer later as a dial that did not
+	// happen — putting a value that can never work into the retryable class. Which
+	// side of the line a URL falls on is the VALUE's fault or the DIAL's, not a
+	// question of which parser the language ships: a URL naming no scheme or no host
+	// is the caller's to fix and will refuse identically forever.
+	//
+	// The value is NOT echoed, for the reason the branch above does not echo it.
+	if req.URL.Scheme == "" || req.URL.Host == "" {
+		return nil, &FetchError{
+			Failure: FetchMalformed, Op: op,
+			Err: errors.New("delivery url names no scheme or no host (value withheld: it carries a live credential)"),
+		}
+	}
+	// A port outside the range a port has. net/url checks only that it is digits, so
+	// ":99999999999" parses and is then refused a layer later as a dial that did not
+	// happen — the same misfiling as the branch above, on the same reasoning: no
+	// value with this port will ever reach anything. The HOST rule is deliberately
+	// left alone, because its own corpus pins what a bare host may say; this is the
+	// delivery leg vetting a value it is about to dial.
+	if port := req.URL.Port(); port != "" {
+		if n, convErr := strconv.Atoi(port); convErr != nil || n < 1 || n > maxPort {
+			return nil, &FetchError{
+				Failure: FetchMalformed, Op: op,
+				Err: errors.New("delivery url names a port outside 1-65535 (value withheld: it carries a live credential)"),
+			}
 		}
 	}
 	// The proof covers @target-uri as the VERBATIM string, while the request line
