@@ -295,10 +295,12 @@ message ResourceQuery {
   // its own signature over the request as received. A message that TERMINATES
   // at the Broker (DiscoveryRequest) is not forwarding: there the Broker is
   // the final recipient, and the agent signs the Broker's URL.
-  // The Exchange resolves each hop's key in that hop's WBA directory — named by
-  // the hop's covered `Signature-Agent` header, with the keyid the key's
-  // RFC 7638 thumbprint; ramp.json carries no keys —
-  // verifies every signature, and enforces RequestConstraints.max_hops /
+  // Each signature's keyid is the key's RFC 7638 thumbprint; ramp.json carries
+  // no keys. The request carries ONE covered `Signature-Agent` header — the
+  // agent's WBA directory, forwarded unchanged by every relay — so the Exchange
+  // resolves the agent's key there, and takes each forwarding hop's key from
+  // the key set it is configured with (e.g. Brokers registered with it).
+  // The Exchange verifies every signature, and enforces RequestConstraints.max_hops /
   // WellKnownManifest.max_intermediary_hops by counting them. (Field 5 unused.)
 
   // Maximum time the caller will wait for a response.

@@ -93,6 +93,13 @@ class TestResolverIoLeaf:
         assert _imports_io("from httpx import Client")
         assert _imports_io("import sys, httpx")
 
+    def test_meta_positive_catches_httpcore_import(self) -> None:
+        # httpcore is a policy entry of its own: no pure module imports it
+        # today, so only these asserts notice if its ban is dropped.
+        assert _imports_io("import httpcore")
+        assert _imports_io("from httpcore import ConnectionPool")
+        assert _imports_io("import sys, httpcore")
+
     def test_meta_positive_catches_urllib_import(self) -> None:
         assert _imports_io("import urllib.request")
         assert _imports_io("from urllib.request import urlopen")

@@ -161,11 +161,11 @@ func (o *Broker) signHop(req *http.Request, priorSig string) {
 The Exchange verifies both layers:
 
 1. **Requester signature** -- verified against the public key in the agent's WBA directory at `{domain}/.well-known/http-message-signatures-directory` (domain from the covered `Signature-Agent` header, key selected by the `keyid` thumbprint)
-2. **The forwarding signature stack** -- each labeled RFC 9421 signature is verified against the public key in that hop's WBA directory (`{hop-domain}/.well-known/http-message-signatures-directory`), and the chained coverage is checked hop-by-hop.
+2. **The forwarding signature stack** -- each labeled RFC 9421 signature is verified against the key its `keyid` thumbprint selects from the key set the Exchange is configured with (`Signature-Agent` stays the agent's directory, so a Broker's key is not discovered through it), and the chained coverage is checked hop-by-hop.
 
 All signatures must pass. The Exchange counts the number of forwarding hops in the stack against `max_hops` / `max_intermediary_hops` and rejects requests that exceed the limit.
 
-The Broker publishes its keys in its WBA directory (the JWK Set at `{domain}/.well-known/http-message-signatures-directory`) — RFC 7517 Ed25519 JWKs, each identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`). Its `ramp.json` manifest uses the same format as agents (`role=ROLE_AGENT`). This allows any Exchange to verify the Broker's identity without prior registration.
+The Broker publishes its keys in its WBA directory (the JWK Set at `{domain}/.well-known/http-message-signatures-directory`) — RFC 7517 Ed25519 JWKs, each identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`). Its `ramp.json` manifest uses the same format as agents (`role=ROLE_AGENT`). An Exchange verifies the Broker's signatures against keys it has loaded from that directory into its configured key set. The covered `Signature-Agent` header stays the agent's directory and does not point at the Broker's, so the Exchange must know the Broker — for example, through registration — before it can verify the hop.
 
 ## Profile-Based Routing
 
