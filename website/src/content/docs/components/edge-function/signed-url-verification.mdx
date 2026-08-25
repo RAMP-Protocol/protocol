@@ -126,7 +126,7 @@ HMAC comparisons use constant-time comparison (XOR loop), never `===`. This prev
 
 The signed URL is bound to the agent that purchased the resource, so a leaked URL is useless to anyone else. The binding follows the **DPoP pattern ([RFC 9449](https://www.rfc-editor.org/rfc/rfc9449))**: the Exchange embeds the agent's key thumbprint into the URL it HMAC-signs, and a capable edge function enforces proof-of-possession at fetch time — **with no outbound network call**.
 
-**Definition.** `agent_identity_hash` (URL parameter `agent_id`) is the **[RFC 7638](https://www.rfc-editor.org/rfc/rfc7638) JWK Thumbprint (SHA-256, base64url)** of the agent's Ed25519 request-signing key — the same key published in the agent's manifest at `{domain}/.well-known/ramp.json` and used for RFC 9421 request signatures. RFC 7638 defines one canonical JSON form and one hash, so signer and verifier compute the identical value. It is present whenever a signed `retrieval_endpoint` is returned, and it is covered by the URL HMAC.
+**Definition.** `agent_identity_hash` (URL parameter `agent_id`) is the **[RFC 7638](https://www.rfc-editor.org/rfc/rfc7638) JWK Thumbprint (SHA-256, base64url)** of the agent's Ed25519 request-signing key — the same key published in the agent's WBA directory at `{domain}/.well-known/http-message-signatures-directory` and used for RFC 9421 request signatures. RFC 7638 defines one canonical JSON form and one hash, so signer and verifier compute the identical value. It is present whenever a signed `retrieval_endpoint` is returned, and it is covered by the URL HMAC.
 
 :::caution
 This is **not** a hash of an account identifier such as `billing_ref` — an identifier is not a secret, so hashing it binds nothing an attacker cannot reproduce. The thumbprint binds the URL to a key whose *private* half the fetcher must prove it holds.
@@ -255,12 +255,12 @@ graph LR
     end
 
     subgraph "Key Distribution"
-        RAMP_JSON["ramp.json or<br/>config endpoint"]
+        WBA_DIR["WBA directory or<br/>config endpoint"]
     end
 
     PRIV_KEY -->|"Signs: URL + expiry + agent_id + txn_id"| SIGNED_URL[Signed URL]
     SIGNED_URL -->|"Agent fetches"| PUB_KEY
     PUB_KEY -->|"Verifies signature"| DECISION{Valid?}
-    PRIV_KEY -.->|"Public key published at"| RAMP_JSON
-    RAMP_JSON -.->|"Edge function fetches public key"| PUB_KEY
+    PRIV_KEY -.->|"Public key published at"| WBA_DIR
+    WBA_DIR -.->|"Edge function fetches public key"| PUB_KEY
 ```

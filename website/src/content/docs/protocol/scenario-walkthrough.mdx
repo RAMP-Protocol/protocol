@@ -231,8 +231,8 @@ Step 3: Prepare RFC 9421 HTTP Message Signature (alg=ed25519)
     Signature-Input headers covering the request method, path, and body digest
   - Authentication is asymmetric:
     the agent signs with its Ed25519 private key (never leaves the agent),
-    the Exchange verifies with the public key fetched from
-    claude.ai/.well-known/ramp.json
+    the Exchange verifies with the public key fetched from the WBA
+    directory at claude.ai/.well-known/http-message-signatures-directory
 ```
 
 **Key insight**: The SDK discovers Exchanges from the provider's `ramp.json`. It only finds the authorized Exchange for THAT domain. Cross-provider discovery (same article on different domains) requires either a hosted Broker that has crawled multiple providers' `ramp.json`, or the agent explicitly requesting multiple URLs across providers.
@@ -265,8 +265,10 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
 ```
 1. Validate request (proto validation) -> pass
 2. Verify the RFC 9421 HTTP Message Signature (alg=ed25519) on the request:
-   a. Extract requester.domain = "claude.ai"
-   b. Fetch public key from claude.ai/.well-known/ramp.json
+   a. Read the covered Signature-Agent header -> "claude.ai"
+   b. Fetch the WBA directory at
+      claude.ai/.well-known/http-message-signatures-directory,
+      select the key whose RFC 7638 thumbprint matches the keyid
    c. Verify the signature against public key -> pass
 3. Resolve tenant: techcrunch.com -> Hearst Media tenant
 4. Find offers: lookup "/premium/ai-regulation-2026.html" in radix trie -> match
@@ -492,8 +494,8 @@ Broker → SSP-Alpha (multi-URI batch query) — `POST https://exchange.ssp-alph
 ```
 
 The forwarding chain travels in the HTTP headers, not the request body: the agent's labeled RFC 9421 signature and the Broker's labeled RFC 9421 signature both sit in the `Signature`/`Signature-Input` headers. The agent's signature covers `@target-uri` against the Exchange's endpoint -- the final recipient -- not the Broker's relay URL. SSP-Alpha's Exchange verifies the full stack:
-1. The agent's RFC 9421 HTTP Message Signature (alg=ed25519) -- fetch public key from `claude.ai/.well-known/ramp.json`, Ed25519 verify
-2. Each forwarding hop's labeled RFC 9421 HTTP Message Signature -- for each one, fetch public key from `{hop.domain}/.well-known/ramp.json`, Ed25519 verify (each hop signs the request plus the prior hop's signature)
+1. The agent's RFC 9421 HTTP Message Signature (alg=ed25519) -- fetch public key from the WBA directory at `claude.ai/.well-known/http-message-signatures-directory`, Ed25519 verify
+2. Each forwarding hop's labeled RFC 9421 HTTP Message Signature -- for each one, look up the public key by its `keyid` thumbprint in the key set the Exchange is configured with (`Signature-Agent` stays the agent's directory, so a hop's key is not discovered through it), Ed25519 verify (each hop signs the request plus the prior hop's signature)
 
 SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
 
@@ -713,17 +715,21 @@ SDK or Broker commits to the subscription offer.
 }
 ```
 
-The request body is identical to the direct case; the forwarding chain lives in the HTTP headers. The Broker preserves the agent's labeled RFC 9421 signature and adds its own labeled RFC 9421 signature (covering the request plus the agent's signature) to the `Signature`/`Signature-Input` headers. The Exchange verifies both: the agent's identity (via the agent's RFC 9421 HTTP Message Signature, alg=ed25519, + public key fetched from `requester.domain/.well-known/ramp.json`) and each forwarding hop (via that hop's labeled RFC 9421 signature + public key fetched from `{hop.domain}/.well-known/ramp.json`).
+The request body is identical to the direct case; the forwarding chain lives in the HTTP headers. The Broker preserves the agent's labeled RFC 9421 signature and adds its own labeled RFC 9421 signature (covering the request plus the agent's signature) to the `Signature`/`Signature-Input` headers. The Exchange verifies both: the agent's identity (via the agent's RFC 9421 HTTP Message Signature, alg=ed25519, + public key fetched from the agent's WBA directory at `claude.ai/.well-known/http-message-signatures-directory`) and each forwarding hop (via that hop's labeled RFC 9421 signature + the hop's public key, selected by its `keyid` thumbprint from the key set the Exchange is configured with).
 
 ### Inside SSP-Alpha's Exchange
 
 ```
 1. Validate request (proto validation) -> pass
 2. Verify the RFC 9421 HTTP Message Signature (alg=ed25519) on the request:
-   - Fetch public key from claude.ai/.well-known/ramp.json (requester.domain key lookup)
+   - Fetch public key from the WBA directory at
+     claude.ai/.well-known/http-message-signatures-directory
+     (domain from the covered Signature-Agent header, key by keyid thumbprint)
    - Ed25519 verify -> pass
 2b. Verify forwarding signature chain (if any forwarding hops added labeled signatures):
-   - For each hop's labeled RFC 9421 signature: fetch public key from {hop.domain}/.well-known/ramp.json
+   - For each hop's labeled RFC 9421 signature: look up the public key by its
+     keyid thumbprint in the Exchange's configured key set (Signature-Agent
+     stays the agent's directory)
    - Ed25519 verify each hop's signature -> pass
 3. Check idempotency: tx-claude-001 not seen before -> proceed
 4. Verify offer signature:

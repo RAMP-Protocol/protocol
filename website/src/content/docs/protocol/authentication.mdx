@@ -407,7 +407,7 @@ A research bot queries a public Exchange. No delegation token, no special scopes
 }
 ```
 
-The Exchange verifies the signature by fetching the public key from `research.acme.com/.well-known/ramp.json`, then returns all publicly available offers for the requested URI.
+The Exchange verifies the signature by fetching the WBA directory at `research.acme.com/.well-known/http-message-signatures-directory` (resolved from the covered `Signature-Agent` header) and selecting the key whose RFC 7638 thumbprint matches the `keyid`, then returns all publicly available offers for the requested URI.
 
 ### Subscription Agent (MarketData JWT)
 
@@ -601,7 +601,7 @@ When a WBA directory sets `revocation_url`, consumers poll it on a 300s cadence 
 
 ### Domainless Agents
 
-An individual agent with no public domain of its own is accommodated **without a protocol change**: a registry (operated by an Exchange/Broker or a third party) hosts the agent's `WellKnownManifest`, and the agent sets `Requester.domain` to that registry host (e.g. `agent-7.registry.example`). The agent generates its own keypair; the registry publishes the public half at `{registry}/.well-known/ramp.json`. The domain + well-known paradigm is preserved end to end. Relaxing the discovery anchor (an explicit per-requester keys URL) is a deliberate deferral.
+An individual agent with no public domain of its own is accommodated **without a protocol change**: a registry (operated by an Exchange/Broker or a third party) hosts the agent's `WellKnownManifest`, and the agent sets `Requester.domain` to that registry host (e.g. `agent-7.registry.example`). The agent generates its own keypair; the registry publishes the public half in its WBA directory at `{registry}/.well-known/http-message-signatures-directory`. The domain + well-known paradigm is preserved end to end. Relaxing the discovery anchor (an explicit per-requester keys URL) is a deliberate deferral.
 
 ## Next Steps
 

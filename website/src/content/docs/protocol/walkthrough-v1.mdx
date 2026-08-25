@@ -82,7 +82,7 @@ The agent sends a `ResourceQuery` to the Exchange with its identity in the `Requ
 ```
 
 **Key fields in `Requester`:**
-- **`id`** + **`domain`** — uniquely identifies the agent. The Exchange fetches the agent's Ed25519 public key from `startup.com/.well-known/ramp.json` (`role=ROLE_AGENT`) to verify the request's RFC 9421 HTTP Message Signature.
+- **`id`** + **`domain`** — uniquely identifies the agent. The Exchange fetches the agent's Ed25519 public key from the WBA directory at `startup.com/.well-known/http-message-signatures-directory` (the domain resolved from the covered `Signature-Agent` header) to verify the request's RFC 9421 HTTP Message Signature.
 - **`type`** — `REQUESTER_TYPE_AGENT` (autonomous AI agent). Other types: `HUMAN_TOOL`, `SERVICE`, `DELEGATED`, `RESEARCH`.
 - **`ResourceQuery.uris`** — the specific resources being requested (a sibling of `requester`, not part of the identity envelope).
 - **`acceptable_restrictions`** — the query's restriction tolerances (here axis `FUNCTION` with `ai-input`); a sibling of `requester`.
@@ -402,7 +402,7 @@ The `delegation.token` is an authority JWT, signed by MarketData's Ed25519 key. 
 ```
 
 The Exchange verifies the JWT chain:
-1. **Signature check** — the authority JWT is signed by `marketdata.example.com`'s Ed25519 key (fetched from `marketdata.example.com/.well-known/ramp.json`, `role=ROLE_AGENT`). This proves MarketData actually issued this delegation.
+1. **Signature check** — the authority JWT is signed by `marketdata.example.com`'s Ed25519 key (fetched from the WBA directory at `marketdata.example.com/.well-known/http-message-signatures-directory`). This proves MarketData actually issued this delegation.
 2. **Scope matching** — the requested URI (`/earnings/NVDA/...`) matches the `earnings:*` scope in the JWT.
 3. **Expiry check** — `exp` is in the future.
 4. **Holder binding** — the key that signed the request (RFC 9421) MUST hash to the final `cnf.jkt`, so a stolen token is useless without the matching private key.

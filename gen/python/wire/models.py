@@ -1322,7 +1322,7 @@ class Requester(WireModel):
         max_length=260,
     ) = Field(
         ...,
-        description='Domain the requester belongs to — used for public key lookup, so the value\n is concatenated into a URL the verifier fetches ({domain}/.well-known/ramp.json,\n WellKnownManifest with role=ROLE_AGENT). It carries the same bare-host shape\n "Request recipient" defines in the file header, for the same structural\n reason: a scheme, path or query smuggled in here would choose what gets\n fetched, not merely from where.',
+        description='Domain the requester belongs to. It carries the same bare-host shape\n "Request recipient" defines in the file header, for the same structural\n reason: a scheme, path or query smuggled in here would choose what gets\n fetched, not merely from where. It is NOT how a verifier finds this\n requester\'s keys: those live in the WBA directory, and verification resolves\n that directory from the COVERED `Signature-Agent` header, never from this\n self-asserted value.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -1906,7 +1906,7 @@ class OfferGroup(WireModel):
 class ResourceEntry(WireModel):
     attestations: list[ResourceAttestation] | None = Field(
         None,
-        description="Signed attestations about this resource entry.\n Same semantics as Offer.attestations — see ResourceAttestation message\n for verification levels and claim vocabulary. Attestations pushed via\n CatalogService are verified at push time: the Exchange checks that\n the attestation verifier is authorized to push for this provider\n (via catalog_contributors in the provider's WellKnownManifest) and validates the\n attestation signature against the verifier's public key from their\n /.well-known/ramp.json endpoint (WellKnownManifest, role determined\n by the verifier's operator).",
+        description="Signed attestations about this resource entry.\n Same semantics as Offer.attestations — see ResourceAttestation message\n for verification levels and claim vocabulary. Attestations pushed via\n CatalogService are verified at push time: the Exchange checks that\n the attestation verifier is authorized to push for this provider\n (via catalog_contributors in the provider's WellKnownManifest) and validates the\n attestation signature against the verifier's public key from its WBA\n directory (the JWK Set at /.well-known/http-message-signatures-directory;\n the keyid is the key's RFC 7638 thumbprint). The verifier's ramp.json\n carries only its role, determined by the verifier's operator.",
     )
     content_hash: str | None = Field(None, description='Content hash')
     content_id: str | None = Field(None, description='Content identifier')

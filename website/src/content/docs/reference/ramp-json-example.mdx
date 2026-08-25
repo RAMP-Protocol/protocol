@@ -38,6 +38,18 @@ The `ramp.json` file is served at `/.well-known/ramp.json` and carries a `WellKn
 }
 ```
 
+## An Agent Manifest
+
+An agent's manifest is much smaller: a role marker. Its signing keys are not here — they live in the WBA directory described below, which a verifier resolves from the covered `Signature-Agent` header.
+
+```json
+{
+  "ver": "1.0",
+  "role": "ROLE_AGENT",
+  "domain": "research-bot.example"
+}
+```
+
 ## The WBA Directory
 
 Signing keys are **not** carried in `ramp.json`. Each participant publishes its keys in a separate, pure WBA directory — a JWK Set served at `/.well-known/http-message-signatures-directory` with `Content-Type: application/jwk-set+json`. Keys are identified by their RFC 7638 thumbprint (the RFC 9421 `keyid`), not by a `kid` label, and the optional emergency revocation list now lives here as `revocation_url`:

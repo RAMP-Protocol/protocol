@@ -448,7 +448,7 @@ The agent selects the **standard tier** ($61.99) — sufficient depth for due di
 
 The Exchange performs:
 1. **Signature verification** — verifies the `offer.signature` is its own Ed25519 signature over the reflected Offer (stateless, no stored offers).
-2. **Agent authentication** — verifies the request's RFC 9421 HTTP Message Signature (alg=ed25519, carried in HTTP headers) against the agent's published public key at `legalcorp.com/.well-known/ramp.json` (`role=ROLE_AGENT`).
+2. **Agent authentication** — verifies the request's RFC 9421 HTTP Message Signature (alg=ed25519, carried in HTTP headers) against the agent's public key published in the WBA directory at `legalcorp.com/.well-known/http-message-signatures-directory`.
 3. **Balance check** — confirms `due-diligence-bot@legalcorp.com` has sufficient balance ($61.99).
 4. **WAL write** — records the transaction in the write-ahead log before generating the signed URL (write-before-sign invariant).
 5. **Signed URL generation** — HMAC-SHA256 over `(base_url, expires, agent_id, txn_id)` using the Exchange-CDN shared secret.
