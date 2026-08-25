@@ -67,48 +67,22 @@ func (h *ExchangeHandler) DiscoverResources(
         defer cancel()
     }
 
-    // 2. Verify Requester identity (RFC 9421 HTTP Message Signature in the HTTP headers, Ed25519, domain-bound key).
-    //    The signing key lives in the signer's WBA directory at
-    //    {domain}/.well-known/http-message-signatures-directory, and the domain
-    //    comes from the COVERED `Signature-Agent` header — the self-asserted
+    // 2. Requester identity. Verification already happened at the HTTP seam:
+    //    the SDK's verify middleware checked every RFC 9421 signature — the
+    //    requester's and the whole forwarding chain (each labeled signature
+    //    covers the request essentials plus the previous hop's signature, so
+    //    the ordered header stack IS the chain) — resolving the requester's
+    //    key by its signed keyid (an RFC 7638 thumbprint) in the WBA directory
+    //    named by the COVERED `Signature-Agent` header. The self-asserted
     //    Requester.domain field never drives key lookup.
-    //    The Exchange MUST verify the requester's HTTP Message Signature. Reject on failure.
+    //    The handler consumes the proof from the context; it never re-fetches
+    //    keys or re-verifies bytes, and it fails closed when the proof is
+    //    absent (a route the middleware does not guard).
     requester := req.Msg.Requester
-    keyDomain, err := coveredSignatureAgent(req) // from the signed header, not the body
-    if err != nil {
-        return nil, connect.NewError(connect.CodeUnauthenticated, err)
-    }
-    requesterPubKey, err := h.requesterKeys.LookupPublicKey(ctx, keyDomain)
-    if err != nil {
+    verified := helpers.FromContext(ctx) // first (requester) signature; hops via helpers.AllSignaturesFromContext
+    if verified == nil {
         return nil, connect.NewError(connect.CodeUnauthenticated,
-            fmt.Errorf("no key directory for domain: %s", keyDomain))
-    }
-    if err := h.verifyRequesterSignature(req, requesterPubKey); err != nil {
-        slog.Warn("requester signature verification failed on DiscoverResources",
-            slog.String("requester_id", requester.Id),
-            slog.String("domain", requester.Domain),
-            slog.Any("error", err),
-        )
-        return nil, connect.NewError(connect.CodeUnauthenticated, err)
-    }
-
-    // 2b. Verify the forwarding chain: the stack of RFC 9421 HTTP Message
-    //     Signatures carried in the request headers (Signature / Signature-Input).
-    //     There is no in-message hop list — each forwarding party (e.g. a Broker)
-    //     adds ONE labeled signature (keyid names the signer) that covers the
-    //     request essentials plus the previous hop's signature, so the ordered
-    //     set of header signatures IS the chain and is tamper-evident.
-    //     verifyForwardingChain resolves each keyid (an RFC 7638 thumbprint)
-    //     in the key set the Exchange is configured with — Signature-Agent
-    //     stays the agent's directory, so hop keys are not discovered through
-    //     it — verifies every signature, and confirms the chain is contiguous.
-    if err := h.verifyForwardingChain(ctx, req); err != nil {
-        slog.Warn("forwarding signature chain verification failed",
-            slog.String("requester_id", requester.Id),
-            slog.String("domain", requester.Domain),
-            slog.Any("error", err),
-        )
-        return nil, connect.NewError(connect.CodeUnauthenticated, err)
+            errors.New("request reached the handler without a verified signature"))
     }
 
     // 2c. Verify delegation (if present).
@@ -121,10 +95,15 @@ func (h *ExchangeHandler) DiscoverResources(
     }
 
     // 2d. Resolve the caller's registered account from the VERIFIED identity:
-    //     the covered directory domain plus the signing key's RFC 7638
-    //     thumbprint. The self-asserted requester.id/domain never select an
-    //     account — they are display fields.
-    account, err := h.accounts.FromVerifiedKey(ctx, keyDomain, thumbprint(requesterPubKey))
+    //     the covered directory (verified.SignatureAgent) plus the RFC 7638
+    //     thumbprint of the key the signature actually verified against
+    //     (verified.PublicKey — not the claimed keyid). The self-asserted
+    //     requester.id/domain never select an account — they are display fields.
+    keyThumb, err := helpers.Thumbprint(verified.PublicKey)
+    if err != nil {
+        return nil, connect.NewError(connect.CodeInternal, err)
+    }
+    account, err := h.accounts.FromVerifiedKey(ctx, verified.SignatureAgent, keyThumb)
     if err != nil {
         return nil, connect.NewError(connect.CodePermissionDenied, err)
     }
@@ -289,10 +268,9 @@ All signatures must pass for the request to proceed. If any verification fails �
 When only the originating signature is present, the requester is calling the Exchange directly — no intermediary was involved. Chain depth is bounded by `RequestConstraints.max_hops` (agent-set) and `WellKnownManifest.max_intermediary_hops` (Exchange-published); the Exchange counts the signatures in the stack against these caps.
 
 ```go
-// Forwarding chain verification — the ordered stack of RFC 9421 HTTP
-// Message Signatures in the request headers IS the chain.
-//
-// verifyForwardingChain:
+// Forwarding-chain verification runs in the SDK's verify middleware at the
+// HTTP seam, before any handler — the ordered stack of RFC 9421 HTTP
+// Message Signatures in the request headers IS the chain. The middleware:
 //   1. Parses the Signature / Signature-Input headers into ordered, labeled hops.
 //   2. Verifies the originating (requester) signature against the key in
 //      the requester's WBA directory at
@@ -301,10 +279,9 @@ When only the originating signature is present, the requester is calling the Exc
 //      Exchange's configured key set, verifies the Ed25519 signature, and
 //      confirms it covers the prior hop's signature (contiguous + ordered).
 //   4. Counts the hops against max_hops / max_intermediary_hops.
-// Any failure returns CodeUnauthenticated.
-if err := h.verifyForwardingChain(ctx, req); err != nil {
-    return nil, connect.NewError(connect.CodeUnauthenticated, err)
-}
+// Any failure rejects the request with CodeUnauthenticated before the handler
+// runs. The handler reads the proven hops from the context:
+hops := helpers.AllSignaturesFromContext(ctx) // sig1..sigN, in chain order
 ```
 
 ### Delegation Verification
@@ -411,34 +388,26 @@ func (h *ExchangeHandler) ExecuteTransaction(
         return nil, connect.NewError(connect.CodeInvalidArgument, err)
     }
 
-    // 2. Verify Requester identity (RFC 9421 HTTP Message Signature in the HTTP
-    //    headers, Ed25519, domain-bound key). As in DiscoverResources step 2,
-    //    the key domain comes from the COVERED `Signature-Agent` header, never
-    //    from the self-asserted Requester.domain.
+    // 2. Requester identity. As in DiscoverResources step 2, the SDK's verify
+    //    middleware already verified every RFC 9421 signature at the HTTP seam;
+    //    the handler consumes the proof from the context and fails closed when
+    //    it is absent.
     requester := req.Msg.Requester
-    keyDomain, err := coveredSignatureAgent(req)
-    if err != nil {
-        return nil, connect.NewError(connect.CodeUnauthenticated, err)
-    }
-    requesterPubKey, err := h.requesterKeys.LookupPublicKey(ctx, keyDomain)
-    if err != nil {
+    verified := helpers.FromContext(ctx)
+    if verified == nil {
         return nil, connect.NewError(connect.CodeUnauthenticated,
-            fmt.Errorf("no key directory for domain: %s", keyDomain))
-    }
-    if err := h.verifyRequesterSignature(req, requesterPubKey); err != nil {
-        slog.Warn("requester signature verification failed on ExecuteTransaction",
-            slog.String("requester_id", requester.Id),
-            slog.String("domain", requester.Domain),
-            slog.Any("error", err),
-        )
-        return nil, connect.NewError(connect.CodeUnauthenticated, err)
+            errors.New("request reached the handler without a verified signature"))
     }
 
     // 2b. Resolve the caller's registered account from the verified identity
-    //     (covered directory domain + key thumbprint), as in DiscoverResources
+    //     (covered directory + proven-key thumbprint), as in DiscoverResources
     //     step 2d. All entitlement, compliance, and billing below use this
     //     account, never the caller-written requester.id/domain.
-    account, err := h.accounts.FromVerifiedKey(ctx, keyDomain, thumbprint(requesterPubKey))
+    keyThumb, err := helpers.Thumbprint(verified.PublicKey)
+    if err != nil {
+        return nil, connect.NewError(connect.CodeInternal, err)
+    }
+    account, err := h.accounts.FromVerifiedKey(ctx, verified.SignatureAgent, keyThumb)
     if err != nil {
         return nil, connect.NewError(connect.CodePermissionDenied, err)
     }
