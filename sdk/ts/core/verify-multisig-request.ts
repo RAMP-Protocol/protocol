@@ -46,8 +46,18 @@ export interface MultisigVerifyHeaders {
 	"content-digest": string;
 	"signature-input": string;
 	signature: string;
-	authorization: string;
-	"signature-agent": string;
+	/**
+	 * The two covered headers whose value may legitimately be EMPTY. Optional so an
+	 * ABSENT one is distinguishable from an empty one, which is the whole reason an
+	 * empty one is put on the wire: the base is rebuilt from the request that ARRIVED,
+	 * so a name the signature covers and the request does not carry cannot be
+	 * reconstructed, and defaulting it to "" would invent a value the signer may never
+	 * have bound. The oracle draws the same line by reading these with Values rather
+	 * than Get. See docs/design-history.md, "A covered header the peer never receives
+	 * is not bound".
+	 */
+	authorization?: string;
+	"signature-agent"?: string;
 	/**
 	 * The entitlement-token header (mirrors Go entitlementHeaderLower). When
 	 * present, EVERY hop's covered set MUST commit to it (enforceEntitlementCoverage
@@ -131,6 +141,15 @@ function chainLinkFor(
 export async function verifyMultisigRequestServer(
 	input: VerifyMultisigRequestInput,
 ): Promise<MultisigVerifyVerdict> {
+	// ABSENT is not EMPTY. See the header type for why the distinction is the whole
+	// point of putting an empty covered header on the wire.
+	if (
+		input.headers.authorization === undefined ||
+		input.headers["signature-agent"] === undefined
+	) {
+		return rejectMultisig("signature");
+	}
+
 	const members = parseMultisigSignatureInput([input.headers["signature-input"]]);
 	if (!members) return rejectMultisig("signature");
 

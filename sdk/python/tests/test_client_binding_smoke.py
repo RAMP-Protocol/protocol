@@ -59,9 +59,15 @@ def test_client_signs_outbound_request_via_core_sign_seam() -> None:
         body=b'{"query":"x"}',
         authorization="",
     )
-    assert "signature-input" in {k.lower() for k in signed.headers}
-    assert "signature" in {k.lower() for k in signed.headers}
-    assert "content-digest" in {k.lower() for k in signed.headers}
+    emitted = {k.lower() for k in signed.headers}
+    assert "signature-input" in emitted
+    assert "signature" in emitted
+    assert "content-digest" in emitted
+    # The two covered headers whose value may be empty. Membership alone is the point
+    # here: a signed request that omits either is refused by a conformant verifier, and
+    # this smoke test passed for the whole life of that defect without them.
+    assert "authorization" in emitted
+    assert "signature-agent" in emitted
 
 
 def test_client_verifies_returned_offer_through_verifier() -> None:

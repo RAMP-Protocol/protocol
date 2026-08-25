@@ -4,10 +4,11 @@
 //
 // Core Invariant: this module is a pure ORCHESTRATION of the already
 // byte-parity-locked primitives signRequest / appendSignature (core/sign-request.ts)
-// and clockWindow / monotonicWindow (core/window.ts). It stamps the RFC 9421
-// Content-Digest / Signature-Input / Signature headers byte-identical to the
-// shared Go/Python oracle, forwards the request body UNMODIFIED, and adds NO new
-// crypto and NO new signature-base rendering.
+// and clockWindow / monotonicWindow (core/window.ts). It stamps EVERY covered header
+// at the value that entered the signature base — Content-Digest / Signature-Input /
+// Signature, and the Authorization / Signature-Agent whose values may be empty —
+// byte-identical to the shared Go/Python oracle, forwards the request body UNMODIFIED,
+// and adds NO new crypto and NO new signature-base rendering.
 //
 // Two faces, mirroring Python's transport-neutral shape (the cleaner fit for TS's
 // multi-runtime edge, which has no Go http.RoundTripper):
@@ -54,6 +55,28 @@ function getHeader(
 	return undefined;
 }
 
+/**
+ * mergeSigned overlays the signed headers onto the caller's, REPLACING any the caller
+ * spelled in a different case rather than letting both survive.
+ *
+ * A plain spread would not: header names are case-insensitive on the wire, JS object keys
+ * are not, so a caller's `Authorization` and a signed `authorization` become two field
+ * lines. getHeader above already reads case-insensitively; this is the write side
+ * agreeing with it. See docs/design-history.md, "A covered header the peer never receives
+ * is not bound".
+ */
+function mergeSigned(
+	callerHeaders: Record<string, string>,
+	signedHeaders: Record<string, string>,
+): Record<string, string> {
+	const claimed = new Set(Object.keys(signedHeaders).map((k) => k.toLowerCase()));
+	const merged: Record<string, string> = {};
+	for (const [name, value] of Object.entries(callerHeaders)) {
+		if (!claimed.has(name.toLowerCase())) merged[name] = value;
+	}
+	return { ...merged, ...signedHeaders };
+}
+
 /** Inputs for signOutbound — the transport-neutral header core. */
 export interface SignOutboundOptions {
 	privKey: CryptoKey;
@@ -88,9 +111,12 @@ export interface SignedOutbound {
  * headers for one outbound request and returns them with the body untouched — the
  * transport-neutral core (Python SignedOutbound sibling). It orchestrates the
  * parity-locked primitives: appendSignature when appendOnly is set OR a prior
- * Signature is present (forwarding chain), signRequest otherwise. The
- * covered Signature-Agent is bound verbatim from `signatureAgent`; the returned
- * headers echo it (via the exported SignatureAgentHeader) only when non-empty.
+ * Signature is present (forwarding chain), signRequest otherwise.
+ *
+ * It returns EVERY covered header at the value that entered the signature base, empty
+ * values included — see the emit below for why. The keys are LOWERCASE, which is the
+ * spelling the corpus records and Python emits, and is what lets a merge over a caller's
+ * own headers replace rather than duplicate.
  */
 export async function signOutbound(
 	o: SignOutboundOptions,
@@ -121,16 +147,21 @@ export async function signOutbound(
 	// request` by every conformant verifier — so the ports agreed byte-for-byte with the
 	// oracle on what they signed and could not complete a single call.
 	//
-	// Emitting the SIGNED value rather than defaulting to empty is what makes this safe
-	// under createSigningTransport's merge below: that wrapper reads the incoming
-	// authorization and computes signatureAgent set-if-absent, then passes both in here,
-	// so restating them can never overwrite a real value with an empty one.
+	// EVERY covered header, at exactly the value that entered the signature base — empty
+	// values included. See docs/design-history.md, "A covered header the peer never
+	// receives is not bound", for why binding one without sending it is not binding it,
+	// and why the emitted key is LOWERCASE (a signed key spelled differently from the
+	// caller's survives the merge beside it, putting the name on the wire twice).
+	//
+	// Taken straight off `signed`, never re-read from `o`: the primitive echoes what it
+	// bound, so there is one place the emitted value can come from and no way for the two
+	// to drift.
 	const headers: Record<string, string> = {
 		"content-digest": signed.contentDigest,
 		"signature-input": signed.signatureInput,
 		signature: signed.signature,
-		authorization: o.authorization,
-		[SignatureAgentHeader]: o.signatureAgent,
+		authorization: signed.authorization,
+		[SignatureAgentHeader.toLowerCase()]: signed.signatureAgent,
 	};
 	return { headers, body: o.body };
 }
@@ -225,7 +256,7 @@ export function createSigningTransport<R>(
 		// but never consume/replace the payload; Go resets req.Body + GetBody).
 		return send(url, {
 			...init,
-			headers: { ...headers, ...signed.headers },
+			headers: mergeSigned(headers, signed.headers),
 			body,
 		});
 	};

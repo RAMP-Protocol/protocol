@@ -43,8 +43,10 @@ class SigningTransport:
     """Signs outbound requests via the core sign seam (RFC 9421 over exact body bytes).
 
     The signer seed + keyid are injected; the clock is injectable for determinism.
-    ``sign_outbound`` returns the request plus the Content-Digest / Signature-Input /
-    Signature headers — the seam MCP wires into its httpx transport.
+    ``sign_outbound`` returns the request plus EVERY covered header at the value that
+    entered the signature base — Content-Digest / Signature-Input / Signature, and
+    Authorization / Signature-Agent whose values may be empty. The seam MCP wires into
+    its httpx transport.
     """
 
     def __init__(
@@ -151,19 +153,14 @@ class SigningTransport:
             expires=expires,
             signature_agent=self._signature_agent,
         )
-        # EVERY covered header is emitted, at exactly the value that entered the
-        # signature base — empty values included. A verifier rebuilds the base from the
-        # request it received, so a value bound but never sent is not bound at all: it
-        # reads the covered names off signature-input, finds nothing on the wire under
-        # one of them, and refuses. Measured: the covered set binds authorization and
-        # signature-agent unconditionally, and a request carrying neither is answered
-        # `header "authorization" missing from request` by every conformant verifier —
-        # so the ports agreed byte-for-byte with the oracle on what they signed and
-        # could not complete a single call.
+        # EVERY covered header, at exactly the value that entered the signature base —
+        # empty values included. See docs/design-history.md,
+        # "A covered header the peer never receives is not bound", for why binding one
+        # without sending it is not binding it.
         #
-        # Emitting the SIGNED value rather than defaulting to empty is what makes this
-        # safe to merge over a caller's own headers: the value is the one already in
-        # the base, so restating it can never overwrite a real Authorization.
+        # Taken straight off ``signed``, never re-read from the arguments: the primitive
+        # echoes what it bound, so there is one place the emitted value can come from and
+        # no way for the two to drift.
         return SignedOutbound(
             method=method,
             url=url,
@@ -172,7 +169,7 @@ class SigningTransport:
                 "content-digest": signed.content_digest,
                 "signature-input": signed.signature_input,
                 "signature": signed.signature,
-                "authorization": authorization,
-                "signature-agent": self._signature_agent,
+                "authorization": signed.authorization,
+                "signature-agent": signed.signature_agent,
             },
         )

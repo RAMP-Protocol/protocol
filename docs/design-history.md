@@ -904,12 +904,40 @@ on the signature while two of them could not complete a single call, so every pa
 passed throughout. This is the same shape as the corpus rows that named a file and read
 none of its columns: a gate that measures the half of the claim that was never in doubt.
 
-`sign-request-vectors.json` gained an `emitted_headers` column for it — the header set a
-signed request carries, captured from the oracle and compared by all three as a whole map
+`sign-request-vectors.json` gained an `emitted_headers` column for it — what the signer
+puts on a bare request, captured from the oracle and compared by all three as a whole map
 rather than key by key. Membership assertions are what let two missing headers ship
 invisibly. The corpus already carried both input shapes, including the no-directory signer
 with an empty `signature_agent`, so the static-bootstrap instance is pinned by the same
-column rather than by a second case someone has to remember.
+column rather than by a second case someone has to remember, and an append/relay case
+extends it to the forwarding leg.
+
+**Then the rule was implemented with the wrong key, and the same blind spot caught it a
+second time.** Header names are case-insensitive on the wire; a JavaScript object's keys
+are not. The TypeScript signer emitted `Signature-Agent` from the exported constant while
+reading incoming headers case-insensitively, so a caller who spelled it `signature-agent`
+— which is every Node server, every WHATWG `Headers`, and HTTP/2 by definition — had their
+key survive the merge BESIDE the signed one. Two field lines reached the wire under one
+covered name; the verifier joins repeated values with `", "` before rebuilding the base, so
+a correct signature was refused. The relay flow that worked before the fix stopped working
+after it.
+
+Two things follow, and both are about gates rather than headers. **A face that reads one
+way and writes another will eventually disagree with itself** — the fix is the lowercase
+key plus a merge that drops any incoming name colliding case-insensitively with a signed
+one, so the write side agrees with `getHeader`. And **a gate must be able to express the
+failure it exists to catch**: `emitted_headers` was a map of single strings built with
+`Header.Get`, which cannot represent a duplicate at all, while the verifier it stands in for
+reads `Values`. It records a list per name now. Every test in the repo had also passed the
+one header spelling that cannot collide, so the whole suite was green over a broken relay —
+the same shape as a corpus row that names a file and reads none of its columns.
+
+**The rule binds the verify half too.** Both ports read the covered headers with a
+default-to-empty (`headers.get("authorization", "")`), which collapses *absent* into
+*empty* and accepts exactly the request Go refuses — the oracle reads them with `Values`
+rather than `Get` precisely to tell the two apart. Defaulting there invents a value the
+signer may never have bound. Both now refuse an absent covered header and still accept a
+present-and-empty one, which is the distinction the empty header exists to carry.
 
 ## SDK layering: a dial-free trust core, a vetted-client I/O tier
 

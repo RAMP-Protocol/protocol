@@ -282,16 +282,22 @@ type signRequestVector struct {
 	SignatureBase  string `json:"signature_base"`
 	SignatureInput string `json:"signature_input"`
 	Signature      string `json:"signature"`
-	// EmittedHeaders is the header set a signed request CARRIES, lowercased.
+	// EmittedHeaders is what the SIGNER puts on a bare request, lowercased —
+	// not the full header set a live client sends, which also carries
+	// content-type, the Connect protocol version and an accept-encoding.
 	//
 	// Every other field here records what was SIGNED. This one records what is
 	// SENT, and the two are different claims: the covered set binds authorization
 	// and signature-agent unconditionally, empty values included, so a verifier
 	// needs them present on the wire to rebuild the base and refuses the request
 	// when they are absent. A port can agree byte-for-byte on the signature and
-	// still be unable to complete a single call, which is exactly what happened
-	// while nothing recorded this.
-	EmittedHeaders map[string]string `json:"emitted_headers"`
+	// still be unable to complete a single call.
+	//
+	// A LIST per name, read with Values, because that is what the verifier reads:
+	// it joins repeated values with ", " before rebuilding the base, so a duplicated
+	// covered header breaks a correct signature. A map of single strings cannot
+	// express that, and a gate that cannot express the failure cannot catch it.
+	EmittedHeaders map[string][]string `json:"emitted_headers"`
 }
 
 // acceptanceVector mirrors the AcceptanceVector shape the py parity test reads.
@@ -619,6 +625,11 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 		body           []byte
 		authorization  string
 		signatureAgent string
+		// appendOnly signs through AppendSignature rather than SignRequest — the
+		// RELAY path. It binds the same covered set and reaches the same
+		// bindAuthorization / bindSignatureAgent, so the emitted set is pinned for
+		// the forwarding leg too, not only the originating one.
+		appendOnly bool
 	}
 	specs := []spec{
 		{
@@ -637,6 +648,19 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 			url:           "https://broker.example/ramp.v1.BrokerService/Fetch?trace=1",
 			body:          []byte(`{"uri":"https://cdn.example/other"}`),
 			authorization: "",
+		},
+		{
+			// The RELAY leg. Appending to an unsigned request produces a sig1
+			// byte-identical to SignRequest — single-sig is the N=1 case — so what
+			// this vector adds over the two above is the emitted set of the
+			// forwarding path, which nothing recorded.
+			name:           "append_relay_leg",
+			method:         "POST",
+			url:            "https://broker.example/ramp.v1.BrokerService/Fetch",
+			body:           []byte(`{"uri":"https://cdn.example/relayed"}`),
+			authorization:  "",
+			signatureAgent: "https://relay.example",
+			appendOnly:     true,
 		},
 	}
 
@@ -666,7 +690,11 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 		}
 		// SignRequest sets Content-Digest + binds Authorization + writes headers;
 		// buildSignatureBase over the same params reproduces the exact base bytes.
-		if err := SignRequest(context.Background(), req, s.body, signer, SignOptions{Created: created, Expires: expires}); err != nil {
+		sign := SignRequest
+		if s.appendOnly {
+			sign = AppendSignature
+		}
+		if err := sign(context.Background(), req, s.body, signer, SignOptions{Created: created, Expires: expires}); err != nil {
 			t.Fatalf("%s: sign: %v", s.name, err)
 		}
 		base, err := buildSignatureBase(req, params)
@@ -676,9 +704,9 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 		// The request was built bare, so what it carries after signing IS the
 		// signer's contribution — nothing pre-set leaks in except the two covered
 		// values the spec supplies, which a signed request must carry anyway.
-		emitted := make(map[string]string, len(req.Header))
+		emitted := make(map[string][]string, len(req.Header))
 		for name := range req.Header {
-			emitted[strings.ToLower(name)] = req.Header.Get(name)
+			emitted[strings.ToLower(name)] = req.Header.Values(name)
 		}
 		out = append(out, signRequestVector{
 			Name:           s.name,

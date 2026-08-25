@@ -31,8 +31,7 @@ def _make_transport(*, signature_agent: str = "") -> SigningTransport:
         signer_seed=bytes(range(1, 33)),
         keyid="agent.test.v1",
         now=lambda: 1_700_000_000.0,
-        # RED: signature_agent is not yet an accepted parameter.
-        signature_agent=signature_agent,  # type: ignore[call-arg]
+        signature_agent=signature_agent,
     )
 
 

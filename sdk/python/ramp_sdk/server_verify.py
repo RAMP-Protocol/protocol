@@ -275,8 +275,18 @@ def verify_request_server(
     signature_input = headers.get("signature-input", "")
     signature = headers.get("signature", "")
     content_digest = headers.get("content-digest", "")
-    authorization = headers.get("authorization", "")
-    signature_agent = headers.get("signature-agent", "")
+
+    # ABSENT is not EMPTY for a covered header, and the difference is the whole reason
+    # an empty one is put on the wire at all. The base is rebuilt from the request that
+    # ARRIVED, so a name the signature covers and the request does not carry cannot be
+    # reconstructed — defaulting it to "" here would invent a value the signer may never
+    # have bound and accept a request the oracle refuses (it reads these with Values,
+    # not Get, precisely to tell the two apart). See docs/design-history.md, "A covered
+    # header the peer never receives is not bound".
+    if "authorization" not in headers or "signature-agent" not in headers:
+        return _reject(_REASON_SIGNATURE)
+    authorization = headers["authorization"]
+    signature_agent = headers["signature-agent"]
 
     parsed = _parse_signature_input(signature_input)
     if parsed is None or parsed.keyid is None:

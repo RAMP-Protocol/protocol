@@ -47,12 +47,27 @@ export interface SignRequestOptions {
 	expires: number;
 }
 
-/** The RFC 9421 artifacts a signed request carries, plus the covered base bytes. */
+/**
+ * The RFC 9421 artifacts a signed request carries, plus the covered base bytes.
+ *
+ * EVERY covered header is here, at the value that entered the base — the two whose value
+ * may be empty included. A verifier rebuilds the base from the request it received, so a
+ * covered value bound but never sent is not bound at all; the oracle's signer reaches the
+ * same place by mutating the request it was handed (helpers.SignRequest), which is why it
+ * has no such field to omit. See docs/design-history.md, "A covered header the peer never
+ * receives is not bound".
+ */
 export interface SignedRequest {
 	contentDigest: string;
 	signatureInput: string;
 	signature: string;
 	signatureBase: string;
+	/** Echoed from the input so a caller attaching what this returns sends what was
+	 * signed. Empty is a value, not an absence. */
+	authorization: string;
+	/** The signer's WBA directory, echoed for the same reason. Empty is the
+	 * static-bootstrap case and is still carried. */
+	signatureAgent: string;
 }
 
 // RFC 9530 Content-Digest header value: `sha-256=:<STANDARD-base64(SHA-256)>:`.
@@ -164,6 +179,8 @@ export async function signRequest(
 		signatureInput: `sig1=${sigParams}`,
 		signature: `sig1=:${stdBase64(new Uint8Array(sig))}:`,
 		signatureBase: base,
+		authorization: opts.authorization,
+		signatureAgent: opts.signatureAgent,
 	};
 }
 
@@ -226,5 +243,7 @@ export async function appendSignature(
 		signatureInput: hasPrev ? `${prev.signatureInput}, ${memberInput}` : memberInput,
 		signature: prev.signature !== "" ? `${prev.signature}, ${memberSig}` : memberSig,
 		signatureBase: base,
+		authorization: opts.authorization,
+		signatureAgent: opts.signatureAgent,
 	};
 }
