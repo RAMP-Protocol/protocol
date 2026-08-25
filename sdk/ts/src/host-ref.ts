@@ -161,7 +161,11 @@ const userinfoAscii = new Set(
 // Locating the separator by search instead let a path segment supply the host —
 // `evil.example/x://a.example` answered `a.example`.
 const schemeAtFront = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
-const escapePair = /%(?![0-9A-Fa-f]{2})/;
+/** A `%` that does not begin a valid escape. Exported for the delivery leg, which reads
+ * the same rule over a signed URL's path and fragment; a second transcription of it is how
+ * two readers of one value end up disagreeing. Not on the package export map, so it stays
+ * in-repo. */
+export const escapePair = /%(?![0-9A-Fa-f]{2})/;
 
 // A control character is refused outright rather than removed. This is the reason
 // the platform parser cannot be used here: `new URL` strips tabs, newlines and

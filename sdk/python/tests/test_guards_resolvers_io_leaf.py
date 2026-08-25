@@ -1,18 +1,22 @@
-"""Structural guard for the resolver IO-leaf invariant.
+"""Structural guard for the IO-leaf invariant.
 
-The resolver faces (``ramp_sdk/resolvers/``) are the SDK's ONLY IO-bearing tree:
-they fetch JWKS / WBA directories / ramp.json over an injected transport (default
-a maintained ``httpx`` client with the SSRF guard). The pure L1 modules
-(``core``, ``httpsig``, ``pop``, ``server_verify``, ``keyresolver``,
-``thumbprint``, ``b64``, ...) are transport-neutral by contract -- they own no
-keys, open no sockets, and MUST NOT depend on the IO tree. Dependency flows one
-way only: ``resolvers`` -> pure-modules (it reuses thumbprint + b64), never the
-reverse. A pure module that imports ``ramp_sdk.resolvers``, ``httpx``, or raw
-``urllib`` would drag IO into the transport-neutral core -- the httpx dependency
-is scoped to the IO tree -- and is exactly the regression this guard bans.
+Three packages bear IO: the resolver faces (``ramp_sdk/resolvers/``), which fetch
+JWKS / WBA directories / ramp.json, and the client (``ramp_sdk/client/``) with its
+blocking facade (``ramp_sdk/sync/``), which speak the RAMP RPCs and the delivery
+fetch. All of them dial over an injected transport whose default is a maintained
+``httpx`` client with the SSRF guard. The pure L1 modules (``core``, ``httpsig``,
+``pop``, ``server_verify``, ``keyresolver``, ``thumbprint``, ``b64``, ...) are
+transport-neutral by contract -- they own no keys, open no sockets, and MUST NOT
+depend on any of them. Dependency flows one way only: the IO packages ->
+pure-modules (they reuse thumbprint, b64, the signing and verifying faces), never
+the reverse. A pure module that imports ``ramp_sdk.resolvers``,
+``ramp_sdk.client``, ``httpx``, or raw ``urllib`` would drag IO into the
+transport-neutral core -- the httpx dependency is scoped to the IO tree -- and is
+exactly the regression this guard bans.
 
-``__init__.py`` is the public aggregator and legitimately re-exports the resolver
-faces, so it is excluded from the pure set.
+The pure set is the TOP-LEVEL ``ramp_sdk/*.py`` modules; the IO packages are
+subpackages and so are outside it by construction. ``__init__.py`` is the public
+aggregator and legitimately re-exports every face, so it is excluded too.
 """
 
 from __future__ import annotations
@@ -22,18 +26,26 @@ import pathlib
 
 _RAMP_SDK = pathlib.Path(__file__).resolve().parents[1] / "ramp_sdk"
 
-# The public aggregator re-exports everything; the resolvers package IS the IO
-# tree. Everything else under ramp_sdk/*.py is the pure, transport-neutral set.
+# The public aggregator re-exports every face, so it is outside the pure set.
+# Everything else under ramp_sdk/*.py is the pure, transport-neutral set; the IO
+# packages are subpackages and so are outside it by construction.
 _NON_PURE = {"__init__.py"}
 
-# The banned roots. The resolvers package IS the IO tree; httpx and httpcore
-# are the maintained HTTP client, scoped to that tree. urllib is banned FLATLY,
-# with no carve-out for .parse. urllib.parse is not IO, but its parsers repair
-# and normalize where the guarded modules must refuse or read substrings —
-# urlsplit deletes tab/CR/LF anywhere in the string — so a pure module reaching
-# for it would silently diverge from the Go and TypeScript ports. No guarded
-# module imports it, and exclusion lists in this repo only shrink.
-_BANNED = ("ramp_sdk.resolvers", "httpx", "httpcore", "urllib")
+# The banned roots. The resolvers package, the client and its blocking facade ARE
+# the IO tree; httpx and httpcore are the maintained HTTP client, scoped to that
+# tree. urllib is banned FLATLY, with no carve-out for .parse. urllib.parse is not
+# IO, but its parsers repair and normalize where the guarded modules must refuse or
+# read substrings — urlsplit deletes tab/CR/LF anywhere in the string — so a pure
+# module reaching for it would silently diverge from the Go and TypeScript ports. No
+# guarded module imports it, and exclusion lists in this repo only shrink.
+_BANNED = (
+    "ramp_sdk.resolvers",
+    "ramp_sdk.client",
+    "ramp_sdk.sync",
+    "httpx",
+    "httpcore",
+    "urllib",
+)
 
 
 def _hits(name: str) -> bool:
@@ -87,6 +99,24 @@ class TestResolverIoLeaf:
         assert _imports_io("from ramp_sdk import resolvers")
         assert _imports_io("from . import resolvers")
         assert _imports_io("from .resolvers import WBAKeyResolver")
+
+    def test_meta_positive_catches_client_import(self) -> None:
+        # The client and its blocking facade are the SECOND IO-bearing tree, and a
+        # policy entry of their own: no pure module imports either today, so only
+        # these asserts notice if the ban is dropped.
+        assert _imports_io("from ramp_sdk.client import Client")
+        assert _imports_io("from ramp_sdk import client")
+        assert _imports_io("import ramp_sdk.client")
+        assert _imports_io("from . import client")
+        assert _imports_io("from .client import Client")
+        assert _imports_io("from ramp_sdk.client.content import fetch_content")
+
+    def test_meta_positive_catches_sync_facade_import(self) -> None:
+        assert _imports_io("from ramp_sdk import sync")
+        assert _imports_io("from ramp_sdk.sync import Client")
+        assert _imports_io("import ramp_sdk.sync")
+        assert _imports_io("from . import sync")
+        assert _imports_io("import os, ramp_sdk.sync")
 
     def test_meta_positive_catches_httpx_import(self) -> None:
         assert _imports_io("import httpx")

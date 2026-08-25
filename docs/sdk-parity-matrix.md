@@ -5,14 +5,14 @@
        • API surface   — sdk/parity/symbol-map.json
                           (enforced against live exports by
                            sdk/python/tests/test_api_surface_parity.py)
-       • Vector replay  — sdk/go/{helpers,resolvers}/testdata/*-vectors.json
+       • Vector replay  — sdk/go/{helpers,resolvers,connect}/testdata/*-vectors.json
                           (enforced by test_corpus_replay_completeness.py)
      Regenerate:  python3 scripts/gen-parity-matrix.py
      Drift-gated in scripts/ci-local.sh. Narrative/rationale: docs/design-history.md. -->
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 103 symbols at cross-language parity · 14 documented divergences · 140 Go-idiomatic exclusions · 27 conformance corpora, each tri-replayed.
+**At a glance:** 116 symbols at cross-language parity · 14 documented divergences · 173 Go-idiomatic exclusions · 33 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -104,6 +104,9 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `ActiveEd25519KeyWithExpiry` | `active_ed25519_key_with_expiry` | `activeEd25519KeyWithExpiry` |
 | `ActiveEd25519KeyWithExpiryScreened` | `active_ed25519_key_with_expiry_screened` | `activeEd25519KeyWithExpiryScreened` |
 | `CachedOfferKeyResolver` | `CachedOfferKeyResolver` | `CachedOfferKeyResolver` |
+| `Content` | `Content` | `Content` |
+| `DefaultContentTimeout` | `DEFAULT_CONTENT_TIMEOUT_SEC` | `DEFAULT_CONTENT_TIMEOUT_MS` |
+| `DefaultMaxContentBytes` | `DEFAULT_MAX_CONTENT_BYTES` | `DEFAULT_MAX_CONTENT_BYTES` |
 | `ErrDirectoryUnavailable` | `DirectoryUnavailableError` | `DirectoryUnavailable` |
 | `ErrEndpointRefused` | `EndpointRefusedError` | `EndpointRefused` |
 | `ErrKeyExpired` | `KeyExpiredError` | `KeyExpired` |
@@ -125,9 +128,11 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | Go | python | ts |
 |---|---|---|
 | `ClockWindow` | `clock_window` | `clockWindow` |
+| `DiscoveryResult` | `DiscoveryResult` | `DiscoveryResult` |
 | `Mode` | `Mode` | `Mode` |
 | `MonotonicWindow` | `monotonic_window` | `monotonicWindow` |
 | `NewSigningTransport` | `SigningTransport` | `createSigningTransport` |
+| `OfferGroupResult` | `OfferGroupResult` | `OfferGroupResult` |
 | `RejectedOffer` | `RejectedOffer` | `RejectedOffer` |
 | `ReplayStore` | `ReplayStore` | `ReplayStore` |
 | `RequestIDHeader` | `RequestIDHeader` | `RequestIDHeader` |
@@ -140,7 +145,15 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 
 | Go | python | ts |
 |---|---|---|
+| `BrokerClient` | `BrokerClient` | `BrokerClient` |
+| `CallError` | `CallError` | `RampCallError` |
+| `CallErrorKind` | `CallErrorKind` | `CallErrorKind` |
+| `Client` | `Client` | `Client` |
+| `DefaultCallTimeout` | `DEFAULT_CALL_TIMEOUT_SEC` | `DEFAULT_CALL_TIMEOUT_MS` |
+| `DefaultMaxRPCReadBytes` | `DEFAULT_MAX_RPC_READ_BYTES` | `DEFAULT_MAX_RPC_READ_BYTES` |
+| `EndpointResolver` | `EndpointResolver` | `EndpointResolver` |
 | `ErrorDetailFrom` | `error_detail_from` | `errorDetailFrom` |
+| `Validation` | `Validation` | `Validation` |
 
 ### connectserver — server-verify handler binding
 
@@ -155,14 +168,13 @@ Deliberate, reason-backed asymmetries. The allowlist is **shrink-only** — a ne
 ### Architectural DECISIONs
 
 - **DECISION — full Connect handler binding.** Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md _(symbols: `connectserver.NewBrokerServiceHandler`, `connectserver.NewExchangeServiceHandler`)_
-- **DECISION — typed Connect **client** — OPEN.** Go-only typed Connect client covering the agent verb set (Discover, Resolve, Execute, ReportUsage, Dispute, Fetch) — OPEN DECISION in docs/sdk-parity-matrix.md: the API-surface design governs and specifies a thin Connect-unary JSON client for TypeScript and Python with the SAME verb names, so this is an implementation difference pending that work, not a settled API divergence _(symbols: `connect.Client`, `connect.NewClient`)_
 
 ### Mapped symbols with an intentional per-language gap
 
 | Go symbol | python | ts | rationale |
 |---|---|---|---|
-| `connect.Client` | — | — | Go-only typed Connect client covering the agent verb set (Discover, Resolve, Execute, ReportUsage, Dispute, Fetch) — OPEN DECISION in docs/sdk-parity-matrix.md: the API-surface design governs and specifies a thin Connect-unary JSON client for TypeScript and Python with the SAME verb names, so this is an implementation difference pending that work, not a settled API divergence |
-| `connect.NewClient` | — | — | Go-only typed Connect client constructor (NewClient plus NewBrokerClient) — OPEN DECISION in docs/sdk-parity-matrix.md, pending the TypeScript and Python unary client that carries the same verb names |
+| `connect.NewBrokerClient` | — | `createBrokerClient` | Go NewX factory folds into the Python class constructor (BrokerClient(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix. |
+| `connect.NewClient` | — | `createClient` | Go NewX factory folds into the Python class constructor (Client(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix. |
 | `connectserver.NewBrokerServiceHandler` | — | — | Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md |
 | `connectserver.NewExchangeServiceHandler` | — | — | Go-only full Connect Exchange handler binding — OPEN DECISION in docs/sdk-parity-matrix.md |
 | `core.NewVerifier` | — | `createVerifier` | Go NewVerifier factory folds into the Python class constructor (Verifier(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createVerifier factory. |
@@ -182,18 +194,19 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 
 | Go symbol | why no py/ts face |
 |---|---|
-| `connect.BrokerClient` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
-| `connect.CallError` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
-| `connect.CallErrorKind` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
-| `connect.CallOption` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
-| `connect.ClientOption` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
-| `connect.DefaultCallTimeout` | Go default deadline for a call to an offer-derived Exchange. Python and TS ship no Connect client at all, so neither holds a counterpart today; the default arrives with their unary client work. |
-| `connect.DefaultMaxRPCReadBytes` | Go default response-size bound for a Connect call. Python and TS ship no unary client to hold one; the bound arrives with their unary client work. |
-| `connect.EndpointResolver` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
-| `connect.ExecuteOption` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
-| `connect.NewBrokerClient` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
-| `connect.NewValidateInterceptor` | Go-only protovalidate interceptor (matrix SERVER-role validation row: TS/Py absent). |
-| `connect.Validation` | Part of the Go-only typed Connect client validation option; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.CallMalformed` | Member of the mapped connect.CallErrorKind enum. Go declares each as a package-level constant; Python spells it CallErrorKind.<NAME> and TypeScript as a member of the CallErrorKind literal union, so neither is a top-level export the surface enumerator can see. The TYPE carries the parity claim and the shared corpora pin the values. |
+| `connect.CallNotSent` | Member of the mapped connect.CallErrorKind enum. Go declares each as a package-level constant; Python spells it CallErrorKind.<NAME> and TypeScript as a member of the CallErrorKind literal union, so neither is a top-level export the surface enumerator can see. The TYPE carries the parity claim and the shared corpora pin the values. |
+| `connect.CallNotSignable` | Member of the mapped connect.CallErrorKind enum. Go declares each as a package-level constant; Python spells it CallErrorKind.<NAME> and TypeScript as a member of the CallErrorKind literal union, so neither is a top-level export the surface enumerator can see. The TYPE carries the parity claim and the shared corpora pin the values. |
+| `connect.CallOption` | Go functional-option type for the per-call knobs; py/ts pass options objects (TS ClientOptions / CallOptions, Python ClientConfig and keyword arguments). |
+| `connect.CallRefused` | Member of the mapped connect.CallErrorKind enum. Go declares each as a package-level constant; Python spells it CallErrorKind.<NAME> and TypeScript as a member of the CallErrorKind literal union, so neither is a top-level export the surface enumerator can see. The TYPE carries the parity claim and the shared corpora pin the values. |
+| `connect.CallTooLarge` | Member of the mapped connect.CallErrorKind enum. Go declares each as a package-level constant; Python spells it CallErrorKind.<NAME> and TypeScript as a member of the CallErrorKind literal union, so neither is a top-level export the surface enumerator can see. The TYPE carries the parity claim and the shared corpora pin the values. |
+| `connect.CallUnknown` | Member of the mapped connect.CallErrorKind enum. Go declares each as a package-level constant; Python spells it CallErrorKind.<NAME> and TypeScript as a member of the CallErrorKind literal union, so neither is a top-level export the surface enumerator can see. The TYPE carries the parity claim and the shared corpora pin the values. |
+| `connect.CallUnreachable` | Member of the mapped connect.CallErrorKind enum. Go declares each as a package-level constant; Python spells it CallErrorKind.<NAME> and TypeScript as a member of the CallErrorKind literal union, so neither is a top-level export the surface enumerator can see. The TYPE carries the parity claim and the shared corpora pin the values. |
+| `connect.ClientOption` | Go functional-option type for the client; py/ts pass options objects (TS ClientOptions / CallOptions, Python ClientConfig and keyword arguments). |
+| `connect.ExecuteOption` | Go type alias kept for continuity with the original execute-only option name; py/ts have one per-call options shape and no alias to mirror. |
+| `connect.NewValidateInterceptor` | Go protovalidate interceptor. The two JSON clients DO check an outbound request, against its generated model rather than through an interceptor — a field-level check, not protovalidate's cross-field CEL — so what has no counterpart is the interceptor, not the validation (see connect.Validation). |
+| `connect.ValidationOff` | Member of the mapped connect.Validation enum. Python and TypeScript spell it as a literal ("off" / "strict") rather than a named export. The defaults differ deliberately and that divergence is recorded in docs/design-history.md, not here. |
+| `connect.ValidationStrict` | Member of the mapped connect.Validation enum. Python and TypeScript spell it as a literal ("off" / "strict") rather than a named export. The defaults differ deliberately and that divergence is recorded in docs/design-history.md, not here. |
 | `connect.WithAgentKey` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithClientOptions` | Go escape hatch for raw connectrpc.ClientOption values, mirroring connectserver.WithHandlerOptions; py/ts have no Connect option type to pass through. |
 | `connect.WithContentTimeout` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
@@ -220,6 +233,10 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `connectserver.EmitUnpopulatedJSONCodec` | Go connect-go codec; n/a for TS/Python (no Connect binding) per the matrix Codec row. |
 | `connectserver.ErrReplayed` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `connectserver.NewErrorDetail` | Go-only Connect ErrorDetail envelope build (the build half of AttachErrorDetail, exposed for callers that set a typed reason before attaching); TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row). |
+| `connectserver.ReasonBrokenChain` | Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export. |
+| `connectserver.ReasonHopBudget` | Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export. |
+| `connectserver.ReasonReplay` | Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export. |
+| `connectserver.ReasonSignature` | Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export. |
 | `connectserver.ServerOption` | Part of the Go-only Connect handler binding; see the connectserver-handler DECISION in docs/sdk-parity-matrix.md. |
 | `connectserver.WithEmitUnpopulated` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithHandlerOptions` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
@@ -235,12 +252,12 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `connectserver.WithVerifyGate` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithoutReplayStore` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `core.DefaultRequestID` | Go default request-id minter; py/ts mint request-ids inline. |
-| `core.DiscoveryResult` | Go per-URI discovery result carrying the fail-closed split plus the typed absence reasons; py/ts gain the same shape with their client verbs. |
 | `core.ErrOfferExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
-| `core.OfferGroupResult` | Go per-URI group within a discovery result; py/ts gain the same shape with their client verbs. |
+| `core.Off` | Member of the mapped core.Mode enum. Python spells it Mode.STRICT / Mode.OFF and TypeScript as the literal "strict" / "off". |
 | `core.RequestIDFunc` | Go request-id function type; py/ts pass a callable inline. |
 | `core.RequestIDMiddleware` | Go-only request-id middleware (matrix SERVER-role request-id row: TS/Py absent). |
 | `core.SigningOption` | Go functional-option type for the signing transport; py/ts pass options objects. |
+| `core.Strict` | Member of the mapped core.Mode enum. Python spells it Mode.STRICT / Mode.OFF and TypeScript as the literal "strict" / "off". |
 | `core.WithAppendSigner` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `core.WithSignPredicate` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `core.WithSignatureAgent` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
@@ -249,6 +266,11 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.AgentIDParam` | Signed-URL query-parameter name; language-idiomatic inline constant, no cross-language public face. |
 | `helpers.AlgEd25519` | RFC 9421 alg tag constant; inlined per language. |
 | `helpers.AllSignaturesFromContext` | Go context.Context accessor; py/ts thread multisig state explicitly. |
+| `helpers.AudienceAccepted` | Member of the mapped helpers.AudienceVerdict vocabulary. Python and TypeScript spell it as a literal rather than a named export, and the shared audience corpus pins the token every language must answer. |
+| `helpers.AudienceEmpty` | Member of the mapped helpers.AudienceVerdict vocabulary. Python and TypeScript spell it as a literal rather than a named export, and the shared audience corpus pins the token every language must answer. |
+| `helpers.AudienceMalformed` | Member of the mapped helpers.AudienceVerdict vocabulary. Python and TypeScript spell it as a literal rather than a named export, and the shared audience corpus pins the token every language must answer. |
+| `helpers.AudienceMismatch` | Member of the mapped helpers.AudienceVerdict vocabulary. Python and TypeScript spell it as a literal rather than a named export, and the shared audience corpus pins the token every language must answer. |
+| `helpers.AudienceNoVerdict` | Member of the mapped helpers.AudienceVerdict vocabulary. Python and TypeScript spell it as a literal rather than a named export, and the shared audience corpus pins the token every language must answer. |
 | `helpers.BrokerKeyIDPrefix` | Relay keyID wire-prefix constant; inlined per language. |
 | `helpers.ComponentParam` | Go value type for an RFC 9421 covered-component parameter; py/ts model components inline. |
 | `helpers.CoveredComponent` | Go value type for an RFC 9421 covered component; py/ts model components inline. |
@@ -292,8 +314,28 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.NewMultisigContext` | Go context.Context accessor; py/ts thread multisig state explicitly. |
 | `helpers.PoPOptions` | Go options struct for the delivery-proof signer; Python takes the same values as keyword arguments and TS as an options object. |
 | `helpers.RedactURL` | Go query-stripping helper for a signed URL headed to a log; py/ts redact inline at the log site. |
+| `helpers.RegistrationDataAccepted` | Member of the mapped helpers.RegistrationDataVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.RegistrationDataNoVerdict` | Member of the mapped helpers.RegistrationDataVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.RegistrationDataTooDeep` | Member of the mapped helpers.RegistrationDataVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.RegistrationDataTooLarge` | Member of the mapped helpers.RegistrationDataVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.RegistrationDataTooManyMembers` | Member of the mapped helpers.RegistrationDataVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.RegistrationDataUncanonicalizable` | Member of the mapped helpers.RegistrationDataVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
 | `helpers.RegistrationSchemaCompileTimeout` | Go-only wall-clock backstop on compilation, not part of the accepted/refused contract and deliberately absent from the ports: Go's runtime preempts, while a CPU-bound spin holds CPython's interpreter and blocks Node's event loop, so a timer there cannot interrupt the work it names. What bounds all three identically is static — the size, depth and evaluation caps and the pattern alphabet — and no admitted schema should ever reach this timeout. |
 | `helpers.RetrievalAuthFailureReasonFromToken` | Go lookup from the delivery edge's refusal token to the typed enum; py/ts branch on the token string directly. |
+| `helpers.SchemaAccepted` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaCompileTimeout` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaMalformed` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaNoVerdict` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaNotPublished` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaRefChainTooLong` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaRefCycle` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaRemoteRef` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaTooComplex` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaTooDeep` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaTooLarge` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaUncompilable` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaUnsafePattern` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
+| `helpers.SchemaWrongDialect` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
 | `helpers.SharedValidator` | Go protovalidate validator singleton; TS/Python ship no protovalidate face. |
 | `helpers.SignOfferAcceptanceWith` | Go Signer-custody variant of SignOfferAcceptance so the SDK never holds the key; py/ts pass key material directly to their single acceptance signer. |
 | `helpers.SignOptions` | Go options struct for SignRequest; py/ts pass options via kwargs/options objects. |
@@ -311,14 +353,17 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.VerifyRequestResolved` | Go resolver-injected VerifyRequest overload; py/ts expose a single verify entry point. |
 | `helpers.WithSignatureAgent` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `resolvers.ActiveKeyScanOptions` | Go scan-options struct; py/ts pass scan options inline. |
-| `resolvers.Content` | Go value struct for one fetched resource; py/ts return their runtime-native body/type pair. |
-| `resolvers.ContentFetchOptions` | Go options struct for the content-download leg; py/ts pass the same values as kwargs/an options object. |
-| `resolvers.ContentFetcher` | Part of the Go content-download leg; the TS/Python download verbs are tracked with their unary client work. |
-| `resolvers.DefaultContentTimeout` | Go default bound for one content fetch. Neither Python nor TS ships a content fetcher, so no counterpart holds this default today; it arrives with the download verbs tracked alongside their unary client work. |
-| `resolvers.DefaultMaxContentBytes` | Go default body cap for one content fetch. Neither Python nor TS ships a content fetcher, so no counterpart holds this cap today; it arrives with the download verbs tracked alongside their unary client work. |
-| `resolvers.FetchError` | Go typed error for the content leg; py/ts raise/throw a runtime-native error carrying the same class and reason. |
-| `resolvers.FetchFailure` | Go failure-class enum for the content leg; py/ts express the same classes as string literals. |
-| `resolvers.NewContentFetcher` | Go constructor for the content-download leg; py/ts fold construction into their client. |
+| `resolvers.ContentFetchOptions` | Go options struct for the content-download leg; TS passes the same values as an options object to its fetch, Python as ClientConfig fields. |
+| `resolvers.ContentFetcher` | Go value that owns the content-download leg; py/ts fold it into the client's fetch verb, which is the only caller either has. |
+| `resolvers.FetchError` | Go typed error for the content leg; py/ts report a delivery failure through the client's own CallError, so a caller branches on one failure type for every verb. |
+| `resolvers.FetchFailure` | Go failure-class enum for the content leg; py/ts fold the same classes into CallErrorKind rather than carrying a second, parallel taxonomy. |
+| `resolvers.FetchMalformed` | Member of the resolvers.FetchFailure enum, which is itself a documented Go-only divergence — the ports fold the same classes into CallErrorKind. The shared content-fetch corpus pins the class every language must answer. |
+| `resolvers.FetchNotSignable` | Member of the resolvers.FetchFailure enum, which is itself a documented Go-only divergence — the ports fold the same classes into CallErrorKind. The shared content-fetch corpus pins the class every language must answer. |
+| `resolvers.FetchRefused` | Member of the resolvers.FetchFailure enum, which is itself a documented Go-only divergence — the ports fold the same classes into CallErrorKind. The shared content-fetch corpus pins the class every language must answer. |
+| `resolvers.FetchTooLarge` | Member of the resolvers.FetchFailure enum, which is itself a documented Go-only divergence — the ports fold the same classes into CallErrorKind. The shared content-fetch corpus pins the class every language must answer. |
+| `resolvers.FetchUnknown` | Member of the resolvers.FetchFailure enum, which is itself a documented Go-only divergence — the ports fold the same classes into CallErrorKind. The shared content-fetch corpus pins the class every language must answer. |
+| `resolvers.FetchUnreachable` | Member of the resolvers.FetchFailure enum, which is itself a documented Go-only divergence — the ports fold the same classes into CallErrorKind. The shared content-fetch corpus pins the class every language must answer. |
+| `resolvers.NewContentFetcher` | Go constructor for the content-download leg; py/ts fold construction into their client, so there is no fetcher to build separately. |
 | `resolvers.NewGuardedTransport` | Go constructor composing the SSRF guard over a caller's base transport; py/ts expose their guarded fetch as a single factory with no separable base. |
 | `resolvers.ProofSigner` | Go interface seam that keeps key custody out of the dialing tier; py/ts inject a signing callable instead of a named interface. |
 | `resolvers.SSRFCheckRedirect` | Go redirect-policy hook; py/ts fold redirect checks into the guard (async_ssrf_guard / the guarded fetch). |
@@ -347,7 +392,10 @@ Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness
 | `helpers/testdata/verify-request-neg-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/wire-canonical-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/wire-constants-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/wire-names-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/wire-null-vectors.json` | ✅ | ✅ | ✅ |
 | `resolvers/testdata/active-ed25519-key-vectors.json` | ✅ | ✅ | ✅ |
+| `resolvers/testdata/content-fetch-vectors.json` | ✅ | ✅ | ✅ |
 | `resolvers/testdata/endpoint-vet-vectors.json` | ✅ | ✅ | ✅ |
 | `resolvers/testdata/offer-key-clamp-vectors.json` | ✅ | ✅ | ✅ |
 | `resolvers/testdata/revocation-membership-vectors.json` | ✅ | ✅ | ✅ |
@@ -356,4 +404,7 @@ Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness
 | `resolvers/testdata/ssrf-redirect-vectors.json` | ✅ | ✅ | ✅ |
 | `resolvers/testdata/ssrf-scheme-vectors.json` | ✅ | ✅ | ✅ |
 | `resolvers/testdata/wba-url-vectors.json` | ✅ | ✅ | ✅ |
+| `connect/testdata/client-request-vectors.json` | ✅ | ✅ | ✅ |
+| `connect/testdata/connect-error-vectors.json` | ✅ | ✅ | ✅ |
+| `connect/testdata/transport-failure-vectors.json` | ✅ | ✅ | ✅ |
 

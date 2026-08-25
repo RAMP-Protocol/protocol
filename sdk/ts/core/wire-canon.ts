@@ -126,20 +126,43 @@ function canonField(field: AnyZod, value: unknown): unknown {
 	return canonScalar(value, isPresenceTracked(field));
 }
 
+// keep writes a member the canonical form must carry, including one whose name is an
+// inherited property of every object. A plain assignment to "__proto__" replaces the
+// object's prototype and creates no member; defineProperty creates the member, which is
+// what JSON.stringify — and therefore JCS, and therefore the signature — reads.
+function keep(out: Record<string, unknown>, name: string, value: unknown): void {
+	Object.defineProperty(out, name, {
+		value,
+		enumerable: true,
+		writable: true,
+		configurable: true,
+	});
+}
+
 function canonMessage(objectSchema: AnyZod, wire: Record<string, unknown>): Record<string, unknown> {
 	const shape = shapeOf(objectSchema);
 	const out: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(wire)) {
 		const name = snake(key);
-		const field = shape[name];
+		// hasOwn on the READ, and defineProperty on the WRITE. Both are the same key: a
+		// wire name like "__proto__" or "constructor" resolves to an inherited member of
+		// Object.prototype, so a truthiness test hands the walk an object with no _def,
+		// and a plain assignment invokes the prototype SETTER instead of creating a
+		// member. An offer comes from a peer, so the key is attacker-chosen, and the
+		// second half was the dangerous one: the member vanished from the canonical form
+		// while the object silently inherited whatever the attacker put there. The signed
+		// bytes were unaffected, so an offer carrying an appended __proto__ still VERIFIED
+		// — the one member name that could be added to a signed offer for free — and the
+		// caller then read attacker-chosen values off a VerifiedOffer.
+		const field = Object.hasOwn(shape, name) ? shape[name] : undefined;
 		if (field === undefined) {
 			// Newer-than-pin field: keep it so verification fails CLOSED (the signature
 			// covered bytes this pin cannot reconstruct).
-			out[name] = value;
+			keep(out, name, value);
 			continue;
 		}
 		const canon = canonField(field, value);
-		if (canon !== OMIT) out[name] = canon;
+		if (canon !== OMIT) keep(out, name, canon);
 	}
 	return out;
 }

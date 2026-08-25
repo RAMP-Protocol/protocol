@@ -93,3 +93,14 @@ def test_active_key_matches_go_oracle(vec: dict[str, Any]) -> None:
     key, not_after = with_expiry
     assert key == expected_pub
     assert not_after == datetime.fromisoformat(vec["expected_not_after"])
+
+
+def test_every_vector_says_what_it_is_for() -> None:
+    """The ``note`` column, which explains what each case is testing.
+
+    Read here rather than left to a human: an unread column is one a later emitter can stop
+    filling without anything noticing, and this one is what makes a failure legible — the
+    label alone says which case broke, the note says what it was protecting.
+    """
+    unexplained = [v["label"] for v in _CORPUS["vectors"] if not str(v.get("note", "")).strip()]
+    assert not unexplained, f"vectors carrying no note: {unexplained}"

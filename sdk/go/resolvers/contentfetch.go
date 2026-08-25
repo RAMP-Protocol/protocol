@@ -6,10 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
@@ -39,6 +40,10 @@ const DefaultMaxContentBytes int64 = 8 << 20
 // reason is parsed out of it. The payload is a small JSON object; anything past
 // this is not a refusal that can be interpreted.
 const maxErrorBodyBytes int64 = 4 << 10
+
+// maxPort is the largest value a TCP port can take. A delivery URL naming one
+// outside the range names nothing reachable, whatever a URL parser makes of it.
+const maxPort = 65535
 
 // defaultContentMIMEType is what a body with no usable Content-Type is labelled.
 // Guessing from the bytes would be worse: the caller is told what the publisher
@@ -269,6 +274,35 @@ func (f *ContentFetcher) request(ctx context.Context, op, signedURL string, sign
 			Err: errors.New("delivery url is not parseable (value withheld: it carries a live credential)"),
 		}
 	}
+	// A value that PARSES and still names no scheme or no host. net/url accepts
+	// "edge.test/asset" and "/asset" as relative references, so nothing above catches
+	// them, and the transport would refuse them a layer later as a dial that did not
+	// happen — putting a value that can never work into the retryable class. Which
+	// side of the line a URL falls on is the VALUE's fault or the DIAL's, not a
+	// question of which parser the language ships: a URL naming no scheme or no host
+	// is the caller's to fix and will refuse identically forever.
+	//
+	// The value is NOT echoed, for the reason the branch above does not echo it.
+	if req.URL.Scheme == "" || req.URL.Host == "" {
+		return nil, &FetchError{
+			Failure: FetchMalformed, Op: op,
+			Err: errors.New("delivery url names no scheme or no host (value withheld: it carries a live credential)"),
+		}
+	}
+	// A port outside the range a port has. net/url checks only that it is digits, so
+	// ":99999999999" parses and is then refused a layer later as a dial that did not
+	// happen — the same misfiling as the branch above, on the same reasoning: no
+	// value with this port will ever reach anything. The HOST rule is deliberately
+	// left alone, because its own corpus pins what a bare host may say; this is the
+	// delivery leg vetting a value it is about to dial.
+	if port := req.URL.Port(); port != "" {
+		if n, convErr := strconv.Atoi(port); convErr != nil || n < 1 || n > maxPort {
+			return nil, &FetchError{
+				Failure: FetchMalformed, Op: op,
+				Err: errors.New("delivery url names a port outside 1-65535 (value withheld: it carries a live credential)"),
+			}
+		}
+	}
 	// The proof covers @target-uri as the VERBATIM string, while the request line
 	// carries whatever the URL value re-serializes to. The signed-URL contract
 	// treats scheme/host/path as opaque bytes, so an Exchange can legitimately mint
@@ -363,15 +397,26 @@ func edgeReason(r io.Reader) string {
 // the SDK does own.
 var edgeReasonToken = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
+// mediaTypeShape is type "/" subtype over RFC 9110's token characters, lowercased.
+var mediaTypeShape = regexp.MustCompile(
+	"^[!#$%&'*+.^_`|~0-9a-z-]+/[!#$%&'*+.^_`|~0-9a-z-]+$")
+
 // mimeTypeOf reduces a Content-Type to its media type, dropping parameters such
 // as charset. The charset belongs to whoever decodes the bytes; the content
 // carries the media type alone.
+//
+// The parameters are DISCARDED WITHOUT BEING PARSED, and the media type's shape is
+// checked here rather than delegated, because the three SDKs must answer one thing for
+// one header and the obvious delegation does not give them that.
+// mime.ParseMediaType reports a malformed PARAMETER as an error beside a perfectly good
+// media type, so honouring its error answers "unknown" for `text/plain; ;` — discarding
+// the one thing the field carries because of the part this function is defined to ignore.
+// It also accepts a bare token with no slash, which is not a media type at all. Both are
+// artifacts of that parser rather than decisions, and neither is reproducible in another
+// language without reimplementing RFC 2045 parameter parsing to inherit its quirks.
 func mimeTypeOf(header string) string {
-	if header == "" {
-		return defaultContentMIMEType
-	}
-	mediaType, _, err := mime.ParseMediaType(header)
-	if err != nil || mediaType == "" {
+	mediaType := strings.ToLower(strings.TrimSpace(strings.SplitN(header, ";", 2)[0]))
+	if !mediaTypeShape.MatchString(mediaType) {
 		return defaultContentMIMEType
 	}
 	return mediaType

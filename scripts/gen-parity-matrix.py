@@ -13,7 +13,7 @@ real code, so the rendered matrix cannot claim something the code contradicts:
      map is a verified-in-sync mirror of the exported surface across all three SDKs.
 
   2. Vector replay <- the committed conformance corpora
-     sdk/go/{helpers,resolvers}/testdata/*-vectors.json, scanned for a Go+python+ts
+     sdk/go/{helpers,resolvers,connect}/testdata/*-vectors.json, scanned for a Go+python+ts
      reference exactly the way sdk/python/tests/test_corpus_replay_completeness.py does.
      That gate holds the un-replayed count at zero with no exemption, so every row is ✅.
 
@@ -37,11 +37,15 @@ _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 _SYMBOL_MAP = _REPO_ROOT / "sdk" / "parity" / "symbol-map.json"
 _OUT = _REPO_ROOT / "docs" / "sdk-parity-matrix.md"
 
-# The two corpus homes and the three SDK source trees — identical scope to the
-# completeness gate, so this table lists exactly the set that gate enforces.
+# The three corpus homes and the three SDK source trees — identical scope to the
+# completeness gate, so this table lists exactly the set that gate enforces. A corpus
+# lives with the tier that can produce it: L1 primitives, L2 resolvers, and the L2
+# transport (the Connect error envelope can only be captured from a real connect-go
+# handler, which the Connect-free tiers may not import).
 _CORPUS_DIRS = (
     _REPO_ROOT / "sdk" / "go" / "helpers" / "testdata",
     _REPO_ROOT / "sdk" / "go" / "resolvers" / "testdata",
+    _REPO_ROOT / "sdk" / "go" / "connect" / "testdata",
 )
 _LANG_TREES: dict[str, tuple[pathlib.Path, str]] = {
     "go": (_REPO_ROOT / "sdk" / "go", ".go"),
@@ -122,7 +126,7 @@ def _render(parity_map: dict) -> str:
     w("       • API surface   — sdk/parity/symbol-map.json")
     w("                          (enforced against live exports by")
     w("                           sdk/python/tests/test_api_surface_parity.py)")
-    w("       • Vector replay  — sdk/go/{helpers,resolvers}/testdata/*-vectors.json")
+    w("       • Vector replay  — sdk/go/{helpers,resolvers,connect}/testdata/*-vectors.json")
     w("                          (enforced by test_corpus_replay_completeness.py)")
     w("     Regenerate:  python3 scripts/gen-parity-matrix.py")
     w("     Drift-gated in scripts/ci-local.sh. Narrative/rationale: docs/design-history.md. -->")

@@ -118,14 +118,16 @@ jobs:
       # fails if the committed testdata differs (deterministic, no time.Now()/random).
       # It also guards the sign-request + acceptance vectors the Python parity suite reads.
       - name: assert Go golden vectors are current
-        # Every emitter in BOTH corpus packages. The selector used to name
+        # Every emitter in EVERY corpus package. The selector used to name
         # TestGenerateVectors, which is one function: `-run` matches unanchored, so a
         # sibling called TestGenerateAudienceVectors does not contain that substring
         # and never ran — and the package selector left sdk/go/resolvers out entirely,
         # so six more were missed twice over. proto-ci is unfiltered and runs
         # `go test ./...`, so the corpora were still gated; what was lost is the
-        # redundancy this job exists to provide.
-        run: go test ./sdk/go/helpers/ ./sdk/go/resolvers/ -run 'TestGenerate'
+        # redundancy this job exists to provide. sdk/go/connect is the third home: the
+        # Connect error envelope can only be captured from a real connect-go handler,
+        # which the Connect-free tiers may not import.
+        run: go test ./sdk/go/helpers/ ./sdk/go/resolvers/ ./sdk/go/connect/ -run 'TestGenerate'
 
       # sdk/ts L1 helpers PLUS the L2 core + Hono server-verify binding
       # (offer-verify over JCS, the branded VerifiedOffer guard, the server-verify

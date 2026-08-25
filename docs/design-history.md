@@ -887,13 +887,29 @@ pure computation over bytes and dials nothing). The list is closed by review rat
 than by count: what the tier refuses is a DEPENDENCY THAT DIALS, not a dependency. It
 takes no HTTP client and does not dial the network: `sdk/go/helpers`
 never constructs an `http.Client`, `sdk/ts/core` imports neither `undici` nor a
-framework, and `ramp_sdk.core` imports no `httpx`. The I/O tier — `sdk/{go,ts,python}/resolvers`
-— is the *only* place a network fetch lives (well-known JWKS, WBA directory,
-`ramp.json` endpoint, offer-key resolution), and there the rule inverts: it runs on a
+framework, and `ramp_sdk.core` imports no `httpx`. The I/O tier is where a network fetch
+lives, and there the rule inverts: it runs on a
 **maintained HTTP client** (Go `net/http`, TS `undici`, Python `httpx`) rather than a
 hand-rolled transport, because the client owns the response state machine (status,
 redirects, 1xx, decompression) and the SDK should own only the SSRF check it injects
 as a connection-level hook.
+
+**The I/O tier is two trees per language, not one.** `sdk/{go,ts,python}/resolvers`
+came first and carries the pre-auth fetches — well-known JWKS, WBA directory, `ramp.json`
+endpoint, offer-key resolution. The client tree — `sdk/go/connect`, `sdk/ts/client`, and
+`ramp_sdk/client` with `ramp_sdk/sync` as its blocking facade — is the second, and it is
+IO-bearing for a different reason: it SENDS. Every leg it dials carries a credential, an
+RFC 9421 signature or a proof of possession bound to one URL, which is why it refuses
+redirects where the resolvers follow them under a cap, and why it splits its transport in
+two — a plain one for the operator-configured home Exchange, an address-guarded one for
+the legs whose host an offer named. The pure trees (`core`, `src`, the top-level
+`ramp_sdk` modules) may import neither, and a structural guard in each language enforces
+that: `sdk/ts/tests/resolvers-io-leaf.guard.test.ts`,
+`sdk/python/tests/test_guards_resolvers_io_leaf.py`.
+
+Worth stating here because this file is where it is stated. ADR-020, cited throughout this
+repo for the L0/L1/L2 layering, lives in the reference implementation's repository rather
+than this one, so a reader who has only this checkout has this document and nothing else.
 
 The reasoning is a threat boundary, not an aesthetic one. The host a resolver fetches
 is caller-supplied and reached **before** any signature is checked, so the fetch
@@ -1046,15 +1062,85 @@ no parameter a configured origin could be passed as. (`Dispute` is the exception
 only because `DisputeRequest` carries no `exchange` field to read — it takes the domain
 as an argument and runs the identical checks.)
 
-Five checks precede the send, in order: refuse anything that is not a plain hostname,
-because the value is concatenated into a URL and a smuggled path would choose what gets
-fetched; resolve the endpoint from that host's own manifest, cached per host; require
-the endpoint to be that host or a subdomain of it, since the manifest is only as
-trustworthy as the host serving it and a dial-time address guard has no objection to an
-unrelated PUBLIC host; dial through the SSRF guard, applied to the report itself and
-not only to the manifest fetch; and refuse redirects. The per-origin client pool that
+The destination is resolved from that host's own manifest, cached per host, and **six
+checks** stand between the caller's message and the wire, in this order.
+
+1. **It is a plain hostname.** The value is concatenated into a URL, so a smuggled path or
+   query would choose what gets fetched.
+2. **The advertised endpoint is that host or a subdomain of it.** The manifest is only as
+   trustworthy as the host serving it, and a dial-time address guard has no objection to an
+   unrelated PUBLIC host.
+3. **The same rule again, on whatever the endpoint resolver handed back.** That resolver is
+   an injectable seam, and this tier cannot make a SIGNED call conditional on a stranger's
+   implementation having remembered the rule. The same predicate both times, deliberately.
+4. **The scheme is one this SDK will dial.** Above the dial rather than inside it, so no
+   injected transport can remove it and no signature rides plaintext.
+5. **The dial goes through the address guard**, applied to the report itself and not only
+   to the manifest fetch.
+6. **A redirect is refused, never followed.** The per-origin client pool that
 follows is bounded and evicts least-recently-used, because which Exchanges appear is
 driven by incoming offers — an open-ended, caller-influenced key space.
+
+## Three client defaults where the ports differ from Go on purpose
+
+Go is the oracle and the ports mirror it, so a difference that survives review has to be
+written down or it reads as drift. Three survive, and none is an API-surface divergence —
+all are behaviour, so they live here rather than in `sdk/parity/symbol-map.json`, whose
+allowlist is a shrink-only ratchet over SYMBOLS.
+
+**Outbound request validation defaults ON in TypeScript and Python, and OFF in Go.** These
+two SDKs are the ones handed to external partners; Go is what our own services run. A
+missing recipient or idempotency key caught before anything is signed is worth more to a
+partner than a matching default, and it costs nothing in safety — the Exchange enforces the
+same rules whatever the client says, and the answer coming back is validated either way.
+Worth knowing what "strict" buys, because it is not what it buys in Go: the generated
+schema carries FIELD-level rules only, while the cross-field CEL rules stay
+server-authoritative. The two checks share a name and not a scope.
+
+**How much of the guard a caller may replace differs, and the scheme gate is the part
+none of them may.** Go is strictest: `WithGuardedBaseTransport` takes what sits UNDER the
+guard, and `NewGuardedTransport` says outright that the guard is not a default a caller may
+replace — the only way out is the deployment-level `SKIP_SSRF` / `ALLOW_INSECURE` opt-out.
+Both ports are more permissive: an injected `UnarySend` in TypeScript, or an injected
+`httpx` client in Python, replaces the dial and takes the ADDRESS PIN with it. That is
+deliberate — a caller who replaced the transport replaced it, and both languages need an
+injectable dial far more than Go does, whose `httptest` seam is a `*http.Transport` — but it
+is a real difference and it is why the scheme gate does not live in the dial. It sits above
+it, in `unaryCall` and in the content leg's own pre-flight, so no injected send reaches a
+plaintext endpoint carrying a signature. A signature over plaintext is not a latitude any
+of the three offers.
+
+**The two JSON clients bound how deep an answer may nest; Go does not.** A response body
+is refused past 32 nested containers in TypeScript and Python — the number the protocol
+already sets for a stranger's JSON in `AccountRegistration.data_schema`, so one value
+covers how deep any document these SDKs did not write may be. Go's client inherits
+protojson's own limit, which is around ten thousand, and is left alone.
+
+The ports need a bound at all because their parsers descend into a document and answer for
+a deep one in a way that is not a verdict: Python's raises `RecursionError`, which is
+neither what a malformed document raises nor a failure the package says it raises, and how
+much nesting it survives is a property of the interpreter release rather than a decision.
+The lesson recorded above under the registration schema applies directly — a bound that
+comes from a runtime's remaining stack is not a bound. TypeScript's parser does not
+overflow, and takes the same number anyway: two clients answering differently about one
+body is the state that produces the bugs, and which of them a caller happens to be holding
+is not something a peer can know.
+
+What it costs, stated plainly because the cost is real: `ext` is a
+`google.protobuf.Struct` and nothing in the contract bounds its nesting, so an Exchange may
+serve a conformant answer deeper than this. The Go client reads it and the other two refuse
+it. Both readers of one wire is the shape this file exists to record, and moving the number
+into the contract — which would make it one rule for every implementation rather than two —
+is the change that would close it rather than document it.
+
+**The client's transport splits in two, and which leg is guarded is the same in all
+three.** A plain transport carries the configured home Exchange and the Broker — an
+operator that points the SDK at a private origin chose that address — and an
+address-guarded one carries the offer-derived legs and the delivery fetch, whose hosts
+another party named. Python briefly guarded everything, which looked safer and was not: it
+refused a home Exchange the other two reach, and a caller injecting a client to get that
+back disarmed the guard on the leg that needed it. An injected client now carries both
+legs, because a caller who replaced the transport replaced it.
 
 ## Host anchoring compares host and port, but not scheme
 
@@ -1185,6 +1271,51 @@ One consequence for the cross-language surface: Go's `SignAgentBinding` takes a
 The parity map records them as counterparts because the face exists in both, but
 the custody posture differs — the Go seam exists precisely so the SDK never holds
 key material, and closing that gap belongs with the TypeScript/Python client work.
+
+## A delivery URL's own faults are malformed; the dial's refusals are unreachable
+
+The content leg refuses a signed delivery URL for two quite different reasons, and a caller
+acts on them oppositely: a fault in the VALUE will refuse identically forever and the
+caller must fix it, while a refusal of the DIAL may not refuse next time. All three SDKs
+had the split, and all three drew it in a different place — in both directions. One value
+was a permanent verdict in one language and a retryable dial failure in the other two;
+another was the reverse.
+
+The cause was that the line had never been *stated*. Each language let its own URL parser
+decide what "unparseable" meant, and the three disagree: Go's `net/url` rejects a malformed
+percent-escape and accepts a reference naming no scheme, WHATWG `new URL` rejects the
+schemeless reference and accepts the bad escape, and `httpx` accepts both — so Python
+minted a proof and dialled for a URL Go refused locally, and its answer then depended on
+whether the host resolved. A classification that changes with the resolver is not a
+classification.
+
+This is the same shape as the `Content-Type` reduction recorded earlier in this file, and
+it takes the same fix. The rule is stated instead. A value fault is: the URL does not
+parse, it names no scheme or no host, it names a port outside 1-65535, it carries a
+malformed percent-escape where a parse would unescape one, or it does not re-serialize to
+itself. Everything else — a scheme this SDK will not carry a proof over, an address the
+guard refuses, a peer that never answers — is the dial's, and unreachable. The escape check
+is read per component, admitting one in a query, exactly as the host rule already reads it:
+a query is not unescaped at parse time, and a delivery URL's query is where the credential
+lives.
+
+The HOST rule is deliberately untouched. Its own corpus pins what a bare host may say, and
+this is the delivery leg vetting a value it is about to dial — a different question about a
+different value.
+
+`sdk/go/resolvers/testdata/content-fetch-vectors.json` gained a second list for this, and
+it is captured from the real fetcher rather than described, so the three answers are held
+by the same mechanism that holds the reading of an answer.
+
+**A refused dial carries no reason token.** TypeScript minted `ssrf_guard` on the delivery
+leg, which no other language produced and which put the SDK's own verdict in a field
+documented in all three as the peer's own refusal token —
+`not_canonical_wire_naming` says outright that it is the one place that happens. It is
+gone. The cost is worth naming: an address-pin refusal is a verdict about where a URL
+points and a momentary blip is not, and nothing in the failure now tells those apart. None
+of the three distinguished them, so the answer is the same everywhere rather than better in
+one; distinguishing them means adding a value to the shared taxonomy, not a token in one
+language.
 
 ## Bounds on a leg that dials wherever an offer points
 

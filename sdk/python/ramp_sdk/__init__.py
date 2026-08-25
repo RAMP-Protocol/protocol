@@ -10,6 +10,11 @@ IO.
 Acceptance canonicalization is JCS (RFC 8785): the canonical names are the
 ``*_jcs`` forms from :mod:`ramp_sdk.core`; the unsuffixed names are aliases kept
 for continuity (see :mod:`ramp_sdk.acceptance`).
+
+``Client`` and ``BrokerClient`` re-exported here are the ASYNC faces, which are the
+core; the blocking facade lives at :mod:`ramp_sdk.sync` under the same names and is
+not flattened into this namespace, because two classes called ``Client`` in one
+namespace would make the choice between them a matter of which import won.
 """
 
 from __future__ import annotations
@@ -20,10 +25,22 @@ from .acceptance import (
     verify_offer_acceptance,
 )
 from .b64 import b64url_decode, b64url_nopad
+from .client import (
+    BrokerClient,
+    CallError,
+    CallErrorKind,
+    Client,
+    ClientConfig,
+    Content,
+    EndpointResolver,
+    Validation,
+)
 from .core import (
     ACCEPTANCE_SIGNATURE_ALGORITHM,
     OFFER_SIGNATURE_ALGORITHM,
+    DiscoveryResult,
     Mode,
+    OfferGroupResult,
     RejectedOffer,
     Result,
     VerifiedOffer,
@@ -144,18 +161,27 @@ __all__ = [
     "REGISTRATION_SCHEMA_DIALECT",
     "WBA_DIRECTORY_PATH",
     "AudienceVerdict",
+    "BrokerClient",
+    "CallError",
+    "CallErrorKind",
+    "Client",
+    "ClientConfig",
     "ConnectProtocolVersion",
     "ConnectProtocolVersionHeader",
+    "Content",
     "ContentTypeJSON",
     "ContentTypeProto",
     "DirectoryUnavailableError",
+    "DiscoveryResult",
     "EndpointRefusedError",
+    "EndpointResolver",
     "KeyExpiredError",
     "KeyResolver",
     "KeyRevokedError",
     "Mode",
     "MultisigVerdict",
     "NoEndpointError",
+    "OfferGroupResult",
     "ProtocolVersion",
     "RegistrationDataVerdict",
     "RegistrationSchema",
@@ -171,6 +197,7 @@ __all__ = [
     "SigningTransport",
     "StaticKeyResolver",
     "UnknownKeyError",
+    "Validation",
     "VerifiedOffer",
     "Verifier",
     "WBAKeyResolver",

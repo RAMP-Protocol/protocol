@@ -30,6 +30,8 @@ import referencing.exceptions
 import rfc8785
 from referencing import Registry
 
+from ramp_sdk._jsondepth import _raw_nesting_depth
+
 __all__ = [
     "MAX_REGISTRATION_DATA_BYTES",
     "MAX_REGISTRATION_DATA_DEPTH",
@@ -598,49 +600,6 @@ def _check_keywords(obj: dict[str, Any]) -> SchemaVerdict:
 
 # JSON structural bytes, named so the lexical scan below reads as JSON rather than
 # as arithmetic.
-_QUOTE = 0x22
-_BACKSLASH = 0x5C
-_OPENERS = frozenset({0x7B, 0x5B})  # { [
-_CLOSERS = frozenset({0x7D, 0x5D})  # } ]
-
-
-def _raw_nesting_depth(raw: bytes) -> int:
-    """The deepest JSON container nesting in ``raw``, counted lexically — no parse,
-    no recursion, one pass over the bytes.
-
-    It is string-aware, so a brace inside a string literal is text rather than a
-    container, and escape-aware so a literal quote does not end the string early. It
-    does NOT check that the brackets balance: an unbalanced document is the parser's
-    to reject, and this only has to produce an upper bound on how deep a parser would
-    have to descend.
-
-    Byte-wise rather than character-wise on purpose. Every delimiter it looks for is
-    ASCII, and no continuation byte of a multi-byte UTF-8 sequence can collide with
-    one, so decoding first would cost a pass and change nothing.
-    """
-    depth = 0
-    deepest = 0
-    in_string = False
-    escaped = False
-    for byte in raw:
-        if in_string:
-            if escaped:
-                escaped = False
-            elif byte == _BACKSLASH:
-                escaped = True
-            elif byte == _QUOTE:
-                in_string = False
-            continue
-        if byte == _QUOTE:
-            in_string = True
-        elif byte in _OPENERS:
-            depth += 1
-            deepest = max(deepest, depth)
-        elif byte in _CLOSERS:
-            depth -= 1
-    return deepest
-
-
 def _scan_schema_map(child: Any) -> SchemaVerdict:
     """Walk a keyword whose child object maps NAMES to subschemas. The child's keys
     are property or definition names, never keywords, so only its values are read as

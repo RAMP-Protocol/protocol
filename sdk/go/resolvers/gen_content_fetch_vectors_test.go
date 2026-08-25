@@ -1,0 +1,300 @@
+package resolvers
+
+// Content-leg golden-vector emitter.
+//
+// The delivery fetch is the one leg where the peer's own words are promoted over the
+// SDK's classification: an edge that refuses a bound GET answers a small JSON object, and
+// the token in it becomes the reason a caller branches on. That makes three decisions
+// cross-language, and none of them is obvious from reading either side alone.
+//
+// Which answers are a REFUSAL and which are something else. A 4xx and a 5xx are both the
+// edge saying no; an oversized body is not — the edge did nothing wrong and the URL is
+// still good, so a caller can retry with a larger budget rather than treating the
+// purchase as lost.
+//
+// Which tokens the SDK will repeat. The refusal body is written by the host just fetched
+// from. Unchecked, a publisher could answer any few kilobytes of text and have it render
+// as though the SDK had said it, so anything that is not token-shaped falls back to the
+// failure class, which the SDK does own.
+//
+// What a Content-Type means. The media type is the content's; the charset belongs to
+// whoever decodes the bytes, and a body with no usable header is labelled rather than
+// sniffed — the caller is told what the publisher said, and "unknown" is a true answer
+// where a guess might not be.
+//
+// Every vector is DERIVED by driving the real ContentFetcher against a server that
+// answers the case, so the corpus records what the oracle does rather than a description
+// of it. The Python and TypeScript clients fold this leg into their fetch verb and replay
+// the same projection through their own failure type.
+//
+// Verification no-op by default (asserts the committed file matches a fresh emit);
+// (re)writes under RAMP_UPDATE_VECTORS=1. TEST INFRASTRUCTURE.
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/vectorio"
+)
+
+// contentFetchVector is one delivery answer and what a client must read out of it.
+type contentFetchVector struct {
+	Name string `json:"name"`
+	//: The status the edge answered with.
+	Status int `json:"status"`
+	//: The body it answered with, verbatim.
+	Body string `json:"body"`
+	//: The Content-Type it served, empty when it served none.
+	ContentType string `json:"content_type"`
+	//: Whether the fetch succeeded.
+	OK bool `json:"ok"`
+	//: The failure class, in the shared vocabulary. Empty when OK.
+	Failure string `json:"failure"`
+	//: The edge's own refusal token, when the SDK was willing to repeat it.
+	Reason string `json:"reason"`
+	//: The most specific machine-readable answer: the token when there is one,
+	//: otherwise the failure class. This is what a caller actually branches on.
+	ReasonOf string `json:"reason_of"`
+	//: The media type a successful fetch reports. Empty when the fetch failed.
+	MIMEType string `json:"mime_type"`
+}
+
+// urlRefusalVector is one delivery URL this leg declines before it dials, and the class
+// it declines with.
+//
+// It is a SEPARATE list because it records a different question. The answers above are
+// read from a server's reply; these are reached with no reply at all, and the split that
+// matters is which of them is the URL's own fault — permanent, the caller must fix the
+// value — and which is a dial that did not happen and may happen later. Those two land in
+// different failure classes, and a port that folds them together puts a value that can
+// never work into the retryable half.
+type urlRefusalVector struct {
+	Name string `json:"name"`
+	//: The URL handed to the fetch. Synthetic: a real delivery URL's query is a live
+	//: credential and this file is committed.
+	URL string `json:"url"`
+	//: The failure class, in the shared vocabulary.
+	Failure string `json:"failure"`
+	//: What a caller branches on.
+	ReasonOf string `json:"reason_of"`
+}
+
+// urlRefusalCases enumerate the delivery URLs refused before any dial. None of them
+// reaches the network: a parse failure and the round-trip check run before the request
+// exists, and the scheme guard sits above the dial in the RoundTripper.
+func urlRefusalCases() []struct {
+	name string
+	url  string
+} {
+	return []struct {
+		name string
+		url  string
+	}{
+		// A value no parser can read. The class is the whole message: redaction itself
+		// needs a parseable value, so nothing about it is safe to name.
+		{"unparseable_escape", "https://edge.test/%zz"},
+		{"unparseable_ipv6_bracket", "https://[::1/asset"},
+		// Parseable, and unusable for a reason a parse does not see. Which side of the
+		// line each of these falls on is the whole reason this list is captured rather
+		// than described.
+		{"out_of_range_port", "https://edge.test:99999999999/asset"},
+		// Zero parses as a port everywhere and is one nowhere. It is checked rather than
+		// left to the parse, because the rule is the rule and not whatever each language's
+		// parser happens to refuse.
+		{"zero_port", "https://edge.test:0/asset"},
+		// Parseable, but names no scheme — which is not the same thing, and the two
+		// have no reason to share a class.
+		{"schemeless_host_and_path", "edge.test/asset"},
+		{"relative_path_only", "/asset"},
+		// A scheme this SDK will not carry a proof of possession over.
+		{"plaintext_scheme", "http://edge.test/asset"},
+		{"non_http_scheme", "ftp://edge.test/asset"},
+		// A URL that does not survive re-serialization: the proof covers @target-uri as
+		// the verbatim string while the request line carries what it re-serializes to, so
+		// the edge could only answer an undifferentiated 403.
+		{"not_round_trip_stable", "https://edge.test/a b/asset"},
+	}
+}
+
+// contentFetchCases enumerate the delivery answers whose reading must not drift.
+func contentFetchCases() []struct {
+	name        string
+	status      int
+	body        string
+	contentType string
+} {
+	return []struct {
+		name        string
+		status      int
+		body        string
+		contentType string
+	}{
+		// Success, and what the media type reduces to.
+		{"ok_plain_text", 200, "the licensed bytes", "text/plain; charset=utf-8"},
+		{"ok_content_type_uppercased", 200, "{}", "Application/JSON"},
+		{"ok_no_content_type", 200, "raw", ""},
+		{"ok_content_type_unparseable", 200, "raw", "not a media type; ;"},
+		// The rule's own edges, and why it is stated rather than delegated. A malformed
+		// PARAMETER cannot discard a good media type — the parameters are the part this
+		// is defined to ignore — and a bare token with no slash is not a media type.
+		{"ok_content_type_malformed_parameter", 200, "raw", "text/plain; ;"},
+		{"ok_content_type_empty_parameter_section", 200, "raw", "text/plain;"},
+		{"ok_content_type_space_before_parameters", 200, "raw", "text/plain ; charset=utf-8"},
+		{"ok_content_type_no_slash", 200, "raw", "text"},
+		{"ok_content_type_subtype_with_suffix", 200, "raw", "image/svg+xml"},
+
+		// A refusal carrying a token the SDK is willing to repeat.
+		{"refused_with_token", 403, `{"error":"denied","reason":"url_expired"}`, "application/json"},
+		{"refused_token_with_digits", 403, `{"error":"denied","reason":"agent_key_mismatch2"}`, "application/json"},
+
+		// A refusal whose "reason" is not a token. The body is the publisher's; prose,
+		// an uppercase value, a leading digit and a wrong JSON type all fall back to the
+		// class rather than rendering as though the SDK had said them.
+		{"refused_prose_reason", 403, `{"reason":"Access denied by our WAF. Contact support."}`, "application/json"},
+		{"refused_uppercase_reason", 403, `{"reason":"URL_EXPIRED"}`, "application/json"},
+		{"refused_leading_digit_reason", 403, `{"reason":"4xx"}`, "application/json"},
+		{"refused_reason_not_a_string", 403, `{"reason":42}`, "application/json"},
+		{"refused_no_reason_member", 403, `{"error":"denied"}`, "application/json"},
+		// A token with a trailing newline. Every anchor here means end-of-INPUT, so it is
+		// not token-shaped — and the token is echoed into a caller's logs, so an anchor
+		// that admitted the newline would be admitting log injection. Python's `$` does,
+		// which is why this is a vector rather than a comment.
+		{"refused_reason_trailing_newline", 403, "{\"reason\":\"url_expired\\n\"}", "application/json"},
+		{"refused_body_not_json", 403, "<html>403</html>", "text/html"},
+		{"refused_empty_body", 401, "", ""},
+
+		// A server fault is still the edge saying no: it answered.
+		{"refused_server_error", 500, `{"reason":"internal"}`, "application/json"},
+	}
+}
+
+// TestGenerateContentFetchVectors emits the content-leg golden corpus.
+func TestGenerateContentFetchVectors(t *testing.T) {
+	path := filepath.Join("testdata", "content-fetch-vectors.json")
+	// Built in statements rather than inline, and the URL refusals FIRST: the two builders
+	// want opposite environments — the reading vectors stand the guards down to reach a
+	// loopback server, the URL refusals need them up to reach the scheme gate at all — and
+	// the evaluation order of a composite literal's values is not somewhere to hide that.
+	urlRefusals := buildURLRefusalVectors(t)
+	vectors := buildContentFetchVectors(t)
+	doc := map[string]any{
+		"note": "Delivery answers and what a client must read out of them, derived by " +
+			"driving the real ContentFetcher. `reason` is the edge's own token, repeated " +
+			"only when it is token-shaped; `reason_of` is what a caller branches on. " +
+			"`url_refusals` records the other half: URLs declined before any dial, and " +
+			"which of them is the URL's own permanent fault rather than a dial that did " +
+			"not happen.",
+		"vectors":      vectors,
+		"url_refusals": urlRefusals,
+	}
+	if os.Getenv("RAMP_UPDATE_VECTORS") == "1" {
+		if err := vectorio.Write(path, doc); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+		return
+	}
+	stale, err := vectorio.Stale(path, doc)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if stale {
+		t.Fatalf("%s is stale; re-run with RAMP_UPDATE_VECTORS=1 to regenerate", path)
+	}
+}
+
+func buildURLRefusalVectors(t *testing.T) []urlRefusalVector {
+	t.Helper()
+	// Both guards UP, which is the default and the point: the scheme gate is what refuses
+	// a plaintext or non-http delivery URL, and standing it down would record the class of
+	// a case that never ran. Nothing here dials, so the address pin never resolves a name.
+	t.Setenv("SKIP_SSRF", "")
+	t.Setenv("ALLOW_INSECURE", "")
+	fetcher := NewContentFetcher(ContentFetchOptions{})
+	out := make([]urlRefusalVector, 0, len(urlRefusalCases()))
+	for _, c := range urlRefusalCases() {
+		_, err := fetcher.Fetch(context.Background(), c.url, stubProofSigner{})
+		if err == nil {
+			t.Fatalf("%s: %q was not refused", c.name, c.url)
+		}
+		var ferr *FetchError
+		if !errors.As(err, &ferr) {
+			t.Fatalf("%s: fetch failed with an untyped error: %v", c.name, err)
+		}
+		out = append(out, urlRefusalVector{
+			Name:     c.name,
+			URL:      c.url,
+			Failure:  ferr.Failure.String(),
+			ReasonOf: ferr.ReasonOf(),
+		})
+	}
+	return out
+}
+
+func buildContentFetchVectors(t *testing.T) []contentFetchVector {
+	t.Helper()
+	// The guard is stood down for the emitter alone: httptest binds loopback, which the
+	// dial guard refuses by design, and what is under test here is the READING of an
+	// answer rather than which addresses may be dialled. The address rule has its own
+	// corpus next door. Set before the fetcher is built, because the transport reads the
+	// flags at construction.
+	t.Setenv("SKIP_SSRF", "true")
+	t.Setenv("ALLOW_INSECURE", "true")
+	out := make([]contentFetchVector, 0, len(contentFetchCases()))
+	for _, c := range contentFetchCases() {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			if c.contentType != "" {
+				w.Header().Set("Content-Type", c.contentType)
+			} else {
+				// Suppressed rather than merely unset: net/http sniffs a type from the
+				// first bytes when the handler names none, which would make the
+				// no-header case record a header after all.
+				w.Header()["Content-Type"] = nil
+			}
+			w.WriteHeader(c.status)
+			_, _ = w.Write([]byte(c.body))
+		}))
+		fetcher := NewContentFetcher(ContentFetchOptions{})
+		content, err := fetcher.Fetch(context.Background(), srv.URL+"/asset", stubProofSigner{})
+		srv.Close()
+
+		vector := contentFetchVector{
+			Name: c.name, Status: c.status, Body: c.body, ContentType: c.contentType,
+		}
+		if err == nil {
+			vector.OK = true
+			vector.MIMEType = content.MIMEType
+		} else {
+			var ferr *FetchError
+			if !errors.As(err, &ferr) {
+				t.Fatalf("%s: fetch failed with an untyped error: %v", c.name, err)
+			}
+			vector.Failure = ferr.Failure.String()
+			vector.Reason = ferr.Reason
+			vector.ReasonOf = ferr.ReasonOf()
+		}
+		if vector.OK {
+			vector.ReasonOf = ""
+		}
+		out = append(out, vector)
+	}
+	return out
+}
+
+// stubProofSigner mints a fixed binding. What the proof CONTAINS is pinned by
+// pop-vectors.json; here it only has to exist, so the reading of the answer is what the
+// vectors record.
+type stubProofSigner struct{}
+
+func (stubProofSigner) SignFetch(context.Context, string) (helpers.AgentBinding, error) {
+	return helpers.AgentBinding{
+		AgentKey:       "stub-agent-key",
+		SignatureInput: `sig1=("@method" "@target-uri");keyid="stub";alg="ed25519";created=1;expires=2`,
+		Signature:      "sig1=:c3R1Yg==:",
+	}, nil
+}

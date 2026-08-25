@@ -23,6 +23,7 @@ import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020"
 import canonicalize from "canonicalize";
 
 import type { RegistrationFieldError as RegistrationFieldErrorShape } from "./errordetail";
+import { rawNestingDepth } from "./jsondepth";
 
 /**
  * maxRegistrationSchemaBytes is the published schema's size cap, measured as the
@@ -588,42 +589,6 @@ function checkKeywords(obj: Record<string, unknown>): SchemaVerdict {
 		}
 	}
 	return "accepted";
-}
-
-/**
- * rawNestingDepth returns the deepest JSON container nesting in `raw`, counted
- * lexically — no parse, no recursion, one pass over the bytes.
- *
- * It is string-aware, so a brace inside a string literal is text rather than a
- * container, and escape-aware so a literal quote does not end the string early. It
- * does NOT check that the brackets balance: an unbalanced document is the parser's
- * to reject, and this only has to produce an upper bound on how deep a parser would
- * have to descend.
- *
- * Byte-wise rather than character-wise on purpose. Every delimiter it looks for is
- * ASCII, and no continuation byte of a multi-byte UTF-8 sequence can collide with
- * one, so decoding first would cost a pass and change nothing.
- */
-function rawNestingDepth(raw: Uint8Array): number {
-	let depth = 0;
-	let deepest = 0;
-	let inString = false;
-	let escaped = false;
-	for (const byte of raw) {
-		if (inString) {
-			if (escaped) escaped = false;
-			else if (byte === 0x5c) escaped = true; // backslash
-			else if (byte === 0x22) inString = false; // quote
-			continue;
-		}
-		if (byte === 0x22) inString = true;
-		else if (byte === 0x7b || byte === 0x5b) {
-			// { [
-			depth++;
-			if (depth > deepest) deepest = depth;
-		} else if (byte === 0x7d || byte === 0x5d) depth--; // } ]
-	}
-	return deepest;
 }
 
 /**

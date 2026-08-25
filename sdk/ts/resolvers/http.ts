@@ -192,8 +192,13 @@ function envFlag(name: string): boolean {
 	return ["true", "1"].includes((process.env[name] ?? "").toLowerCase());
 }
 
-/** Whether the dial-time address guard is disabled (SKIP_SSRF). Default: off. */
-function skipSSRF(): boolean {
+/** Whether the dial-time address guard is disabled (SKIP_SSRF). Default: off.
+ *
+ * Exported because the client tier builds its own dispatchers and has to honour the same
+ * deployment flag this tier does — Go reads it in NewGuardedTransport and Python in
+ * guarded_client, so a TypeScript client that ignored it would be the one place the
+ * documented opt-out did nothing. */
+export function skipSSRF(): boolean {
 	return envFlag("SKIP_SSRF");
 }
 
@@ -205,10 +210,40 @@ function allowInsecure(): boolean {
 /** The two-flag scheme decision: https always, http only under ALLOW_INSECURE,
  * everything else denied (a scheme denylist is unwinnable — ftp, telnet, gopher,
  * file, data, …). Case-insensitive. */
-function schemeGuardAllows(scheme: string): boolean {
+export function schemeGuardAllows(scheme: string): boolean {
 	const s = scheme.toLowerCase();
 	if (s === "https") return true;
 	return s === "http" && allowInsecure();
+}
+
+/**
+ * requireScheme refuses a URL this SDK will not dial, BEFORE any dial happens.
+ *
+ * The connector returned by ssrfGuard is an ADDRESS pin — it decides what a hostname is
+ * allowed to resolve to, and it never sees the scheme, because by then the URL has already
+ * been reduced to a host and a port. So a dispatcher built from it alone will happily carry
+ * an RFC 9421 signature, or a proof of possession, over plaintext http. The scheme is a
+ * separate decision and needs a separate gate: Go states it in schemeGuardRoundTripper and
+ * Python in _SchemeGuardTransport, both wrapping the transport so it applies to whatever
+ * base a caller injected. This is the same gate for the callers that dial undici directly.
+ *
+ * Raising SsrfBlockedError rather than a typed client failure is deliberate: the client
+ * tier already classifies an unrecognised dial failure the way Go classifies this one,
+ * which reaches it through the RoundTripper for the same reason.
+ */
+export function requireScheme(url: string): void {
+	let parsed: URL;
+	try {
+		parsed = new URL(url);
+	} catch (err) {
+		throw new SsrfBlockedError(`SSRF guard: unparseable url: ${String(err)}`);
+	}
+	// URL.protocol carries a trailing colon ("https:").
+	if (!schemeGuardAllows(parsed.protocol.replace(/:$/, ""))) {
+		throw new SsrfBlockedError(
+			`SSRF guard: refusing disallowed scheme ${parsed.protocol}`,
+		);
+	}
 }
 
 /** The ONE public env-driven best-effort guarded fetch factory — every consumer's

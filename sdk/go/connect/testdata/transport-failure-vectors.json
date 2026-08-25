@@ -1,0 +1,94 @@
+{
+  "transport_failures": [
+    {
+      "name": "gateway_502_html",
+      "status": 502,
+      "body": "\u003chtml\u003e\u003cbody\u003e502 Bad Gateway\u003c/body\u003e\u003c/html\u003e",
+      "content_type": "text/html",
+      "kind": "unreachable",
+      "reason": "unavailable",
+      "retryable": true
+    },
+    {
+      "name": "gateway_503_empty",
+      "status": 503,
+      "body": "",
+      "content_type": "text/plain",
+      "kind": "unreachable",
+      "reason": "unavailable",
+      "retryable": true
+    },
+    {
+      "name": "gateway_504_text",
+      "status": 504,
+      "body": "upstream timed out",
+      "content_type": "text/plain",
+      "kind": "unreachable",
+      "reason": "unavailable",
+      "retryable": true
+    },
+    {
+      "name": "gateway_500_html",
+      "status": 500,
+      "body": "\u003chtml\u003e500\u003c/html\u003e",
+      "content_type": "text/html",
+      "kind": "refused",
+      "reason": "unknown",
+      "retryable": false
+    },
+    {
+      "name": "throttled_429_empty",
+      "status": 429,
+      "body": "",
+      "content_type": "text/plain",
+      "kind": "unreachable",
+      "reason": "unavailable",
+      "retryable": true
+    },
+    {
+      "name": "not_found_404_html",
+      "status": 404,
+      "body": "\u003chtml\u003e404\u003c/html\u003e",
+      "content_type": "text/html",
+      "kind": "refused",
+      "reason": "unimplemented",
+      "retryable": false
+    },
+    {
+      "name": "forbidden_403_empty",
+      "status": 403,
+      "body": "",
+      "content_type": "text/plain",
+      "kind": "refused",
+      "reason": "permission_denied",
+      "retryable": false
+    },
+    {
+      "name": "unauthorized_401_empty",
+      "status": 401,
+      "body": "",
+      "content_type": "text/plain",
+      "kind": "refused",
+      "reason": "unauthenticated",
+      "retryable": false
+    },
+    {
+      "name": "bad_request_400_text",
+      "status": 400,
+      "body": "malformed",
+      "content_type": "text/plain",
+      "kind": "refused",
+      "reason": "internal",
+      "retryable": false
+    },
+    {
+      "name": "json_envelope_without_a_code",
+      "status": 503,
+      "body": "{\"message\":\"draining\"}",
+      "content_type": "application/json",
+      "kind": "unreachable",
+      "reason": "unavailable",
+      "retryable": true
+    }
+  ]
+}

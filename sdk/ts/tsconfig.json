@@ -29,5 +29,12 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["src/**/*", "core/**/*", "hono/**/*", "resolvers/**/*", "tests/**/*"]
+  "include": [
+    "src/**/*",
+    "core/**/*",
+    "client/**/*",
+    "hono/**/*",
+    "resolvers/**/*",
+    "tests/**/*"
+  ]
 }

@@ -1,0 +1,58 @@
+{
+  "vectors": [
+    {
+      "name": "attestation_without_an_attested_at",
+      "message": "ResourceAttestation",
+      "wire_json": {
+        "attested_at": null,
+        "claims": null,
+        "keyid": "",
+        "signature": "",
+        "uri": "",
+        "verifier": "v.test"
+      },
+      "accepted": true,
+      "note": "an unset Timestamp renders as null; the type generator flattens it to a string schema, so a rule written for message-typed fields refuses it"
+    },
+    {
+      "name": "rate_limit_without_a_reset_time",
+      "message": "RateLimitInfo",
+      "wire_json": {
+        "limit": 300,
+        "remaining": 299,
+        "reset_at": null
+      },
+      "accepted": true,
+      "note": "the same unset Timestamp, on the message every discovery answer that reports a rate limit carries"
+    },
+    {
+      "name": "response_carrying_a_rate_limit_without_a_reset_time",
+      "message": "ResourceResponse",
+      "wire_json": {
+        "exchange": "exchange.test",
+        "ext": null,
+        "ext_critical": [],
+        "offer_groups": [],
+        "offers": [],
+        "rate_limit": {
+          "limit": 300,
+          "remaining": 299,
+          "reset_at": null
+        },
+        "ver": "1.0"
+      },
+      "accepted": true,
+      "note": "one unset Timestamp one level down refuses the WHOLE answer, which is what a caller actually meets"
+    },
+    {
+      "name": "defaulted_scalar_sent_as_null",
+      "message": "ResourceAttestation",
+      "wire_json": {
+        "keyid": null,
+        "verifier": "v.test"
+      },
+      "accepted": true,
+      "note": "a null on a field carrying a default is the default, not an absence — the oracle reads keyid as the empty string"
+    }
+  ]
+}

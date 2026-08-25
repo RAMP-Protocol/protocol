@@ -1,0 +1,281 @@
+{
+  "note": "Delivery answers and what a client must read out of them, derived by driving the real ContentFetcher. `reason` is the edge's own token, repeated only when it is token-shaped; `reason_of` is what a caller branches on. `url_refusals` records the other half: URLs declined before any dial, and which of them is the URL's own permanent fault rather than a dial that did not happen.",
+  "url_refusals": [
+    {
+      "name": "unparseable_escape",
+      "url": "https://edge.test/%zz",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    },
+    {
+      "name": "unparseable_ipv6_bracket",
+      "url": "https://[::1/asset",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    },
+    {
+      "name": "out_of_range_port",
+      "url": "https://edge.test:99999999999/asset",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    },
+    {
+      "name": "zero_port",
+      "url": "https://edge.test:0/asset",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    },
+    {
+      "name": "schemeless_host_and_path",
+      "url": "edge.test/asset",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    },
+    {
+      "name": "relative_path_only",
+      "url": "/asset",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    },
+    {
+      "name": "plaintext_scheme",
+      "url": "http://edge.test/asset",
+      "failure": "unreachable",
+      "reason_of": "unreachable"
+    },
+    {
+      "name": "non_http_scheme",
+      "url": "ftp://edge.test/asset",
+      "failure": "unreachable",
+      "reason_of": "unreachable"
+    },
+    {
+      "name": "not_round_trip_stable",
+      "url": "https://edge.test/a b/asset",
+      "failure": "malformed",
+      "reason_of": "malformed"
+    }
+  ],
+  "vectors": [
+    {
+      "name": "ok_plain_text",
+      "status": 200,
+      "body": "the licensed bytes",
+      "content_type": "text/plain; charset=utf-8",
+      "ok": true,
+      "failure": "",
+      "reason": "",
+      "reason_of": "",
+      "mime_type": "text/plain"
+    },
+    {
+      "name": "ok_content_type_uppercased",
+      "status": 200,
+      "body": "{}",
+      "content_type": "Application/JSON",
+      "ok": true,
+      "failure": "",
+      "reason": "",
+      "reason_of": "",
+      "mime_type": "application/json"
+    },
+    {
+      "name": "ok_no_content_type",
+      "status": 200,
+      "body": "raw",
+      "content_type": "",
+      "ok": true,
+      "failure": "",
+      "reason": "",
+      "reason_of": "",
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "name": "ok_content_type_unparseable",
+      "status": 200,
+      "body": "raw",
+      "content_type": "not a media type; ;",
+      "ok": true,
+      "failure": "",
+      "reason": "",
+      "reason_of": "",
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "name": "ok_content_type_malformed_parameter",
+      "status": 200,
+      "body": "raw",
+      "content_type": "text/plain; ;",
+      "ok": true,
+      "failure": "",
+      "reason": "",
+      "reason_of": "",
+      "mime_type": "text/plain"
+    },
+    {
+      "name": "ok_content_type_empty_parameter_section",
+      "status": 200,
+      "body": "raw",
+      "content_type": "text/plain;",
+      "ok": true,
+      "failure": "",
+      "reason": "",
+      "reason_of": "",
+      "mime_type": "text/plain"
+    },
+    {
+      "name": "ok_content_type_space_before_parameters",
+      "status": 200,
+      "body": "raw",
+      "content_type": "text/plain ; charset=utf-8",
+      "ok": true,
+      "failure": "",
+      "reason": "",
+      "reason_of": "",
+      "mime_type": "text/plain"
+    },
+    {
+      "name": "ok_content_type_no_slash",
+      "status": 200,
+      "body": "raw",
+      "content_type": "text",
+      "ok": true,
+      "failure": "",
+      "reason": "",
+      "reason_of": "",
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "name": "ok_content_type_subtype_with_suffix",
+      "status": 200,
+      "body": "raw",
+      "content_type": "image/svg+xml",
+      "ok": true,
+      "failure": "",
+      "reason": "",
+      "reason_of": "",
+      "mime_type": "image/svg+xml"
+    },
+    {
+      "name": "refused_with_token",
+      "status": 403,
+      "body": "{\"error\":\"denied\",\"reason\":\"url_expired\"}",
+      "content_type": "application/json",
+      "ok": false,
+      "failure": "refused",
+      "reason": "url_expired",
+      "reason_of": "url_expired",
+      "mime_type": ""
+    },
+    {
+      "name": "refused_token_with_digits",
+      "status": 403,
+      "body": "{\"error\":\"denied\",\"reason\":\"agent_key_mismatch2\"}",
+      "content_type": "application/json",
+      "ok": false,
+      "failure": "refused",
+      "reason": "agent_key_mismatch2",
+      "reason_of": "agent_key_mismatch2",
+      "mime_type": ""
+    },
+    {
+      "name": "refused_prose_reason",
+      "status": 403,
+      "body": "{\"reason\":\"Access denied by our WAF. Contact support.\"}",
+      "content_type": "application/json",
+      "ok": false,
+      "failure": "refused",
+      "reason": "",
+      "reason_of": "refused",
+      "mime_type": ""
+    },
+    {
+      "name": "refused_uppercase_reason",
+      "status": 403,
+      "body": "{\"reason\":\"URL_EXPIRED\"}",
+      "content_type": "application/json",
+      "ok": false,
+      "failure": "refused",
+      "reason": "",
+      "reason_of": "refused",
+      "mime_type": ""
+    },
+    {
+      "name": "refused_leading_digit_reason",
+      "status": 403,
+      "body": "{\"reason\":\"4xx\"}",
+      "content_type": "application/json",
+      "ok": false,
+      "failure": "refused",
+      "reason": "",
+      "reason_of": "refused",
+      "mime_type": ""
+    },
+    {
+      "name": "refused_reason_not_a_string",
+      "status": 403,
+      "body": "{\"reason\":42}",
+      "content_type": "application/json",
+      "ok": false,
+      "failure": "refused",
+      "reason": "",
+      "reason_of": "refused",
+      "mime_type": ""
+    },
+    {
+      "name": "refused_no_reason_member",
+      "status": 403,
+      "body": "{\"error\":\"denied\"}",
+      "content_type": "application/json",
+      "ok": false,
+      "failure": "refused",
+      "reason": "",
+      "reason_of": "refused",
+      "mime_type": ""
+    },
+    {
+      "name": "refused_reason_trailing_newline",
+      "status": 403,
+      "body": "{\"reason\":\"url_expired\\n\"}",
+      "content_type": "application/json",
+      "ok": false,
+      "failure": "refused",
+      "reason": "",
+      "reason_of": "refused",
+      "mime_type": ""
+    },
+    {
+      "name": "refused_body_not_json",
+      "status": 403,
+      "body": "\u003chtml\u003e403\u003c/html\u003e",
+      "content_type": "text/html",
+      "ok": false,
+      "failure": "refused",
+      "reason": "",
+      "reason_of": "refused",
+      "mime_type": ""
+    },
+    {
+      "name": "refused_empty_body",
+      "status": 401,
+      "body": "",
+      "content_type": "",
+      "ok": false,
+      "failure": "refused",
+      "reason": "",
+      "reason_of": "refused",
+      "mime_type": ""
+    },
+    {
+      "name": "refused_server_error",
+      "status": 500,
+      "body": "{\"reason\":\"internal\"}",
+      "content_type": "application/json",
+      "ok": false,
+      "failure": "refused",
+      "reason": "internal",
+      "reason_of": "internal",
+      "mime_type": ""
+    }
+  ]
+}

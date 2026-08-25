@@ -5,6 +5,82 @@ description: "RAMP protocol changelog"
 
 ## Unreleased
 
+**The TypeScript and Python SDKs gained a client, and it changed what they accept
+from a peer (no wire change; conformance-affecting).** Neither could SEND a RAMP
+request before; both now speak the Connect-unary JSON form the protocol's unary RPCs
+are fully described by. Six consequences reach anyone re-pinning, and none of them
+moves a field, a message or an encoding — `buf breaking` reports nothing.
+
+A **`null` means the field has no value**, and the TypeScript wire policy now reads it
+that way. The canonical wire is proto-JSON, where a null is a field's default — for **any**
+field, not only a message-typed one — so the policy drops it wherever the schema does not
+require a value, and leaves it for the schema to refuse where it does. `EmitUnpopulated` —
+what `connectserver`'s codec emits, and therefore what a RAMP Exchange serves — renders an
+unpopulated non-optional field as `null` rather than omitting it, so `{"ext":null}` is the
+ordinary shape of a real response. (An unset **map** renders `{}`, and an unset `optional`
+field is omitted outright.) Every generated Zod schema rejected `null`, which meant a
+TypeScript consumer could not read a conformant answer at all. Pydantic already spelled
+those fields `X | None`.
+
+An earlier form of this note said only a message field and a `Struct` arrive as `null`.
+That described what the codec emits and was read as a bound on what a client must accept,
+which it is not: an unset `google.protobuf.Timestamp` arrives as `null` too, and because
+the type generator flattens it to a string schema, a rule written for message-typed fields
+refused it. An attestation without an `attested_at`, or a rate limit without a `reset_at` —
+both conformant, neither carrying a validation rule that requires the field — took the
+whole answer down for a TypeScript reader while Go and Python read it. The rule now asks
+about presence rather than type, and a shared corpus pins it in all three languages.
+
+Where that policy lives matters to a consumer: the schemas themselves are unchanged, and
+`parseWire()` in `wire/base.ts` is what applies it — together with the naming refusal
+below. `@ramp-protocol/sdk` now exports `./wire/base` and `./wire/names` so a consumer of
+the generated types can reach it; parse an answer off the wire with `parseWire(Schema, body)`
+rather than `Schema.safeParse(body)`.
+
+A **lowerCamelCase answer is refused**, at every depth, with the reason
+`not_canonical_wire_naming`. The RAMP wire is snake_case proto-JSON and the `json_name`
+alias is out of contract; a stock `connect-go` server that registers no `UseProtoNames`
+codec serves the alias, and the generated clients accept snake_case only and drop what
+they do not recognise — so such an answer parsed successfully into a message with every
+multiword field missing. A deployment must register the codec on every JSON-serving
+listener; the reference services already do.
+
+**`Offer.title`, `ResourceEntry.title` and `UsageAsset.title` exist in the generated
+Pydantic and Zod models** for the first time. They are proto fields whose NAME is `title`,
+and the types pipeline removed every key of that name while meaning to drop the
+JSON-Schema keyword.
+
+**`mimeTypeOf` narrowed in Go**: `text/plain; ;` now reduces to `text/plain` instead of
+the default, and a bare token carrying no slash now reduces to the default instead of
+passing through. The rule is stated rather than delegated — the text before the first
+`;`, trimmed and lowercased, must be `token "/" token` — so all three languages answer
+alike. The function is unexported with one call site, so no Go caller depended on the old
+behaviour.
+
+**A hex signature carrying a sign, whitespace or an odd length is refused in
+TypeScript**, as Go and Python already refused it. And Python's edge refusal-token anchor
+no longer admits a trailing newline, which Go and TypeScript never did — the token is
+echoed into a caller's logs.
+
+**Nine TypeScript modules the root export map could not reach are importable**, and the
+root manifest now carries `undici` and the peer metadata `sdk/ts` declares. `exports`
+carries no wildcard, so an unlisted subpath failed with `ERR_PACKAGE_PATH_NOT_EXPORTED`
+and had no deep-path workaround; `./resolvers` was listed and still unimportable for want
+of the dependency.
+
+Five shared vector files are new against the previous revision, all replayed by all three
+SDKs: `connect/testdata/{connect-error,client-request,transport-failure}-vectors.json`,
+`helpers/testdata/wire-names-vectors.json` and
+`resolvers/testdata/content-fetch-vectors.json`. The transport-failure set records what
+class an answer that did NOT come from the service falls into, captured from a real
+`connect-go` client rather than transcribed; the wire-names set pins the two textual rules
+above. The `null` and naming rules are pinned
+beside the generated types instead, in `gen/{ts,python}` — they belong to the schema seam
+every message routes through, not to one tier's corpus. The endpoint rule's existing
+corpus now replays through the CLIENT as well as the resolver in all three languages, which
+is what holds the re-check an injected resolver's answer gets. Per-language surface:
+`docs/sdk-parity-matrix.md`.
+
 **The endpoint rule is enforced in all three SDKs, and it now refuses a credential
 it used to accept (no wire change; conformance-affecting).** `WellKnownManifest.endpoint`
 has stated its rule as a MUST since the previous revision — the advertised endpoint must

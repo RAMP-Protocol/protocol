@@ -113,7 +113,10 @@ _TOP_TYPE_RE = re.compile(r"^type ([A-Z][A-Za-z0-9_]*)\b")
 _TOP_CONST_RE = re.compile(r"^const ([A-Z][A-Za-z0-9_]*)\b")
 _TOP_VAR_RE = re.compile(r"^var ([A-Z][A-Za-z0-9_]*)\b")
 _GROUP_OPEN_RE = re.compile(r"^(const|var) \($")
-_GROUP_ENTRY_RE = re.compile(r"^\t([A-Z][A-Za-z0-9_]*) ")
+# A group member, which go doc renders tab-indented. The trailing name may stand ALONE:
+# after the first line of an iota run every later constant is written as just its name, so
+# requiring a following token missed all but the first member of every enum-like type.
+_GROUP_ENTRY_RE = re.compile(r"^\t([A-Z][A-Za-z0-9_]*)(?:\s|$)")
 
 
 def _parse_go_doc(text: str) -> set[str]:
@@ -122,6 +125,14 @@ def _parse_go_doc(text: str) -> set[str]:
     Grouped ``const (...)`` / ``var (...)`` blocks are expanded (plain ``go doc``
     truncates them with ``...``). Methods (``func (recv T) M``) are NOT captured — they
     are part of their type, matching the top-level surface.
+
+    A const group is expanded WHEREVER it appears, and that is the part this originally got
+    wrong. ``go doc`` renders the constants of an enum-like type under that type, inside
+    TYPES rather than CONSTANTS, so a parser that only opened groups under CONSTANTS could
+    not see them: 46 exported members across the five packages — every CallErrorKind, every
+    FetchFailure, every AudienceVerdict, both core Modes — were outside the surface this
+    gate compares, and the gate exists precisely to refuse an export that is neither mapped
+    nor excluded.
     """
     syms: set[str] = set()
     section: str | None = None
@@ -132,18 +143,21 @@ def _parse_go_doc(text: str) -> set[str]:
             section = m.group(1)
             in_group = False
             continue
+        # A group is expanded in ANY section — see the docstring. Checked before the
+        # per-section branches, because the group's own members are what matter and the
+        # section only says where go doc chose to render them.
+        if _GROUP_OPEN_RE.match(line):
+            in_group = True
+            continue
+        if in_group:
+            if line == ")":
+                in_group = False
+                continue
+            gm = _GROUP_ENTRY_RE.match(line)
+            if gm:
+                syms.add(gm.group(1))
+            continue
         if section in ("CONSTANTS", "VARIABLES"):
-            if _GROUP_OPEN_RE.match(line):
-                in_group = True
-                continue
-            if in_group:
-                if line == ")":
-                    in_group = False
-                    continue
-                gm = _GROUP_ENTRY_RE.match(line)
-                if gm:
-                    syms.add(gm.group(1))
-                continue
             single = _TOP_CONST_RE.match(line) or _TOP_VAR_RE.match(line)
             if single:
                 syms.add(single.group(1))
@@ -177,11 +191,30 @@ def enumerate_go() -> dict[str, str]:
 
 
 def enumerate_python() -> set[str]:
-    """The public Python surface: ramp_sdk.__all__ + ramp_sdk.resolvers.__all__."""
-    import ramp_sdk
-    from ramp_sdk import resolvers
+    """The public Python surface: the aggregator plus each IO package's own ``__all__``.
 
-    return set(ramp_sdk.__all__) | set(resolvers.__all__)
+    The aggregator flattens the faces a caller reaches for by name, but not every constant
+    the client tier owns — bounds and timeouts belong beside the client that applies them
+    rather than in a namespace of ninety names. Reading each package's ``__all__`` is what
+    keeps those in scope, the same way ``resolvers`` was brought in when it landed.
+
+    ``ramp_sdk.sync`` is read for the same reason: it is a public face a caller imports by
+    name, so a symbol existing only there would be invisible to this gate. Today it adds
+    nothing — the blocking Client and BrokerClient carry the same names as their async
+    twins, which the aggregator already exports — and reading it anyway is what keeps that
+    true, because the alternative is discovering a sync-only export the day it ships. The
+    test below pins the fact rather than the effect.
+    """
+    import ramp_sdk
+    from ramp_sdk import client, resolvers
+    from ramp_sdk import sync as blocking
+
+    return (
+        set(ramp_sdk.__all__)
+        | set(resolvers.__all__)
+        | set(client.__all__)
+        | set(blocking.__all__)
+    )
 
 
 _TS_INLINE_RE = re.compile(
@@ -559,3 +592,24 @@ def test_staleness_bites_on_a_map_entry_with_no_go_symbol() -> None:
         "go_exclusions": {},
     }
     assert any("helpers.GoneType" in f for f in staleness_failures(live, mapped_stale))
+
+
+def test_reading_the_sync_facade_is_load_bearing_or_it_is_not() -> None:
+    """Say which, out loud, instead of leaving a no-op looking like coverage.
+
+    ``ramp_sdk.sync`` deliberately mirrors the async names, so enumerating it adds nothing
+    TODAY. That is the fact worth pinning: if a symbol ever exists only on the blocking
+    face, this assertion fails and whoever added it learns the gate now covers them, rather
+    than the enumeration silently doing nothing forever.
+    """
+    import ramp_sdk
+    from ramp_sdk import client, resolvers
+    from ramp_sdk import sync as blocking
+
+    aggregated = set(ramp_sdk.__all__) | set(resolvers.__all__) | set(client.__all__)
+    sync_only = set(blocking.__all__) - aggregated
+    assert not sync_only, (
+        "the blocking facade now exports names the async face does not: "
+        f"{sorted(sync_only)}. They are in the parity surface — give each one a "
+        "symbol-map entry, and rewrite this test to say so."
+    )

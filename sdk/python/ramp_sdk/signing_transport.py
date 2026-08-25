@@ -16,7 +16,9 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from ramp_sdk.core import sign_offer_acceptance_jcs
 from ramp_sdk.httpsig import sign_request
+from ramp_sdk.pop import sign_agent_binding
 from ramp_sdk.window import Window, clock_window
 
 if TYPE_CHECKING:
@@ -74,6 +76,50 @@ class SigningTransport:
         # seconds, so the @signature-params bytes stay byte-identical to the
         # historical inline ``int(self._now())`` mint.
         self._window = window or clock_window(self._now, self._ttl_sec)
+
+    def sign_offer_acceptance(
+        self,
+        *,
+        offer_sig: str,
+        requester_id: str,
+        requester_domain: str,
+        idempotency_key: str,
+    ) -> tuple[str, str]:
+        """Sign the detached acceptance a purchase carries; return ``(hex_signature, alg)``.
+
+        It signs with the REQUEST signer's key, and there is deliberately no option for a
+        separate acceptance key. The protocol carries one agent identity:
+        ``agent_identity_hash`` is defined as the thumbprint of the agent's request-signing
+        key, an Exchange verifies the detached acceptance against the key registered for
+        the caller its request signature identified, and the delivery URL is bound to that
+        same thumbprint. A second key would be refused at execute, and any URL it did
+        produce could never be fetched — the presented key would not match the binding.
+
+        It lives on the transport so the key stays in one place: the client composes this
+        seam and never handles key material, which is the shape the Go oracle has, where
+        the acceptance is signed by passing the injected Signer itself.
+        """
+        return sign_offer_acceptance_jcs(
+            seed=self._signer_seed,
+            offer_sig=offer_sig,
+            requester_id=requester_id,
+            requester_domain=requester_domain,
+            idempotency_key=idempotency_key,
+        )
+
+    def sign_agent_binding(self, *, url: str, window: Window) -> tuple[str, str, str]:
+        """Mint the proof of possession for one bound delivery GET; return the agent-key
+        header value, the Signature-Input and the Signature.
+
+        The SAME key as the request signer, for the same reason as
+        :meth:`sign_offer_acceptance`: the delivery URL is bound to the thumbprint of the
+        agent's request-signing key, so a proof minted under any other key presents an
+        identity the URL was not issued to.
+        """
+        created, expires = window()
+        return sign_agent_binding(
+            url=url, signer_seed=self._signer_seed, created=created, expires=expires
+        )
 
     def sign_outbound(
         self,

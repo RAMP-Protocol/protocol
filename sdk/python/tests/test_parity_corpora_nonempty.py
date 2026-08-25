@@ -26,7 +26,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from conftest import CONFORMANCE_CORPUS, GO_RESOLVERS_TESTDATA, GO_TESTDATA, load_json
+from conftest import (
+    CONFORMANCE_CORPUS,
+    GO_CONNECT_TESTDATA,
+    GO_RESOLVERS_TESTDATA,
+    GO_TESTDATA,
+    load_json,
+)
 
 if TYPE_CHECKING:
     import pathlib
@@ -59,6 +65,7 @@ _CORPUS_SPECS: list[tuple[pathlib.Path, Callable[[Any], Any], str]] = [
     (GO_TESTDATA / "verify-request-neg-vectors.json", _vectors, "verify-request-neg"),
     (GO_TESTDATA / "wire-canonical-vectors.json", _vectors, "wire-canonical"),
     (GO_TESTDATA / "wire-constants-vectors.json", _vectors, "wire-constants"),
+    (GO_TESTDATA / "wire-null-vectors.json", _vectors, "wire-null"),
     (GO_TESTDATA / "error-detail-vectors.json", _vectors, "error-detail"),
     (GO_TESTDATA / "pop-vectors.json", _whole, "pop"),
     (GO_TESTDATA / "signedurl-vectors.json", _whole, "signedurl"),
@@ -86,6 +93,32 @@ _CORPUS_SPECS: list[tuple[pathlib.Path, Callable[[Any], Any], str]] = [
         GO_RESOLVERS_TESTDATA / "endpoint-vet-vectors.json",
         lambda d: d["endpoint_vet"],
         "endpoint-vet",
+    ),
+    (
+        GO_CONNECT_TESTDATA / "connect-error-vectors.json",
+        _vectors,
+        "connect-error-envelope",
+    ),
+    (
+        GO_CONNECT_TESTDATA / "transport-failure-vectors.json",
+        lambda d: d["transport_failures"],
+        "transport-failure",
+    ),
+    (
+        GO_TESTDATA / "wire-names-vectors.json",
+        lambda d: d["snake_from_json_name"],
+        "wire-names-snake",
+    ),
+    (GO_TESTDATA / "wire-names-vectors.json", lambda d: d["hex_decode"], "wire-names-hex"),
+    (
+        GO_CONNECT_TESTDATA / "client-request-vectors.json",
+        _vectors,
+        "client-request",
+    ),
+    (
+        GO_RESOLVERS_TESTDATA / "content-fetch-vectors.json",
+        _vectors,
+        "content-fetch",
     ),
     (CONFORMANCE_CORPUS / "crossfield.json", _whole, "crossfield"),
 ]

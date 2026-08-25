@@ -6,6 +6,8 @@
   "type": "module",
   "exports": {
     "./wire/schemas": "./wire/schemas.ts",
+    "./wire/base": "./wire/base.ts",
+    "./wire/names": "./wire/names.ts",
     "./vocab/*": "./vocab/*.ts"
   },
   "scripts": {

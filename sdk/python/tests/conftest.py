@@ -26,6 +26,11 @@ GO_TESTDATA = _REPO_ROOT / "sdk" / "go" / "helpers" / "testdata"
 # corpora live in the sdk/go/resolvers L2 package (the I/O layer, extracted from
 # helpers). GO_TESTDATA stays the L1 crypto-vector home; this is its L2 sibling.
 GO_RESOLVERS_TESTDATA = _REPO_ROOT / "sdk" / "go" / "resolvers" / "testdata"
+# The transport tier's corpus home. A corpus lives with the tier that can produce it,
+# and the Connect error envelope can only be captured from a real connect-go handler —
+# which neither helpers nor resolvers may import, since both are Connect-free by
+# contract. Third home, same rules: emitted by Go, replayed by all three.
+GO_CONNECT_TESTDATA = _REPO_ROOT / "sdk" / "go" / "connect" / "testdata"
 CONFORMANCE_CORPUS = _REPO_ROOT / "conformance" / "corpus"
 
 
