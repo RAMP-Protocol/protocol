@@ -701,7 +701,7 @@ The Broker commits to all 49 selected offers in a single batch `TransactionReque
 The Exchange processes all 49 items in a single batch:
 
 1. **Signature verification** — verifies each item's `offer.signature` is its own Ed25519 signature over the reflected Offer (stateless, no stored offers).
-2. **Agent authentication** — verifies the request's RFC 9421 HTTP Message Signature (alg=ed25519, carried in the HTTP headers) against the agent's published public key at `cs.stanford.edu/.well-known/ramp.json` (`role=ROLE_AGENT`).
+2. **Agent authentication** — verifies the request's RFC 9421 HTTP Message Signature (alg=ed25519, carried in the HTTP headers) against the agent's public key published in the WBA directory at `cs.stanford.edu/.well-known/http-message-signatures-directory`.
 3. **Delegation verification** — verifies the JWT chain for the 20 subscription items. Confirms `academic:*` scope covers Elsevier content.
 4. **Balance check** — confirms `litrev-agent@cs.stanford.edu` has sufficient balance ($25.50 for 17 paid items).
 5. **Quota check** — confirms 49 accesses fit within the subscription's remaining quota (76,520).

@@ -4080,12 +4080,13 @@ type Requester struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique requester identifier (e.g., "agent-research-bot-001").
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Domain the requester belongs to — used for public key lookup, so the value
-	// is concatenated into a URL the verifier fetches ({domain}/.well-known/ramp.json,
-	// WellKnownManifest with role=ROLE_AGENT). It carries the same bare-host shape
+	// Domain the requester belongs to. It carries the same bare-host shape
 	// "Request recipient" defines in the file header, for the same structural
 	// reason: a scheme, path or query smuggled in here would choose what gets
-	// fetched, not merely from where.
+	// fetched, not merely from where. It is NOT how a verifier finds this
+	// requester's keys: those live in the WBA directory, and verification resolves
+	// that directory from the COVERED `Signature-Agent` header, never from this
+	// self-asserted value.
 	Domain string `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
 	// What kind of entity is making this request.
 	Type RequesterType `protobuf:"varint,3,opt,name=type,proto3,enum=ramp.v1.RequesterType" json:"type,omitempty"`
@@ -5233,9 +5234,10 @@ type ResourceEntry struct {
 	// CatalogService are verified at push time: the Exchange checks that
 	// the attestation verifier is authorized to push for this provider
 	// (via catalog_contributors in the provider's WellKnownManifest) and validates the
-	// attestation signature against the verifier's public key from their
-	// /.well-known/ramp.json endpoint (WellKnownManifest, role determined
-	// by the verifier's operator).
+	// attestation signature against the verifier's public key from its WBA
+	// directory (the JWK Set at /.well-known/http-message-signatures-directory;
+	// the keyid is the key's RFC 7638 thumbprint). The verifier's ramp.json
+	// carries only its role, determined by the verifier's operator.
 	Attestations []*ResourceAttestation `protobuf:"bytes,12,rep,name=attestations,proto3" json:"attestations,omitempty"`
 	// Publisher-declared licensing terms for this resource.
 	// See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST

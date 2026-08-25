@@ -11,7 +11,7 @@ The [discovery paths](/protocol/discovery-paths/) (RSL, sitemap, well-known, cra
 publisher feed (.jsonl, one resource/line)
   └─► ramp-ingest   parse (typed, strict) · canonicalize tokens · sign (RFC 9421)
         └─► CatalogService.PushResources           ── ALL-OR-NOTHING ──
-              │  trust:    caller key fetched from /.well-known/ramp.json; tenant derived from the publisher domain
+              │  trust:    caller key fetched from the WBA directory (/.well-known/http-message-signatures-directory); tenant derived from the publisher domain
               │  validate: protovalidate CEL owns term shape / presence / coherence; vocab membership is a warning
               └─► catalog (per-tenant, URI-namespaced)  ─►  DiscoverResources ─► signed Offer
 ```

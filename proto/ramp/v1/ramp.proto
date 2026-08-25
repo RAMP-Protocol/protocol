@@ -295,8 +295,12 @@ message ResourceQuery {
   // its own signature over the request as received. A message that TERMINATES
   // at the Broker (DiscoveryRequest) is not forwarding: there the Broker is
   // the final recipient, and the agent signs the Broker's URL.
-  // The Exchange resolves each hop's key (keyid → domain → /.well-known/ramp.json),
-  // verifies every signature, and enforces RequestConstraints.max_hops /
+  // Each signature's keyid is the key's RFC 7638 thumbprint; ramp.json carries
+  // no keys. The request carries ONE covered `Signature-Agent` header — the
+  // agent's WBA directory, forwarded unchanged by every relay — so the Exchange
+  // resolves the agent's key there, and takes each forwarding hop's key from
+  // the key set it is configured with (e.g. Brokers registered with it).
+  // The Exchange verifies every signature, and enforces RequestConstraints.max_hops /
   // WellKnownManifest.max_intermediary_hops by counting them. (Field 5 unused.)
 
   // Maximum time the caller will wait for a response.
@@ -1596,12 +1600,13 @@ message Requester {
   // Unique requester identifier (e.g., "agent-research-bot-001").
   string id = 1;
 
-  // Domain the requester belongs to — used for public key lookup, so the value
-  // is concatenated into a URL the verifier fetches ({domain}/.well-known/ramp.json,
-  // WellKnownManifest with role=ROLE_AGENT). It carries the same bare-host shape
+  // Domain the requester belongs to. It carries the same bare-host shape
   // "Request recipient" defines in the file header, for the same structural
   // reason: a scheme, path or query smuggled in here would choose what gets
-  // fetched, not merely from where.
+  // fetched, not merely from where. It is NOT how a verifier finds this
+  // requester's keys: those live in the WBA directory, and verification resolves
+  // that directory from the COVERED `Signature-Agent` header, never from this
+  // self-asserted value.
   string domain = 2 [
     (buf.validate.field).string = {
       max_len: 260,
@@ -1648,9 +1653,9 @@ message Requester {
   repeated string scopes = 6 [(buf.validate.field).repeated.max_items = 64];
 
   // Request authentication is handled at the HTTP layer via RFC 9421
-  // HTTP Message Signatures (alg=ed25519). The Requester's public key
-  // is published at {domain}/.well-known/ramp.json as a WellKnownManifest
-  // (role=ROLE_AGENT) with inline JWK keys.
+  // HTTP Message Signatures (alg=ed25519). The Requester's public keys are NOT
+  // in ramp.json: they live in the WBA directory (WBAFile), and a verifier
+  // resolves that directory from the COVERED `Signature-Agent` header.
 
   // Optional delegation — present when the requester acts on behalf of
   // another entity (user, organization, upstream agent).
@@ -2195,9 +2200,10 @@ message ResourceEntry {
   // CatalogService are verified at push time: the Exchange checks that
   // the attestation verifier is authorized to push for this provider
   // (via catalog_contributors in the provider's WellKnownManifest) and validates the
-  // attestation signature against the verifier's public key from their
-  // /.well-known/ramp.json endpoint (WellKnownManifest, role determined
-  // by the verifier's operator).
+  // attestation signature against the verifier's public key from its WBA
+  // directory (the JWK Set at /.well-known/http-message-signatures-directory;
+  // the keyid is the key's RFC 7638 thumbprint). The verifier's ramp.json
+  // carries only its role, determined by the verifier's operator.
   repeated ResourceAttestation attestations = 12;
 
   // Publisher-declared licensing terms for this resource.
@@ -2652,7 +2658,8 @@ message RequestConstraints {
 // an Exchange/Broker or a third party) hosts the agent's WellKnownManifest,
 // and the agent sets Requester.domain to that registry host
 // (e.g. "agent-7.registry.example"). The agent generates its own keypair; the
-// registry publishes the public half at {registry}/.well-known/ramp.json. The
+// registry publishes the public half in its WBA directory (the JWK Set at
+// {registry}/.well-known/http-message-signatures-directory). The
 // domain + well-known paradigm is preserved end to end.
 // ============================================================================
 
