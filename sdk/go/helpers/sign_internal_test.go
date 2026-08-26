@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newSignedReq(t *testing.T, body []byte, mutate func(*http.Request)) (*http.Request, ed25519.PublicKey, sigParams) {
@@ -102,6 +103,35 @@ func TestSignRequest_bindsEntitlementTokenWhenPresent(t *testing.T) {
 	base, _ := buildSignatureBase(req, params)
 	if !ed25519.Verify(pub, []byte(base), sig) {
 		t.Error("signature with bound entitlement token does not verify")
+	}
+}
+
+func TestSignRequest_bindsEntitlementTokenSentAsTwoFieldLines(t *testing.T) {
+	// A request may legally carry the entitlement header twice, and an empty line ahead
+	// of a real capability token is ordinary HTTP — no case trick and no unusual client.
+	// A signer resolving the name to its FIRST field line reads back "" and leaves the
+	// header OUT of the covered set, so it emits a request carrying a token its own
+	// signature never committed to. Every other sign-side case here sends one field line,
+	// where the first line and the join agree and neither reading can be told from the other.
+	body := []byte("x")
+	req, pub, _ := newSignedReq(t, body, func(r *http.Request) {
+		r.Header.Add(entitlementHeader, "")
+		r.Header.Add(entitlementHeader, "jwt:capability-token")
+	})
+
+	// What the signer COMMITTED to, read off the emitted header rather than recomputed:
+	// deriving the covered set a second time asks the same function again, so it would
+	// agree with a broken signer. The inner list is what went on the wire.
+	si := req.Header.Get("Signature-Input")
+	if !strings.Contains(si, `"`+entitlementHeaderLower+`"`) {
+		t.Fatalf("entitlement header missing from the emitted covered set: %q", si)
+	}
+
+	// And both halves resolve the name the same way: the join that put the header in the
+	// covered set is the join that rebuilds the base, so a request this signer produced is
+	// one this verifier accepts. Read the first line at either site and they disagree.
+	if _, err := VerifyRequest(req, body, pub, VerifyOptions{Now: time.Unix(1700000100, 0)}); err != nil {
+		t.Fatalf("a request signed over two entitlement field lines must verify: %v", err)
 	}
 }
 

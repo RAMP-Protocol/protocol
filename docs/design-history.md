@@ -991,6 +991,15 @@ in the corpus. Only a POSITIVE case signed over two field lines, whose covered v
 base and every hop fails. The same shape catches a case-sensitive reader, as a chain
 whose bag is spelled the conventional way and which must still verify.
 
+The signer's half cannot have a vector at all. The shared corpus records what a signer
+EMITTED, and a row proving which covered set it CHOSE would still have to be replayed in
+all three — but neither port can bind the entitlement header to begin with: both render a
+fixed five-line base, so a name outside that list never reaches their signature base. A row
+no port can consume is an orphan, and the corpus rule admits none. So this one is gated by a
+Go internal test that signs over two field lines and asserts the emitted inner list names
+the header. That is not a way around the tri-language rule; it is the honest answer for a
+rule only the oracle can express today.
+
 The chain corpus pins one thing more, which only a chain can express: **where** the
 missing header is noticed. The oracle finds it while rebuilding a hop's base, which runs
 after the hop budget and the structural chain are enforced — so an over-budget chain
