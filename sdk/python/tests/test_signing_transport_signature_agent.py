@@ -1,21 +1,23 @@
-"""Sub-task D (TDD red) — SigningTransport.signature_agent binding.
+"""SigningTransport.signature_agent — bound into the base, and carried on the wire.
 
-MUST FAIL TODAY because SigningTransport.__init__ does not accept a
-signature_agent keyword argument.  Constructing it with one raises:
-  TypeError: SigningTransport.__init__() got an unexpected keyword argument
-  'signature_agent'
+Signature-Agent is a COVERED component: the sign seam binds its value into the
+signature base unconditionally, empty included. A verifier rebuilds that base from the
+request it RECEIVED, so binding is only half of it — the header has to arrive, or the
+verifier reads the covered name off signature-input, finds nothing under it, and
+refuses the request.
 
-Test shape mirrors test_client_binding_smoke.py (sign_outbound invocation).
+(a) signature_agent="https://agent.example" → the header carries that directory, and
+    'signature-agent' appears in the Signature-Input covered-component list.
 
-(a) signature_agent="https://agent.example" → 'signature-agent' header
-    present in signed.headers AND 'signature-agent' in the Signature-Input
-    covered-component list.
-    [RED TODAY — TypeError on construction]
+(b) default signature_agent='' → the header is still carried, EMPTY. This is the
+    static-bootstrap case, and it used to assert the opposite: that a caller who
+    configured no directory received no header. That read as a tidy conditional and
+    was the defect written down as intent — a request signed that way was refused by
+    every conformant verifier. The empty value is the point: it is what lets the peer
+    rebuild a base that bound an empty directory.
 
-(b) default signature_agent='' → NO 'signature-agent' header.
-    [RED TODAY — TypeError on construction; once implemented, pins the
-    conditional so a future change cannot accidentally stamp the header when
-    the caller did not configure one]
+The whole emitted set is pinned against the Go oracle by the shared corpus, in
+test_signrequest_parity.py; this file covers the two signature_agent shapes directly.
 """
 
 from __future__ import annotations
@@ -29,8 +31,7 @@ def _make_transport(*, signature_agent: str = "") -> SigningTransport:
         signer_seed=bytes(range(1, 33)),
         keyid="agent.test.v1",
         now=lambda: 1_700_000_000.0,
-        # RED: signature_agent is not yet an accepted parameter.
-        signature_agent=signature_agent,  # type: ignore[call-arg]
+        signature_agent=signature_agent,
     )
 
 
@@ -67,14 +68,20 @@ def test_signature_agent_covered_in_signature_input_when_configured() -> None:
     )
 
 
-# ---- (b) default (empty) signature_agent → header absent ------------------
+# ---- (b) default (empty) signature_agent → header present, EMPTY ----------
 
 
-def test_no_signature_agent_header_when_not_configured() -> None:
-    """Default (signature_agent='') produces NO Signature-Agent header.
+def test_signature_agent_header_is_carried_empty_when_not_configured() -> None:
+    """Default (signature_agent='') still carries Signature-Agent, with an empty value.
 
-    This test pins the conditional: a caller that does not configure
-    signature_agent must not receive the header on the wire.
+    The static-bootstrap case. The covered set binds the empty directory, so the header
+    has to arrive for the verifier to rebuild the base — an absent one is refused, not
+    tolerated. Measured: a request signed without it is answered
+    ``header "signature-agent" missing from request``.
+
+    Authorization is asserted beside it because the two are one mechanism: both are
+    covered unconditionally, and fixing only the first leaves the second failing the
+    identical way.
     """
     transport = _make_transport(signature_agent="")
     signed = transport.sign_outbound(
@@ -83,8 +90,10 @@ def test_no_signature_agent_header_when_not_configured() -> None:
         body=b'{"query":"x"}',
         authorization="",
     )
-    header_keys_lower = {k.lower() for k in signed.headers}
-    assert "signature-agent" not in header_keys_lower, (
-        f"Unexpected 'Signature-Agent' header with empty signature_agent; "
-        f"headers: {list(signed.headers.keys())}"
+    emitted = {k.lower(): v for k, v in signed.headers.items()}
+    assert emitted.get("signature-agent") == "", (
+        f"empty signature_agent must still be CARRIED, not dropped; headers: {emitted}"
+    )
+    assert emitted.get("authorization") == "", (
+        f"empty authorization must still be CARRIED, not dropped; headers: {emitted}"
     )

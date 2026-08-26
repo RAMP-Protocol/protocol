@@ -26,9 +26,11 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/hex"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -89,6 +91,17 @@ type multisigChainVector struct {
 	ExpectedVerified bool     `json:"expected_verified"`
 	ExpectedKeyIDs   []string `json:"expected_keyids"`
 	ExpectedReason   string   `json:"expected_reason"`
+	// OmitHeaders names the header fields the request does NOT carry, deleted after
+	// the base ones are set. ABSENT is not EMPTY — see the single-sig corpus's field
+	// of the same name. On a chain it also pins the REJECT PRECEDENCE: the missing
+	// header is found while a hop's base is rebuilt, which happens after the hop
+	// budget and the structural chain are enforced, so a chain that is over budget
+	// or broken keeps ITS reason rather than reporting a signature failure.
+	OmitHeaders []string `json:"omit_headers,omitempty"`
+	// ExtraHeaders are field lines ADDED after the base ones — see the single-sig
+	// corpus's field of the same name for why a second line under a covered name is
+	// joined rather than allowed to override.
+	ExtraHeaders map[string]string `json:"extra_headers,omitempty"`
 }
 
 // hopSpec names a chain hop's keyID and its deterministic seed byte.
@@ -102,13 +115,41 @@ type hopSpec struct {
 // (sig2, sig3, …), returning the signed request and the per-hop identities.
 func signMultisigChain(t *testing.T, body []byte, hops []hopSpec) (*http.Request, []multisigHop) {
 	t.Helper()
+	return signMultisigChainWith(t, body, hops, msAuth, msSigAgent)
+}
+
+// signMultisigChainWith is signMultisigChain over an explicit covered-header pair,
+// so a chain can be signed with the EMPTY values the static-bootstrap path binds.
+func signMultisigChainWith(
+	t *testing.T, body []byte, hops []hopSpec, authorization, signatureAgent string,
+) (*http.Request, []multisigHop) {
+	t.Helper()
+	return signMultisigChainOverLines(t, body, hops, []string{authorization}, signatureAgent)
+}
+
+// signMultisigChainOverLines signs a chain whose Authorization arrives as SEVERAL
+// field lines. The covered value is then what the join produces, so the emitted
+// chain verifies ONLY against a reader that joins: resolving the name to its first
+// or its last line reconstructs a different base and every hop fails. That is the
+// distinction no negative vector can draw — a first-match and a last-match reader
+// both reject a request whose covered value was tampered with, and only a positive
+// case signed over two lines separates either of them from the join.
+func signMultisigChainOverLines(
+	t *testing.T, body []byte, hops []hopSpec, authorizationLines []string, signatureAgent string,
+) (*http.Request, []multisigHop) {
+	t.Helper()
 	ctx := context.Background()
 	req, err := http.NewRequest(msMethod, msURL, nil)
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
-	req.Header.Set("Authorization", msAuth)
-	req.Header.Set(SignatureAgentHeader, msSigAgent)
+	// Add, not Set: each entry is its own field line under the one covered name.
+	// bindAuthorization only fills in an EMPTY Authorization, so lines supplied here
+	// survive into the covered value untouched.
+	for _, line := range authorizationLines {
+		req.Header.Add("Authorization", line)
+	}
+	req.Header.Set(SignatureAgentHeader, signatureAgent)
 	opts := SignOptions{Created: msCreated, Expires: msExpires}
 	out := make([]multisigHop, 0, len(hops))
 	for i, h := range hops {
@@ -138,13 +179,23 @@ func signMultisigChain(t *testing.T, body []byte, hops []hopSpec) (*http.Request
 
 // mkChainVector templates a vector from a signed request's wire bytes + hops.
 func mkChainVector(name string, req *http.Request, hops []multisigHop, body []byte, maxSig int) multisigChainVector {
+	return mkChainVectorWith(name, req, hops, body, maxSig, msAuth, msSigAgent)
+}
+
+// mkChainVectorWith is mkChainVector recording an explicit covered-header pair —
+// the values the chain was actually signed over, which for the empty-bound cases
+// are not the package defaults.
+func mkChainVectorWith(
+	name string, req *http.Request, hops []multisigHop, body []byte, maxSig int,
+	authorization, signatureAgent string,
+) multisigChainVector {
 	return multisigChainVector{
 		Name:           name,
 		Method:         msMethod,
 		URL:            msURL,
 		BodyHex:        hex.EncodeToString(body),
-		Authorization:  msAuth,
-		SignatureAgent: msSigAgent,
+		Authorization:  authorization,
+		SignatureAgent: signatureAgent,
 		Created:        msCreated,
 		Expires:        msExpires,
 		ContentDigest:  req.Header.Get("Content-Digest"),
@@ -158,7 +209,9 @@ func mkChainVector(name string, req *http.Request, hops []multisigHop, body []by
 // buildMultisigChainVectors emits the forwarding-chain corpus: a positive 2-hop
 // chain, the hop-budget overflow (3 hops under MaxSignatures=2), the three
 // broken-chain structural rejects (reordered / stripped-middle / missing-link),
-// and the tampered-predecessor crypto reject. Every outcome/reason is DERIVED
+// the tampered-predecessor crypto reject, and three chains missing a covered
+// header — which pin both that such a chain is refused and where that is noticed
+// relative to the budget and chain gates. Every outcome/reason is DERIVED
 // from the REAL VerifyMultisigRequestResolved via multisigOracleReason — never
 // hand-authored.
 func buildMultisigChainVectors(t *testing.T) []multisigChainVector {
@@ -201,7 +254,79 @@ func buildMultisigChainVectors(t *testing.T) []multisigChainVector {
 	tampered := mkChainVector("tampered_predecessor", reqT, hopsT, body, 0)
 	tampered.Signature = msCorruptFirstMember(tampered.Signature)
 
-	out := []multisigChainVector{positive, hopBudget, reordered, stripped, missingLink, tampered}
+	// The same three chains again, each missing a header its signatures cover. Two
+	// claims at once. First, a chain whose covered header never arrived is refused —
+	// the base is rebuilt from the request that ARRIVED, and a covered name with no
+	// field line under it cannot be reconstructed. Second, and this is what only a
+	// chain can pin: WHERE that is noticed. It is noticed while a hop's base is
+	// rebuilt, which is after the hop budget and the structural chain are enforced,
+	// so an over-budget or reordered chain keeps ITS reason and only the otherwise
+	// well-formed one reports a signature failure. A port that tests for the header
+	// before those two gates answers "signature" to all three and diverges here on
+	// two of them.
+	// Signed with EMPTY covered values, and that is load-bearing rather than
+	// incidental. Omit a header whose signer bound a NON-empty value and the request
+	// is refused either way — a port defaulting the missing header to "" still
+	// reconstructs the wrong value, so the case cannot tell "refused because absent"
+	// from "refused because the value differs" and gates nothing. Bound EMPTY,
+	// defaulting to "" reproduces exactly what was signed, so only a port that
+	// distinguishes absent from empty refuses. It is also the static-bootstrap shape
+	// the empty covered header exists to carry.
+	reqE2, hopsE2 := signMultisigChainWith(t, body, []hopSpec{agent, brokerA}, "", "")
+	absentTwoHop := mkChainVectorWith("absent_authorization_two_hop", reqE2, hopsE2, body, 0, "", "")
+	absentTwoHop.OmitHeaders = []string{"Authorization"}
+
+	reqE3, hopsE3 := signMultisigChainWith(t, body, []hopSpec{agent, brokerA, brokerB}, "", "")
+	absentOverBudget := mkChainVectorWith("absent_authorization_over_budget", reqE3, hopsE3, body, 2, "", "")
+	absentOverBudget.OmitHeaders = []string{"Authorization"}
+
+	reqER, hopsER := signMultisigChainWith(t, body, []hopSpec{agent, brokerA}, "", "")
+	absentReordered := mkChainVectorWith("absent_signature_agent_reordered", reqER, hopsER, body, 0, "", "")
+	absentReordered.SignatureInput = msSwapTwoMembers(absentReordered.SignatureInput)
+	absentReordered.Signature = msSwapTwoMembers(absentReordered.Signature)
+	absentReordered.OmitHeaders = []string{SignatureAgentHeader}
+
+	// Three chains that exercise how a covered header is READ. Until these existed the
+	// whole fold could be stripped out of either port's multisig face and every test
+	// stayed green: nothing in this corpus ever put two spellings of one name in the
+	// bag, so a plain property lookup answered identically.
+
+	// A second Authorization field line beside the signed one, spelled in another case.
+	// Both lines belong to the one covered name and join before a hop's base is rebuilt,
+	// so the covered value changes and the chain is refused. A reader resolving the name
+	// to its first line reads back the signed empty value and accepts the token beside it.
+	reqD, hopsD := signMultisigChainWith(t, body, []hopSpec{agent, brokerA}, "", "")
+	dupTwoHop := mkChainVectorWith("duplicate_authorization_two_hop", reqD, hopsD, body, 0, "", "")
+	dupTwoHop.ExtraHeaders = map[string]string{"Authorization": "Bearer unsigned-token"}
+
+	// The same chain reached through a header bag spelled the CONVENTIONAL way. Omitting
+	// the lowercase keys and re-adding the identical values canonically is a pure case
+	// change, so the oracle still verifies it — a port matching names case-sensitively
+	// finds nothing under either covered name and refuses traffic Go accepts. Positive,
+	// because that failure is a refusal and only a positive case can catch it.
+	reqC, hopsC := signMultisigChainWith(t, body, []hopSpec{agent, brokerA}, msAuth, msSigAgent)
+	canonCase := mkChainVectorWith("canonical_case_two_hop", reqC, hopsC, body, 0, msAuth, msSigAgent)
+	canonCase.OmitHeaders = []string{"Authorization", SignatureAgentHeader}
+	canonCase.ExtraHeaders = map[string]string{
+		"Authorization":      msAuth,
+		SignatureAgentHeader: msSigAgent,
+	}
+
+	// A chain legitimately SIGNED over two Authorization field lines: the covered value
+	// is the join, so only a reader that joins reconstructs the base. This is the one
+	// shape that separates the join from a LAST-match reader — a last-match reader
+	// rejects every negative duplicate case just as the join does, and passes them all.
+	reqJ, hopsJ := signMultisigChainOverLines(
+		t, body, []hopSpec{agent, brokerA}, []string{"Bearer first-line", "Bearer second-line"}, msSigAgent)
+	dupBound := mkChainVectorWith(
+		"duplicate_bound_two_hop", reqJ, hopsJ, body, 0, "Bearer first-line", msSigAgent)
+	dupBound.ExtraHeaders = map[string]string{"Authorization": "Bearer second-line"}
+
+	out := []multisigChainVector{
+		positive, hopBudget, reordered, stripped, missingLink, tampered,
+		absentTwoHop, absentOverBudget, absentReordered,
+		dupTwoHop, canonCase, dupBound,
+	}
 	for i := range out {
 		keyids, reason := multisigOracleReason(t, out[i])
 		out[i].ExpectedKeyIDs = keyids
@@ -249,6 +374,14 @@ func multisigOracleReason(t *testing.T, v multisigChainVector) (keyids []string,
 	req.Header.Set(SignatureAgentHeader, v.SignatureAgent)
 	req.Header.Set("Signature-Input", v.SignatureInput)
 	req.Header.Set("Signature", v.Signature)
+	for _, name := range v.OmitHeaders {
+		req.Header.Del(name)
+	}
+	// Add, not Set: an extra line lands BESIDE the base one under the same covered
+	// name. Sorted so the emitted vector is deterministic — map iteration is not.
+	for _, name := range slices.Sorted(maps.Keys(v.ExtraHeaders)) {
+		req.Header.Add(name, v.ExtraHeaders[name])
+	}
 
 	keys := make(map[string]ed25519.PublicKey, len(v.Hops))
 	for _, h := range v.Hops {

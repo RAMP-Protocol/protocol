@@ -83,6 +83,12 @@ The `Requester` message carries identity semantics only — it has **no** signat
 
 The signature MUST cover five components: `@method`, `@target-uri`, `content-digest`, `authorization`, and `signature-agent`. A signature omitting any of them is rejected. `authorization` is covered even when empty, so a token cannot be slipped under an existing signature; `signature-agent` is covered so the directory the key is looked up in cannot be repointed.
 
+Covering a header is not the same as sending it, and both are required. A verifier rebuilds the signature base from the request it **received**, so a covered name the request does not carry cannot be reconstructed at all:
+
+- A sender MUST transmit every covered header, **including those whose value is empty**. `Authorization:` with an empty value and `Signature-Agent:` with an empty value are the ordinary shape of a request from an agent holding no bearer token and no key directory, and both field lines MUST be present.
+- A verifier MUST reject a request that **omits** a covered header, and MUST accept one that carries it **empty**. Treating a missing header as empty invents a value the sender may never have bound, and accepts a request whose base cannot be reconstructed.
+- Header field names are case-insensitive, and repeated field lines under one name are joined with `", "` before the base is rebuilt (RFC 9421 §2.1). A second field line placed beside a covered one therefore **changes** that covered value and invalidates the signature — it does not replace or override it. This is the mechanism that stops a token being slipped under an existing signature, and it means a verifier MUST NOT resolve a covered header by picking one field line among several.
+
 The Exchange verifies it by:
 
 1. Reading the `keyid` and covered components from the request's `Signature-Input` header

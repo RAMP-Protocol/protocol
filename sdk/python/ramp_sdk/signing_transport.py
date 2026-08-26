@@ -43,8 +43,10 @@ class SigningTransport:
     """Signs outbound requests via the core sign seam (RFC 9421 over exact body bytes).
 
     The signer seed + keyid are injected; the clock is injectable for determinism.
-    ``sign_outbound`` returns the request plus the Content-Digest / Signature-Input /
-    Signature headers — the seam MCP wires into its httpx transport.
+    ``sign_outbound`` returns the request plus EVERY covered header at the value that
+    entered the signature base — Content-Digest / Signature-Input / Signature, and
+    Authorization / Signature-Agent whose values may be empty. The seam MCP wires into
+    its httpx transport.
     """
 
     def __init__(
@@ -60,11 +62,16 @@ class SigningTransport:
         """``signature_agent`` is the signer's own WBA directory URL.
 
         Signature-Agent is a COVERED wire component: the sign seam always binds
-        its value (empty included) into the signature base, and when non-empty
-        the header itself is attached so the verifier resolves the signer's
-        keys against that directory. Always-stamp-when-configured is the client
-        shape — Python has no relay path, so the Go relay's set-if-absent guard
-        (core.WithSignatureAgent) has no analogue here.
+        its value (empty included) into the signature base, and the header is
+        always attached carrying that same value — empty included. Binding it
+        without sending it is not binding it, because the verifier rebuilds the
+        base from the request it received and refuses one whose covered name has
+        nothing on the wire under it. When non-empty it is also how the verifier
+        resolves the signer's keys against that directory.
+
+        Always-stamp is the client shape — Python has no relay path, so the Go
+        relay's set-if-absent guard (core.WithSignatureAgent) has no analogue
+        here.
         """
         self._signer_seed = signer_seed
         self._keyid = keyid
@@ -131,8 +138,10 @@ class SigningTransport:
     ) -> SignedOutbound:
         """Sign an outbound request; return it with the RFC 9421 headers attached.
 
-        Authorization is always bound — pass an empty string to pin its absence
-        (mirror the L1 sign_request contract).
+        Authorization is always bound — pass an empty string when the caller holds no
+        token, which BINDS that emptiness (mirrors the L1 sign_request contract). The
+        header is still emitted and still sent; an absent header is a different thing
+        entirely and a verifier refuses it.
         """
         created, expires = self._window()
         signed = sign_request(
@@ -146,13 +155,23 @@ class SigningTransport:
             expires=expires,
             signature_agent=self._signature_agent,
         )
-        headers = {
-            "content-digest": signed.content_digest,
-            "signature-input": signed.signature_input,
-            "signature": signed.signature,
-        }
-        # The covered set binds signature-agent unconditionally (empty included);
-        # the header itself travels only when a directory is configured.
-        if self._signature_agent:
-            headers["signature-agent"] = self._signature_agent
-        return SignedOutbound(method=method, url=url, body=body, headers=headers)
+        # EVERY covered header, at exactly the value that entered the signature base —
+        # empty values included. See docs/design-history.md,
+        # "A covered header the peer never receives is not bound", for why binding one
+        # without sending it is not binding it.
+        #
+        # Taken straight off ``signed``, never re-read from the arguments: the primitive
+        # echoes what it bound, so there is one place the emitted value can come from and
+        # no way for the two to drift.
+        return SignedOutbound(
+            method=method,
+            url=url,
+            body=body,
+            headers={
+                "content-digest": signed.content_digest,
+                "signature-input": signed.signature_input,
+                "signature": signed.signature,
+                "authorization": signed.authorization,
+                "signature-agent": signed.signature_agent,
+            },
+        )

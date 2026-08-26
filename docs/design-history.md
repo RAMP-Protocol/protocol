@@ -875,6 +875,138 @@ autolink pass could not see into. All of it is deleted. `protoc-gen-rampvocab` a
 `gen/go/vocab` stay — they are a real Go-SDK surface the conformance suite uses
 (`pricingunits.IsRegistered`).
 
+## A covered header the peer never receives is not bound
+
+The RFC 9421 covered set is fixed and unconditional: `@method`, `@target-uri`,
+`content-digest`, `authorization` and `signature-agent` are bound into the signature base
+whether or not they carry a value. Binding the empty ones is deliberate — it stops a later
+injection piggy-backing an existing signature.
+
+What that implies about the WIRE took a working system to notice. A verifier rebuilds the
+base from the request it received, so it reads the covered names off `signature-input` and
+requires each to be present; the Go verifier reads them with `Values` rather than `Get`
+precisely so an explicitly-empty header is distinguishable from an absent one, and the Go
+signer sets the empty header so it reaches the wire. Both ports bound the same two values
+and attached neither. Every signed RPC was refused with `header "authorization" missing
+from request`, and fixing only that one surfaced the identical failure on
+`signature-agent` — one mechanism with two instances.
+
+The rule is stated now, in one sentence both ports implement: **a signing face emits every
+covered header at exactly the value that entered the signature base, empty values
+included.** Emitting the signed value rather than defaulting to empty is what makes it safe
+to merge over a caller's own headers — the value is already in the base, so restating it
+cannot overwrite a real `Authorization` with an empty one.
+
+The durable part is not the dropped header; it is what the gates were measuring. Every
+corpus pinned what was **signed** — the base string, the parameters, the resulting
+signature — and nothing pinned what was **sent**. All three languages agreed byte-for-byte
+on the signature while two of them could not complete a single call, so every parity gate
+passed throughout. This is the same shape as the corpus rows that named a file and read
+none of its columns: a gate that measures the half of the claim that was never in doubt.
+
+`sign-request-vectors.json` gained an `emitted_headers` column for it — what the signer
+puts on a bare request, captured from the oracle and compared by all three as a whole map
+rather than key by key. Membership assertions are what let two missing headers ship
+invisibly. The corpus already carried both input shapes, including the no-directory signer
+with an empty `signature_agent`, so the static-bootstrap instance is pinned by the same
+column rather than by a second case someone has to remember, and an append/relay case
+extends it to the forwarding leg.
+
+**Then the rule was implemented with the wrong key, and the same blind spot caught it a
+second time.** Header names are case-insensitive on the wire; a JavaScript object's keys
+are not. The TypeScript signer emitted `Signature-Agent` from the exported constant while
+reading incoming headers case-insensitively, so a caller who spelled it `signature-agent`
+— which is every Node server, every WHATWG `Headers`, and HTTP/2 by definition — had their
+key survive the merge BESIDE the signed one. Two field lines reached the wire under one
+covered name; the verifier joins repeated values with `", "` before rebuilding the base, so
+a correct signature was refused. The relay flow that worked before the fix stopped working
+after it.
+
+Two things follow, and both are about gates rather than headers. **A face that reads one
+way and writes another will eventually disagree with itself** — the fix is the lowercase
+key plus a merge that drops any incoming name colliding case-insensitively with a signed
+one, so the write side agrees with `getHeader`. And **a gate must be able to express the
+failure it exists to catch**: `emitted_headers` was a map of single strings built with
+`Header.Get`, which cannot represent a duplicate at all, while the verifier it stands in for
+reads `Values`. It records a list per name now. Every test in the repo had also passed the
+one header spelling that cannot collide, so the whole suite was green over a broken relay —
+the same shape as a corpus row that names a file and reads none of its columns.
+
+**The rule binds the verify half too.** Both ports read the covered headers with a
+default-to-empty (`headers.get("authorization", "")`), which collapses *absent* into
+*empty* and accepts exactly the request Go refuses — the oracle reads them with `Values`
+rather than `Get` precisely to tell the two apart. Defaulting there invents a value the
+signer may never have bound. All four server-verify faces now refuse an absent covered
+header and still accept a present-and-empty one, which is the distinction the empty
+header exists to carry.
+
+**Reading a header case-sensitively is the same defect one tier down.** The absent-header
+guard first landed on three of the four faces, and it landed as a plain key test
+(`"authorization" not in headers`). Both halves of that were wrong in the same way the
+emit had been. A header bag whose keys are strings can hold `Authorization` and
+`authorization` at once, where the wire has one field name spelled two ways — so the peer
+DID send the header, under a spelling the reader never looked for. A guard that misses it
+reports absent; a reader that misses it substitutes empty and rebuilds a base that
+matches, accepting an unsigned bearer token sitting beside the signed empty one. That is
+precisely the injection the covered set exists to prevent, and it was open on every face
+before the fold landed.
+
+The fix is a fold **and a join**, never a fold and a pick. Measured on the oracle, a
+request carrying `authorization: ""` and `Authorization: Bearer …` resolves to
+`", Bearer …"` — `http.Header.Values` returns both and RFC 9421 joins them with `", "`
+before the base is rebuilt, so the covered value CHANGES and the signature fails. A port
+that folds the case but returns the first match reads back the signer's empty value and
+accepts the token next to it: the fold makes the bug harder to see without removing it.
+Absent stays a distinct answer from either — zero field lines, not an empty one.
+
+Both properties are pinned by Go-derived corpus rows rather than by prose, and the rows
+are signed with EMPTY covered values on purpose. Omit a header whose signer bound a
+non-empty value and the request is refused either way — a port that defaults the missing
+header to `""` still reconstructs the wrong value, so the case cannot tell *refused
+because absent* from *refused because the value differs*, and gates nothing. The first
+attempt at these vectors made exactly that mistake and passed with the guard deleted.
+
+**The last read to learn the rule was the oracle's own, and it was the most exposed.**
+The entitlement-coverage gate — present-but-uncovered token, refuse — asked `Get`, the
+first field line. Everything above applies to it, with one difference that inverts the
+usual ranking: the ports need a header bag holding two differently-cased keys, which no
+mainstream adapter produces, while Go needs only the header sent twice. That is ordinary
+HTTP and no case trick at all. Measured on the oracle: `Add("")` then `Add("STOLEN")`
+gives `Get()=""`, the gate never runs, and a capability token no signature committed to
+is accepted. The signer half had the same shadow — `coveredFor` resolving the name with
+`Get` leaves it UNCOVERED whenever an empty line precedes a real one, binding a value it
+never committed to — so both sites moved, not just the gate.
+
+Two lessons worth separating. A presence test is not exempt from how a header is
+defined: "does the request carry this name" is answered by all of its field lines, not
+by whichever one a map hands back first. And *parity with the oracle* is a rule about
+where the answer comes from, not a licence to copy a hole — the port that had already
+been fixed was the one diverging, and it was diverging by being right.
+
+A negative vector cannot finish this. It separates a first-match reader from the join,
+because both a last-match reader and the join refuse a tampered covered value — so a
+port could resolve a covered name to its LAST field line and pass every rejection case
+in the corpus. Only a POSITIVE case signed over two field lines, whose covered value
+*is* the join, tells them apart: first-match and last-match each reconstruct a different
+base and every hop fails. The same shape catches a case-sensitive reader, as a chain
+whose bag is spelled the conventional way and which must still verify.
+
+The signer's half cannot have a vector at all. The shared corpus records what a signer
+EMITTED, and a row proving which covered set it CHOSE would still have to be replayed in
+all three — but neither port can bind the entitlement header to begin with: both render a
+fixed five-line base, so a name outside that list never reaches their signature base. A row
+no port can consume is an orphan, and the corpus rule admits none. So this one is gated by a
+Go internal test that signs over two field lines and asserts the emitted inner list names
+the header. That is not a way around the tri-language rule; it is the honest answer for a
+rule only the oracle can express today.
+
+The chain corpus pins one thing more, which only a chain can express: **where** the
+missing header is noticed. The oracle finds it while rebuilding a hop's base, which runs
+after the hop budget and the structural chain are enforced — so an over-budget chain
+still answers `hop_budget` and a reordered one still answers `broken_chain`, even with a
+covered header removed. A port that tests for the header before those gates answers
+`signature` to all three and silently diverges on two.
+
 ## SDK layering: a dial-free trust core, a vetted-client I/O tier
 
 The three SDKs (`sdk/go`, `sdk/ts`, `sdk/python`) are split into a **pure trust

@@ -1,45 +1,41 @@
 // sdk/ts SigningTransport / signOutbound outbound auto-sign parity + behavior.
 //
-// GAP: Go core.NewSigningTransport + SigningOption and Python SigningTransport /
-// SignedOutbound exist; TS has only the low-level signRequest / appendSignature
-// primitives — no outbound auto-sign wrapper. This suite is the TDD-red contract
-// for the NEW sdk/ts/core/signing-transport.ts module:
+// The TS sibling of Go core.NewSigningTransport + SigningOption and Python
+// SigningTransport / SignedOutbound:
 //   - signOutbound({ privKey, keyid, method, url, body, authorization,
 //     signatureAgent, window, appendOnly, prior? }) -> { headers, body }
 //     (transport-neutral header core, Python SignedOutbound sibling);
 //   - createSigningTransport(send, opts) -> a WHATWG-fetch-shaped send that buffers
-//     the body, stamps Content-Digest / Signature-Input / Signature via signOutbound,
-//     and forwards the SAME body bytes to the wrapped send.
+//     the body, stamps the RFC 9421 headers via signOutbound, and forwards the SAME
+//     body bytes to the wrapped send.
 //
-// Core Invariant (agentic-content-access): the transport is a pure
-// ORCHESTRATION of the already-parity-locked signRequest / appendSignature +
-// clockWindow / monotonicWindow primitives — it stamps RFC 9421 headers
-// byte-identical to the shared Go/Python oracle, forwards the request body
-// UNMODIFIED, and adds NO new crypto and NO new signature-base rendering.
+// Core Invariant (agentic-content-access): the transport is a pure ORCHESTRATION of
+// the already-parity-locked signRequest / appendSignature + clockWindow /
+// monotonicWindow primitives — it stamps RFC 9421 headers byte-identical to the
+// shared Go/Python oracle, forwards the request body UNMODIFIED, and adds NO new
+// crypto and NO new signature-base rendering.
 //
-// Proof strategy (corpus-first, no new emitter): replay the SAME shared Go
-// vectors the primitive suites already verify against
-// (sdk/go/helpers/testdata/sign-request-vectors.json for the fresh-sig path,
-// multisig-chain-vectors.json for the append/relay path) THROUGH the transport
-// via a capturing fake send, and assert the stamped headers equal the vector
-// fields byte-for-byte. Each vector injects a FIXED
-// window ()=>[v.created, v.expires] — the DEFAULT clockWindow(now) drifts
-// created/expires and the base would not reproduce; the windowless
-// sign-request.parity.test.ts harness is adapted, NOT copied verbatim.
-//
-// RED until sdk/ts/core/signing-transport.ts exists: the import below resolves to
-// a nonexistent module, so vitest fails at collection — the intended TDD-red
-// signal for this additive-gap ticket (same convention as sign-request.parity /
-// multisig-chain.parity, which are RED-on-import until their module lands).
+// Proof strategy (corpus-first, no new emitter): replay the SAME shared Go vectors
+// the primitive suites already verify against
+// (sdk/go/helpers/testdata/sign-request-vectors.json for the fresh-sig and
+// append/relay paths, multisig-chain-vectors.json for the chain) THROUGH the
+// transport via a capturing fake send, and assert the stamped headers equal the
+// vector fields byte-for-byte. Each vector injects a FIXED window
+// ()=>[v.created, v.expires] — the DEFAULT clockWindow(now) drifts created/expires
+// and the base would not reproduce; the windowless sign-request.parity.test.ts
+// harness is adapted, NOT copied verbatim.
 
 import { describe, it, expect } from "vitest";
-// RED: sdk/ts/core/signing-transport.ts does not exist yet (TDD red step).
 import { createSigningTransport, signOutbound } from "../core/signing-transport.ts";
 // The append/relay path reuses the already-landed primitives to arrange the
 // upstream sig1 state the relay transport chains onto.
 import { signRequest } from "../core/sign-request.ts";
 // Use the EXPORTED header constant (do NOT string-literal "signature-agent").
 import { SignatureAgentHeader } from "../src/wire.ts";
+// The signer EMITS the lowercase spelling, so a merge over a caller's own headers
+// replaces rather than duplicates — two field lines under one covered name break the
+// rebuilt signature base. Derived from the exported constant, never string-literalled.
+const SignatureAgentEmitted = SignatureAgentHeader.toLowerCase();
 import signRequestVectors from "../../go/helpers/testdata/sign-request-vectors.json";
 import multisigVectors from "../../go/helpers/testdata/multisig-chain-vectors.json";
 
@@ -61,7 +57,19 @@ type SignRequestVector = {
   content_digest: string;
   signature_input: string;
   signature: string;
+  /** What the SIGNER puts on a bare request — what is SENT, as against every other
+   * field here, which records what was SIGNED. A LIST per name because that is what
+   * the verifier reads: it joins repeated values with ", " before rebuilding the base. */
+  emitted_headers: Record<string, string[]>;
 };
+
+/** This face returns one value per name and cannot hold a duplicate, so each wraps to a
+ * one-element list. The keys are compared VERBATIM: normalizing the casing here is what
+ * previously hid a signed key spelled differently from the one a caller supplies, which
+ * puts two field lines on the wire and breaks the rebuilt base. */
+function asEmitted(h: Record<string, string>): Record<string, string[]> {
+  return Object.fromEntries(Object.entries(h).map(([k, v]) => [k, [v]]));
+}
 
 type MultisigHop = { keyid: string; pubkey_b64url: string; seed_hex: string };
 type MultisigChainVector = {
@@ -188,7 +196,11 @@ describe("createSigningTransport replays the shared Go sign-request vectors byte
       const body = hexToBytes(v.body_hex);
       await signing(v.url, {
         method: v.method,
-        headers: { authorization: v.authorization },
+        // Spelled the CONVENTIONAL HTTP way, deliberately differing in case from the
+        // lowercase key the signer emits. Every test here used to pass the one spelling
+        // that cannot collide, which is why a signed key landing BESIDE a caller's rather
+        // than replacing it went unseen through a whole green suite.
+        headers: { Authorization: v.authorization },
         body,
       });
 
@@ -200,6 +212,16 @@ describe("createSigningTransport replays the shared Go sign-request vectors byte
       expect(h["content-digest"]).toBe(v.content_digest);
       expect(h["signature-input"]).toBe(v.signature_input);
       expect(h.signature).toBe(v.signature);
+
+      // (c) ONE FIELD LINE PER COVERED NAME. Header names are case-insensitive on the
+      // wire and JS object keys are not, so a caller's spelling surviving beside the
+      // signed one puts the name on the wire twice; the verifier joins repeated values
+      // with ", " before rebuilding the base, and a correct signature is then refused.
+      // Asserted over the WHOLE forwarded map — the emitted set is what the corpus
+      // records, and the caller's differently-cased key must be gone from it.
+      const names = Object.keys(h).map((k) => k.toLowerCase());
+      expect(new Set(names).size, `duplicated header names: ${names}`).toBe(names.length);
+      expect(asEmitted(h)).toEqual(v.emitted_headers);
 
       // (b) BODY-INTEGRITY (the key regression guard): the FORWARDED body bytes
       // must equal the input body. A wrapper that buffers-for-digest but forwards
@@ -248,6 +270,21 @@ describe("signOutbound returns the RFC 9421 header set byte-identical to the Go 
       expect(out.headers["content-digest"]).toBe(v.content_digest);
       expect(out.headers["signature-input"]).toBe(v.signature_input);
       expect(out.headers.signature).toBe(v.signature);
+
+      // The WHOLE emitted set, compared as a map rather than key by key.
+      //
+      // Every assertion above says what was SIGNED; emitted_headers says what is
+      // SENT, and the two are different claims. A verifier rebuilds the base from
+      // the request it received, so a covered value bound but never sent is not
+      // bound: it reads the covered names off signature-input, finds nothing under
+      // one of them, and refuses. This port bound authorization and signature-agent
+      // and attached neither, so it matched the oracle byte-for-byte on all three
+      // fields above and could not complete a single signed call.
+      //
+      // Membership assertions are what let that ship. A map comparison is what
+      // notices the next header to go missing.
+      expect(asEmitted(out.headers)).toEqual(v.emitted_headers);
+
       // Transport-neutral core forwards the body untouched.
       expect(bytesEqual(out.body, body)).toBe(true);
     });
@@ -316,7 +353,7 @@ describe("createSigningTransport append/relay path mirrors the Go multisig chain
     const h = fwd.init.headers ?? {};
 
     // Set-if-absent preserves the upstream agent directory (NOT the broker's).
-    expect(h[SignatureAgentHeader]).toBe(v.signature_agent);
+    expect(h[SignatureAgentEmitted]).toBe(v.signature_agent);
     // The appended sig2 reproduces the Go-emitted 2-hop chain byte-for-byte.
     expect(h["signature-input"]).toBe(v.signature_input);
     expect(h.signature).toBe(v.signature);
@@ -424,7 +461,7 @@ describe("createSigningTransport option behavior (ported from Go transport_optio
     });
 
     const h = (calls[0] as Captured).init.headers ?? {};
-    expect(h[SignatureAgentHeader]).toBe(dir);
+    expect(h[SignatureAgentEmitted]).toBe(dir);
   });
 
   it("WithSignatureAgent: PRESERVES an existing Signature-Agent header", async () => {
@@ -444,7 +481,7 @@ describe("createSigningTransport option behavior (ported from Go transport_optio
     });
 
     const h = (calls[0] as Captured).init.headers ?? {};
-    expect(h[SignatureAgentHeader]).toBe(agentDir);
+    expect(h[SignatureAgentEmitted]).toBe(agentDir);
   });
 
   it("predicate returning FALSE: request passes through UNSIGNED (not an error)", async () => {

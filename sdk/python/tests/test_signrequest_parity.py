@@ -1,38 +1,13 @@
 """RFC 9421 request SIGN byte-parity (Python side).
 
-No sibling exists in sdk/ts (the TS edge never SIGNs a request — it verifies);
-this is the surface sdk/python adds. The byte oracle is the Go
-SignRequest (sdk/go/helpers/sign.go) + buildSignatureBase (sigbase.go); the port
-source is the app's src/mcp/src/ramp_mcp_shim/httpsig.py Signer.sign.
+The byte oracle is the Go SignRequest (sdk/go/helpers/sign.go) + buildSignatureBase
+(sigbase.go); the TS sibling is sdk/ts/tests/sign-request.parity.test.ts over
+sdk/ts/core/sign-request.ts, and all three replay the same shared vector file
+sdk/go/helpers/testdata/sign-request-vectors.json.
 
-`ramp_sdk.httpsig.sign_request(...)` MUST produce, byte-for-byte, the same
-signature base, Signature-Input, and Signature the Go oracle emits. The shared
-vector file sdk/go/helpers/testdata/sign-request-vectors.json does NOT exist yet
-— the implement step EXTENDS the Go golden emitter to create it (from SignRequest
-over a fixed request+body+created+expires, cross-checked by round-tripping
-through the real Go SignRequest/VerifyRequest). Referencing it by its planned
-path keeps this test RED now on BOTH the missing module AND the missing file.
-
-Contract (the WBA identity split superseded the earlier exactly-four-components
-pin — signature-agent joined the required covered set platform-wide, so a
-four-component signer would produce signatures the platform rejects):
-  - covered set is EXACTLY @method @target-uri content-digest authorization
-    signature-agent (NO biscuit / no conditional component beyond these five);
-  - Signature-Agent is bound like Authorization: an empty string is still
-    covered (the static bootstrap path) — the empty-bind case is a distinct
-    vector;
-  - created/expires are injected NON-zero (1_700_000_000 / 1_700_000_600 — the
-    pop emitter's pinned window; Go omits created/expires from the base when 0,
-    so zero values would drop from the signature base);
-  - the empty-authorization bound case is a distinct vector (empty-string value
-    still covered);
-  - assert byte-equality of the FULL signature base + Signature-Input +
-    Signature, and that each vector round-trips (verify at a pinned now inside
-    the window).
-
-L1 purity (ADR-020 §1/§4): created/expires are INJECTED — sign_request reads no
-wall clock. The Signature value is STANDARD base64 (`sig1=:<b64>:`), NOT
-b64url-nopad — do not unify with the thumbprint encoding.
+``ramp_sdk.httpsig.sign_request(...)`` MUST produce, byte-for-byte, the same signature
+base, Signature-Input and Signature the Go oracle emits — and MUST hand back the same
+header set a signed request carries, which is what emitted_headers pins.
 """
 
 from __future__ import annotations
@@ -45,12 +20,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from conftest import GO_TESTDATA, load_json
 
-# RED: sdk/python/ramp_sdk/httpsig.py does not exist yet (TDD red).
-from ramp_sdk.httpsig import sign_request, verify_request  # type: ignore[import-not-found]
+from ramp_sdk.httpsig import sign_request, verify_request
 
-# RED (also): this vector file is produced by the Go emitter extension the
-# implement step adds; it does not exist yet. load_json raises FileNotFoundError
-# → the suite fails at collection, which is a clean TDD-red signal.
+#: The shared Go-emitted oracle every port replays.
 _SIGN_REQUEST_VECTORS_PATH = GO_TESTDATA / "sign-request-vectors.json"
 _VECTORS = load_json(_SIGN_REQUEST_VECTORS_PATH)["vectors"]
 
@@ -76,6 +48,50 @@ def test_sign_request_vector_file_exists_and_covers_empty_authorization() -> Non
     assert "" in authz_values, (
         "sign-request-vectors.json must include an empty-authorization bound case"
     )
+
+
+@pytest.mark.parametrize("vector", _VECTORS, ids=[v["name"] for v in _VECTORS])
+def test_sign_outbound_emits_the_header_set_the_oracle_emits(
+    vector: dict[str, object],
+) -> None:
+    """The headers a signed request CARRIES, compared as a whole map.
+
+    Every other assertion in this file says what was SIGNED. ``emitted_headers`` says
+    what is SENT, and the two are different claims. A verifier rebuilds the signature
+    base from the request it received, so a covered value bound but never sent is not
+    bound at all: it reads the covered names off ``signature-input``, finds nothing on
+    the wire under one of them, and refuses.
+
+    See docs/design-history.md, "A covered header the peer never receives is not bound".
+
+    Compared as a MAP, not key by key. Membership assertions are what let the defect ship;
+    only a whole-set comparison notices the next header to go missing.
+
+    The oracle records a LIST per name because the verifier reads one — it joins repeated
+    values with ", " before rebuilding the base. This face returns a dict, which cannot
+    hold a duplicate at all, so each value wraps to a one-element list: the shape says
+    where a duplicate CAN arise, which is the merge in a transport wrapper, not here.
+    """
+    from ramp_sdk.signing_transport import SigningTransport
+
+    created, expires = int(vector["created"]), int(vector["expires"])  # type: ignore[call-overload]
+    transport = SigningTransport(
+        signer_seed=bytes.fromhex(str(vector["signer_seed_hex"])),
+        keyid=str(vector["keyid"]),
+        signature_agent=str(vector["signature_agent"]),
+        window=lambda: (created, expires),
+    )
+    signed = transport.sign_outbound(
+        method=str(vector["method"]),
+        url=str(vector["url"]),
+        body=bytes.fromhex(str(vector["body_hex"])),
+        authorization=str(vector["authorization"]),
+    )
+    # Keys VERBATIM, never lowercased first. Normalising here would erase the property
+    # under test: emitting a covered name in the wrong case is what put the name on the
+    # wire twice and broke the merge, and a gate that folds the case cannot see it.
+    emitted = {name: [value] for name, value in signed.headers.items()}
+    assert emitted == vector["emitted_headers"]
 
 
 @pytest.mark.parametrize("vector", _VECTORS, ids=[v["name"] for v in _VECTORS])

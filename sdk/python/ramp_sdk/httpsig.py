@@ -53,12 +53,27 @@ _MAX_FUTURE_SKEW_SEC = 300
 
 @dataclass(frozen=True)
 class SignedRequest:
-    """The RFC 9421 headers + the signature base produced for a request."""
+    """The RFC 9421 headers + the signature base produced for a request.
+
+    EVERY covered header is here, at the value that entered the base — the two whose
+    value may be empty included, so a caller attaching what this returns sends what was
+    signed. The oracle reaches the same place by mutating the request it was handed
+    (``helpers.SignRequest``), which is why it has no such field to omit. See
+    docs/design-history.md, "A covered header the peer never receives is not bound".
+    """
 
     content_digest: str
     signature_input: str
     signature: str
     signature_base: str
+    #: Echoed from the input so a caller attaching what this returns sends what was
+    #: signed. Empty is a value, not an absence — and REQUIRED, no default: a field
+    #: that can be left out re-creates the "empty is a safe default" assumption the
+    #: transport now relies on this echo to remove.
+    authorization: str
+    #: The signer's WBA directory, echoed for the same reason and required for the
+    #: same reason. Empty is the static-bootstrap case and is still carried.
+    signature_agent: str
 
 
 @dataclass(frozen=True)
@@ -133,7 +148,9 @@ def sign_request(
     """Sign a request over the RAMP covered set; return the RFC 9421 headers.
 
     ``created``/``expires`` are injected unix seconds (L1-pure, no wall clock).
-    Authorization is always bound — pass an empty string to pin its absence.
+    Authorization is always bound — pass an empty string when the caller holds no
+    token, which BINDS that emptiness. The header is still emitted and still sent;
+    an absent header is a different thing entirely and a verifier refuses it.
     ``signature_agent`` is the signer's WBA key-directory URL, bound the same
     way (empty string for the static bootstrap path), mirroring Go's
     ``bindSignatureAgent``.
@@ -156,6 +173,8 @@ def sign_request(
         signature_input=f"sig1={sig_params}",
         signature=f"sig1=:{sig_b64}:",
         signature_base=base,
+        authorization=authorization,
+        signature_agent=signature_agent,
     )
 
 
@@ -218,6 +237,8 @@ def append_signature(
         signature_input=f"{prev_signature_input}, {member_input}" if has_prev else member_input,
         signature=f"{prev_signature}, {member_sig}" if prev_signature != "" else member_sig,
         signature_base=base,
+        authorization=authorization,
+        signature_agent=signature_agent,
     )
 
 

@@ -28,9 +28,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -282,6 +284,22 @@ type signRequestVector struct {
 	SignatureBase  string `json:"signature_base"`
 	SignatureInput string `json:"signature_input"`
 	Signature      string `json:"signature"`
+	// EmittedHeaders is what the SIGNER puts on a bare request, lowercased —
+	// not the full header set a live client sends, which also carries
+	// content-type, the Connect protocol version and an accept-encoding.
+	//
+	// Every other field here records what was SIGNED. This one records what is
+	// SENT, and the two are different claims: the covered set binds authorization
+	// and signature-agent unconditionally, empty values included, so a verifier
+	// needs them present on the wire to rebuild the base and refuses the request
+	// when they are absent. A port can agree byte-for-byte on the signature and
+	// still be unable to complete a single call.
+	//
+	// A LIST per name, read with Values, because that is what the verifier reads:
+	// it joins repeated values with ", " before rebuilding the base, so a duplicated
+	// covered header breaks a correct signature. A map of single strings cannot
+	// express that, and a gate that cannot express the failure cannot catch it.
+	EmittedHeaders map[string][]string `json:"emitted_headers"`
 }
 
 // acceptanceVector mirrors the AcceptanceVector shape the py parity test reads.
@@ -609,6 +627,11 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 		body           []byte
 		authorization  string
 		signatureAgent string
+		// appendOnly signs through AppendSignature rather than SignRequest — the
+		// RELAY path. It binds the same covered set and reaches the same
+		// bindAuthorization / bindSignatureAgent, so the emitted set is pinned for
+		// the forwarding leg too, not only the originating one.
+		appendOnly bool
 	}
 	specs := []spec{
 		{
@@ -627,6 +650,19 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 			url:           "https://broker.example/ramp.v1.BrokerService/Fetch?trace=1",
 			body:          []byte(`{"uri":"https://cdn.example/other"}`),
 			authorization: "",
+		},
+		{
+			// The RELAY leg. Appending to an unsigned request produces a sig1
+			// byte-identical to SignRequest — single-sig is the N=1 case — so what
+			// this vector adds over the two above is the emitted set of the
+			// forwarding path, which nothing recorded.
+			name:           "append_relay_leg",
+			method:         "POST",
+			url:            "https://broker.example/ramp.v1.BrokerService/Fetch",
+			body:           []byte(`{"uri":"https://cdn.example/relayed"}`),
+			authorization:  "",
+			signatureAgent: "https://relay.example",
+			appendOnly:     true,
 		},
 	}
 
@@ -656,12 +692,23 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 		}
 		// SignRequest sets Content-Digest + binds Authorization + writes headers;
 		// buildSignatureBase over the same params reproduces the exact base bytes.
-		if err := SignRequest(context.Background(), req, s.body, signer, SignOptions{Created: created, Expires: expires}); err != nil {
+		sign := SignRequest
+		if s.appendOnly {
+			sign = AppendSignature
+		}
+		if err := sign(context.Background(), req, s.body, signer, SignOptions{Created: created, Expires: expires}); err != nil {
 			t.Fatalf("%s: sign: %v", s.name, err)
 		}
 		base, err := buildSignatureBase(req, params)
 		if err != nil {
 			t.Fatalf("%s: build base: %v", s.name, err)
+		}
+		// The request was built bare, so what it carries after signing IS the
+		// signer's contribution — nothing pre-set leaks in except the two covered
+		// values the spec supplies, which a signed request must carry anyway.
+		emitted := make(map[string][]string, len(req.Header))
+		for name := range req.Header {
+			emitted[strings.ToLower(name)] = req.Header.Values(name)
 		}
 		out = append(out, signRequestVector{
 			Name:           s.name,
@@ -679,6 +726,7 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 			SignatureBase:  base,
 			SignatureInput: req.Header.Get("Signature-Input"),
 			Signature:      req.Header.Get("Signature"),
+			EmittedHeaders: emitted,
 		})
 	}
 	return out
@@ -724,6 +772,23 @@ type verifyRequestNegVector struct {
 	// unsigned entitlement claim (enforceEntitlementCoverage). Format-neutral —
 	// the token value stands in for any JWT/opaque capability token.
 	Entitlement string `json:"entitlement,omitempty"`
+	// OmitHeaders names the header fields the request does NOT carry, deleted after
+	// the base ones are set. ABSENT is not EMPTY: the base is rebuilt from the
+	// request that ARRIVED, so a covered name with no field line under it cannot be
+	// reconstructed at all, while an empty one reconstructs to the empty value the
+	// signer bound. Reading these with Values rather than Get is what tells the two
+	// apart — a port defaulting an absent header to "" invents a value and accepts
+	// the request this case proves is refused.
+	OmitHeaders []string `json:"omit_headers,omitempty"`
+	// ExtraHeaders are field lines ADDED after the base ones, never replacing them.
+	// Header names are case-insensitive on the wire, so a second line under a name
+	// the signature covers belongs to that same covered name and joins with ", "
+	// before the base is rebuilt — it changes the covered value rather than
+	// overriding it, which is how an unsigned token slipped in beside a signed one
+	// is refused instead of honoured. A replay's header map is keyed by string, so
+	// the spelling here MUST differ in case from the lowercased base key or the two
+	// lines collapse into one and the case proves nothing.
+	ExtraHeaders map[string]string `json:"extra_headers,omitempty"`
 }
 
 // negRequest is one signed request the negative emitter mutates into a reject case.
@@ -743,11 +808,19 @@ type negRequest struct {
 // accepts before the case-specific mutation flips it to a rejection.
 func signNegBase(t *testing.T, keyid string, seed []byte, created, expires int64) negRequest {
 	t.Helper()
+	return signNegBaseWith(t, keyid, seed, created, expires, "Bearer neg-token", "https://agent.example")
+}
+
+// signNegBaseWith is signNegBase over an explicit covered-header pair, so a base
+// can be signed with the EMPTY values the static-bootstrap path binds.
+func signNegBaseWith(
+	t *testing.T, keyid string, seed []byte, created, expires int64,
+	authorization, sigAgent string,
+) negRequest {
+	t.Helper()
 	const (
-		method        = "POST"
-		url           = "https://broker.example/ramp.v1.BrokerService/Fetch"
-		authorization = "Bearer neg-token"
-		sigAgent      = "https://agent.example"
+		method = "POST"
+		url    = "https://broker.example/ramp.v1.BrokerService/Fetch"
 	)
 	body := []byte(`{"uri":"https://cdn.example/neg"}`)
 	req, err := http.NewRequest(method, url, nil)
@@ -799,6 +872,15 @@ func verifyNegReason(
 	if v.Entitlement != "" {
 		req.Header.Set(entitlementHeader, v.Entitlement)
 	}
+	for _, name := range v.OmitHeaders {
+		req.Header.Del(name)
+	}
+	// Add, not Set: the point of an extra line is that it lands BESIDE the base one
+	// under the same covered name. Sorted so the emitted vector is deterministic —
+	// Go map iteration is not.
+	for _, name := range slices.Sorted(maps.Keys(v.ExtraHeaders)) {
+		req.Header.Add(name, v.ExtraHeaders[name])
+	}
 	resolver := NewStaticKeyResolver(map[string]ed25519.PublicKey{})
 	if resolverPub != nil {
 		resolver.Put(v.ResolverKeyID, resolverPub)
@@ -839,8 +921,12 @@ func classifyNegReason(err error) string {
 
 // buildVerifyRequestNegVectors emits the SINGLE-SIG negative-verify corpus the
 // TS/py server-verify suites consume: neg_bad_sig, neg_replay, neg_expired,
-// neg_wrong_key, neg_tampered_authorization. Each is produced by signing with the
-// REAL Go signer then applying the case mutation, and each recorded
+// neg_wrong_key, neg_tampered_authorization, neg_entitlement_uncovered, and the
+// three that pin how a covered header is READ — neg_absent_authorization,
+// neg_absent_signature_agent (a covered name with no field line under it) and
+// neg_duplicate_authorization (a second line beside the signed one). Each is
+// produced by signing with the REAL Go signer then applying the case mutation,
+// and each recorded
 // expected_reason is taken from the REAL Go verify path (verifyNegReason) so the
 // tokens are authoritative, never hand-authored.
 func buildVerifyRequestNegVectors(t *testing.T) []verifyRequestNegVector {
@@ -899,12 +985,108 @@ func buildVerifyRequestNegVectors(t *testing.T) []verifyRequestNegVector {
 	entitlement := mk("neg_entitlement_uncovered", freshNow)
 	entitlement.Entitlement = "jwt:demo-unsigned-entitlement-token"
 
-	out := []verifyRequestNegVector{badSig, replay, expired, wrongKey, tampered, entitlement}
+	// neg_absent_authorization / neg_absent_signature_agent: a validly-signed
+	// request that does NOT CARRY one of the headers its signature covers. Empty is
+	// a value the signer may legitimately have bound; absent is no value at all, and
+	// a base that cannot be rebuilt is not a base that matches. These are the two
+	// cases a port collapses when it defaults a missing header to "" — it then
+	// accepts a request this vector proves the oracle refuses.
+	// Signed with EMPTY covered values, and that is load-bearing rather than
+	// incidental. Omit a header whose signer bound a NON-empty value and the request
+	// is refused either way — a port defaulting the missing header to "" still
+	// reconstructs the wrong value, so the case cannot tell "refused because absent"
+	// from "refused because the value differs" and gates nothing. Bound EMPTY,
+	// defaulting to "" reproduces exactly what was signed, so only a port that
+	// distinguishes absent from empty refuses. It is also the static-bootstrap shape
+	// the empty covered header exists to carry.
+	emptyBase := signNegBaseWith(t, keyid, seed, created, expires, "", "")
+	mkEmpty := func(name string, now int64) verifyRequestNegVector {
+		v := mk(name, now)
+		v.Authorization = emptyBase.authorization
+		v.SignatureAgent = emptyBase.signatureAgent
+		v.ContentDigest = emptyBase.contentDigest
+		v.SignatureInput = emptyBase.sigInput
+		v.Signature = emptyBase.sig
+		return v
+	}
+	absentAuthz := mkEmpty("neg_absent_authorization", freshNow)
+	absentAuthz.OmitHeaders = []string{"Authorization"}
+	absentAgent := mkEmpty("neg_absent_signature_agent", freshNow)
+	absentAgent.OmitHeaders = []string{SignatureAgentHeader}
+
+	// neg_duplicate_authorization: the signed Authorization stays exactly as bound,
+	// and a SECOND field line carrying an unsigned bearer token is added beside it
+	// under a different spelling of the same name. Both lines belong to the covered
+	// name, so they join with ", " and the rebuilt base no longer matches — which is
+	// what stops a token being slipped under an existing signature. A port that
+	// looks the name up case-sensitively, or folds the case but returns the first
+	// match instead of joining, reads back the signed value and accepts the token
+	// sitting next to it.
+	dupAuthz := mkEmpty("neg_duplicate_authorization", freshNow)
+	dupAuthz.ExtraHeaders = map[string]string{"Authorization": "Bearer unsigned-token"}
+
+	// neg_shadowed_entitlement: the entitlement-token header carried TWICE, an empty
+	// line ahead of a real capability token, on a signature whose covered set does not
+	// commit to it. Resolving the name to its first field line answers "", the coverage
+	// rule never runs, and the unsigned token is accepted — no case trick and no
+	// unusual client, two field lines is ordinary HTTP. Joining answers ", jwt:…",
+	// which is non-empty, so the coverage rule fires and the request is refused.
+	//
+	// The EMPTY value has to sit under the capitalised spelling. Both the emitted JSON
+	// and the ports' replay order follow the map's sorted key order, and "X-" sorts
+	// before "x-" — so this is what puts the empty line first. Reversed, the first
+	// line carries the token, every reading refuses it, and the case proves nothing.
+	shadowedEntitlement := mkEmpty("neg_shadowed_entitlement", freshNow)
+	shadowedEntitlement.ExtraHeaders = map[string]string{
+		"X-Entitlement-Token": "",
+		"x-entitlement-token": "jwt:unsigned-capability-token",
+	}
+
+	out := []verifyRequestNegVector{
+		badSig, replay, expired, wrongKey, tampered, entitlement, shadowedEntitlement,
+		absentAuthz, absentAgent, dupAuthz,
+	}
 	// Derive expected_reason from the REAL Go verify path — never hand-author it.
 	for i := range out {
+		assertExtraHeaderSpelling(t, out[i].Name, out[i].ExtraHeaders)
 		out[i].ExpectedReason = oracleNegReason(t, out[i])
 	}
 	return out
+}
+
+// baseVectorHeaderNames are the field names a replay writes into its header bag from
+// the vector's own scalar columns, lowercased — the entries an extra line has to land
+// BESIDE rather than replace.
+var baseVectorHeaderNames = map[string]bool{
+	"content-digest": true, "signature-input": true, "signature": true,
+	"authorization": true, signatureAgentLower: true,
+}
+
+// assertExtraHeaderSpelling enforces the rule the ExtraHeaders doc states, which is
+// otherwise only a comment: an extra line duplicating a name the replay already wrote
+// from a scalar column MUST be spelled in a different case.
+//
+// Go collapses both spellings onto one canonical key and keeps two values whatever the
+// case, so the oracle would emit the same expected_reason either way — but a replay's
+// header map is keyed by string. Spell the key exactly as the base entry and the port
+// OVERWRITES rather than adding beside it, the bag holds one line, and a case that
+// exists to prove two lines join proves nothing while every test still passes.
+//
+// A name with no base counterpart (the entitlement pair, which no scalar column writes)
+// carries both its own lines and is unconstrained here.
+func assertExtraHeaderSpelling(t *testing.T, name string, extra map[string]string) {
+	t.Helper()
+	for key := range extra {
+		lower := strings.ToLower(key)
+		if !baseVectorHeaderNames[lower] {
+			continue
+		}
+		if key == lower {
+			t.Fatalf("vector %s: extra header %q duplicates a base header name in the SAME "+
+				"spelling — a replay's map would overwrite the base entry instead of adding "+
+				"a second field line, and the case would assert nothing", name, key)
+		}
+	}
 }
 
 // oracleNegReason runs the emitted vector through the REAL Go verify path and

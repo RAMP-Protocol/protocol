@@ -8,8 +8,46 @@ description: "RAMP protocol changelog"
 **The TypeScript and Python SDKs gained a client, and it changed what they accept
 from a peer (no wire change; conformance-affecting).** Neither could SEND a RAMP
 request before; both now speak the Connect-unary JSON form the protocol's unary RPCs
-are fully described by. Six consequences reach anyone re-pinning, and none of them
+are fully described by. Seven consequences reach anyone re-pinning, and none of them
 moves a field, a message or an encoding — `buf breaking` reports nothing.
+
+**Every signed request now carries `authorization` and `signature-agent`, empty values
+included.** The RFC 9421 covered set binds both unconditionally — that is what stops a
+later injection piggy-backing an existing signature — and a verifier rebuilds the base
+from the request it RECEIVED, so a value bound but never sent is not bound at all. Both
+ports bound them and attached neither, so every signed RPC was refused with
+`header "authorization" missing from request` while all three languages agreed
+byte-for-byte on the signature itself. Re-pinning changes the header set your clients put
+on the wire; nothing about the bytes they sign moves.
+
+Three further consequences of the same rule. The TypeScript signer emits the covered header
+names **lowercase**, so a caller supplying its own `Authorization` has it replaced rather
+than duplicated — two field lines under one covered name are joined with `", "` before the
+base is rebuilt, which breaks an otherwise valid signature. And every server-verify face
+in both ports now **refuses a request that OMITS a covered header** while still accepting
+one that carries it empty: defaulting an absent header to empty invents a value the signer
+may never have bound, and accepted exactly the request the Go verifier refuses.
+
+Those faces also read every header the way the wire defines it, which changes what they
+accept. Names are matched **case-insensitively**, so a header bag spelling them
+`Authorization` / `Signature-Agent` now verifies where it used to be refused. Repeated
+spellings of one name are **joined** with `", "` rather than one being picked, so an
+unsigned `Authorization: Bearer …` placed beside a signed empty one changes the covered
+value and is refused — previously it was read past and the request was accepted, on every
+face. If you built a header mapping for these faces by lowercasing keys, nothing changes
+for you; if you passed one straight from a framework, it now behaves as the oracle does.
+
+**The Go entitlement-coverage check reads every field line too, and this one is a
+behaviour change in `sdk/go/helpers`.** It resolved `X-Entitlement-Token` with
+`Header.Get` — the first line only — at both the sign site (whether the covered set
+commits to the header) and the verify site (whether an unsigned token is being slipped
+in). A request that simply sends the header **twice**, an empty line ahead of a real
+capability token, made both answer `""`: the signer left the header uncovered and the
+verifier skipped the rule, so the token rode in under a signature that never committed
+to it. Ordinary HTTP, no unusual client. Both sites now join every line, so any second
+line makes the value non-empty. Nothing in a single-line request moves — no API changes,
+both functions are unexported — but a peer that sends the header twice is now refused
+where it was accepted.
 
 A **`null` means the field has no value**, and the TypeScript wire policy now reads it
 that way. The canonical wire is proto-JSON, where a null is a field's default — for **any**

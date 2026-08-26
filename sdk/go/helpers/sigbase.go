@@ -103,6 +103,21 @@ const (
 	entitlementHeaderLower = "x-entitlement-token"
 )
 
+// entitlementValue resolves the entitlement-token header the way the header is
+// defined rather than the way a map lookup is convenient: ALL field lines under
+// the name, joined with ", " and outer-trimmed, exactly as componentValue
+// resolves a covered name.
+//
+// Get would return only the FIRST line, and that is shadowable. A request may
+// legally carry the name twice; an attacker who puts an empty line ahead of a
+// real capability token makes Get answer "", the coverage rule below never runs,
+// and the unsigned token rides in under a signature that never committed to it.
+// It takes no case trick and no unusual client — two field lines is ordinary
+// HTTP. Joining removes the shadow: any second line makes the value non-empty.
+func entitlementValue(h http.Header) string {
+	return strings.TrimSpace(strings.Join(h.Values(entitlementHeader), ", "))
+}
+
 // ContentDigest returns the RFC 9530 Content-Digest header value for body:
 // sha-256=:<base64(SHA-256(body))>:.
 func ContentDigest(body []byte) string {
@@ -115,7 +130,10 @@ func ContentDigest(body []byte) string {
 // lowercase so the rendered byte output is preserved.
 func coveredFor(req *http.Request) []CoveredComponent {
 	names := append([]string(nil), requiredCoveredComponents...)
-	if req.Header.Get(entitlementHeader) != "" {
+	// Read the same way the verify gate reads it. A signer resolving this with Get
+	// would leave the header UNCOVERED whenever an empty line precedes a real one,
+	// binding a value it never committed to — the sign-side half of the same shadow.
+	if entitlementValue(req.Header) != "" {
 		names = append(names, entitlementHeaderLower)
 	}
 	return plainComponents(names...)

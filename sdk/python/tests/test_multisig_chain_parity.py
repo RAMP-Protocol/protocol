@@ -61,7 +61,7 @@ def _resolver(hops: list[dict[str, object]]) -> StaticKeyResolver:
     return StaticKeyResolver(keys)
 
 
-def test_vector_set_covers_the_positive_and_all_four_negative_chain_cases() -> None:
+def test_vector_set_covers_the_positive_and_every_negative_chain_case() -> None:
     names = {v["name"] for v in _VECTORS}
     assert {
         "positive_two_hop",
@@ -70,7 +70,40 @@ def test_vector_set_covers_the_positive_and_all_four_negative_chain_cases() -> N
         "broken_chain_stripped_middle",
         "broken_chain_missing_link",
         "tampered_predecessor",
+        # The same chains missing a covered header — which pin WHERE that is
+        # noticed relative to the budget and chain gates, not only that it is.
+        "absent_authorization_two_hop",
+        "absent_authorization_over_budget",
+        "absent_signature_agent_reordered",
+        # How a covered header is READ on a chain: a second field line beside the
+        # signed one, a bag spelled the conventional way, and a chain whose covered
+        # value IS the join of two lines.
+        "duplicate_authorization_two_hop",
+        "canonical_case_two_hop",
+        "duplicate_bound_two_hop",
     } <= names
+
+
+def _headers_for(v: dict[str, object]) -> dict[str, str]:
+    """The header bag a vector describes: the base five, minus what the request does
+    not carry, plus any extra field line spelled in another case.
+
+    ``omit_headers`` drops the key entirely, so the face sees a covered name with no
+    field line under it rather than an empty one. ``extra_headers`` is applied AFTER
+    the base ones so the join order matches the order the oracle added them.
+    """
+    headers = {
+        "content-digest": str(v["content_digest"]),
+        "signature-input": str(v["signature_input"]),
+        "signature": str(v["signature"]),
+        "authorization": str(v["authorization"]),
+        "signature-agent": str(v["signature_agent"]),
+    }
+    for name in v.get("omit_headers") or []:  # type: ignore[union-attr]
+        headers.pop(str(name).lower(), None)
+    for name, value in (v.get("extra_headers") or {}).items():  # type: ignore[union-attr]
+        headers[str(name)] = str(value)
+    return headers
 
 
 def test_positive_two_hop_verifies_and_returns_keyids_in_order() -> None:
@@ -162,16 +195,15 @@ def test_append_to_unsigned_request_equals_sign_request_n1() -> None:
     assert appended.signature == signed.signature
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "hop_budget_three_over_two",
-        "broken_chain_reordered",
-        "broken_chain_stripped_middle",
-        "broken_chain_missing_link",
-        "tampered_predecessor",
-    ],
-)
+#: The reject cases, DERIVED from the corpus rather than hand-listed. A hand-written
+#: name list is how a vector lands and is never replayed — the corpus grew the
+#: duplicate-header plumbing and sat unexercised because nothing enumerated it. Every
+#: row the emitter adds is now driven the day it is committed.
+_NEGATIVE = [str(v["name"]) for v in _VECTORS if not v["expected_verified"]]
+_POSITIVE = [str(v["name"]) for v in _VECTORS if v["expected_verified"]]
+
+
+@pytest.mark.parametrize("name", _NEGATIVE, ids=_NEGATIVE)
 def test_negative_chain_case_rejects_with_go_reason(name: str) -> None:
     # NEGATIVE: each Go-emitted chain reject case rejects (valid=False) with the
     # exact taxonomy token, honoring the hop_budget → broken_chain → signature
@@ -182,19 +214,35 @@ def test_negative_chain_case_rejects_with_go_reason(name: str) -> None:
         method=str(v["method"]),
         url=str(v["url"]),
         body=bytes.fromhex(str(v["body_hex"])),
-        headers={
-            "content-digest": str(v["content_digest"]),
-            "signature-input": str(v["signature_input"]),
-            "signature": str(v["signature"]),
-            "authorization": str(v["authorization"]),
-            "signature-agent": str(v["signature_agent"]),
-        },
+        headers=_headers_for(v),
         resolver=_resolver(v["hops"]),  # type: ignore[arg-type]
         now=now,
         max_signatures=int(v["max_signatures"]),  # type: ignore[call-overload]
     )
     assert verdict.valid is False  # type: ignore[attr-defined]
     assert verdict.reason == str(v["expected_reason"])  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("name", _POSITIVE, ids=_POSITIVE)
+def test_positive_chain_case_verifies_with_go_keyids(name: str) -> None:
+    # POSITIVE: every Go-emitted chain the oracle ACCEPTS verifies here too, returning
+    # the same keyids in chain order. The rejects above cannot stand in for this: a
+    # face that refuses everything passes all of them. This is what catches a reader
+    # that resolves a covered header to one field line where the oracle joins, and a
+    # reader that matches header names case-sensitively where the wire does not.
+    v = _by_name(name)
+    now = (int(v["created"]) + int(v["expires"])) // 2  # type: ignore[call-overload]
+    verdict = verify_multisig_request_server(
+        method=str(v["method"]),
+        url=str(v["url"]),
+        body=bytes.fromhex(str(v["body_hex"])),
+        headers=_headers_for(v),
+        resolver=_resolver(v["hops"]),  # type: ignore[arg-type]
+        now=now,
+        max_signatures=int(v["max_signatures"]),  # type: ignore[call-overload]
+    )
+    assert verdict.valid is True, f"{name}: {verdict.reason}"  # type: ignore[attr-defined]
+    assert list(verdict.keyids) == list(v["expected_keyids"])  # type: ignore[attr-defined]
 
 
 def _positive_two_hop_call(

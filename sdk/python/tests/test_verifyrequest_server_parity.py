@@ -95,7 +95,7 @@ class _MemoryReplayStore:
         return False
 
 
-def test_neg_vector_set_covers_the_five_single_sig_reject_cases() -> None:
+def test_neg_vector_set_covers_every_single_sig_reject_case() -> None:
     # The Go emitter must produce exactly these named single-sig negatives; the
     # multisig cases (broken_chain / hop_budget) are out of scope.
     names = {v["name"] for v in _NEG_VECTORS}
@@ -106,6 +106,15 @@ def test_neg_vector_set_covers_the_five_single_sig_reject_cases() -> None:
         "neg_wrong_key",
         "neg_tampered_authorization",
         "neg_entitlement_uncovered",
+        # How a covered header is READ, which is a separate claim from whether its
+        # value was tampered with: a name the request does not carry at all, and a
+        # second field line beside the signed one under a different spelling.
+        "neg_absent_authorization",
+        "neg_absent_signature_agent",
+        "neg_duplicate_authorization",
+        # The entitlement name carried twice with an empty line first — the coverage
+        # rule is skipped entirely by a reader that resolves the name to one line.
+        "neg_shadowed_entitlement",
     } <= names
 
 
@@ -210,6 +219,16 @@ def test_negative_vector_rejected_with_correct_reason(vector: dict[str, object])
     # must reject with reason "signature".
     if vector.get("entitlement"):
         headers["X-Entitlement-Token"] = str(vector["entitlement"])
+    # A name the request does NOT carry: the key is dropped, so the face sees a
+    # covered name with no field line under it rather than an empty one. Absent is
+    # not empty, and the two must not verify alike.
+    for name in vector.get("omit_headers") or []:
+        headers.pop(str(name).lower(), None)
+    # Field lines ADDED beside the base ones, spelled in a different case so the
+    # mapping holds both. Applied AFTER, so the join order matches the order the
+    # oracle added them; the verbatim spelling is the whole point.
+    for name, value in (vector.get("extra_headers") or {}).items():  # type: ignore[union-attr]
+        headers[str(name)] = str(value)
 
     def _verify() -> object:
         return verify_request_server(
