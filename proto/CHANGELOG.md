@@ -17,13 +17,22 @@ ports bound them and attached neither, so every signed RPC was refused with
 byte-for-byte on the signature itself. Re-pinning changes the header set your clients put
 on the wire; nothing about the bytes they sign moves.
 
-Two further consequences of the same rule. The TypeScript signer emits the covered header
+Three further consequences of the same rule. The TypeScript signer emits the covered header
 names **lowercase**, so a caller supplying its own `Authorization` has it replaced rather
 than duplicated — two field lines under one covered name are joined with `", "` before the
-base is rebuilt, which breaks an otherwise valid signature. And both ports' server-verify
-faces now **refuse a request that OMITS a covered header** while still accepting one that
-carries it empty: defaulting an absent header to empty invents a value the signer may
-never have bound, and accepted exactly the request the Go verifier refuses.
+base is rebuilt, which breaks an otherwise valid signature. And every server-verify face
+in both ports now **refuses a request that OMITS a covered header** while still accepting
+one that carries it empty: defaulting an absent header to empty invents a value the signer
+may never have bound, and accepted exactly the request the Go verifier refuses.
+
+Those faces also read every header the way the wire defines it, which changes what they
+accept. Names are matched **case-insensitively**, so a header bag spelling them
+`Authorization` / `Signature-Agent` now verifies where it used to be refused. Repeated
+spellings of one name are **joined** with `", "` rather than one being picked, so an
+unsigned `Authorization: Bearer …` placed beside a signed empty one changes the covered
+value and is refused — previously it was read past and the request was accepted, on every
+face. If you built a header mapping for these faces by lowercasing keys, nothing changes
+for you; if you passed one straight from a framework, it now behaves as the oracle does.
 
 A **`null` means the field has no value**, and the TypeScript wire policy now reads it
 that way. The canonical wire is proto-JSON, where a null is a field's default — for **any**

@@ -208,16 +208,50 @@ def _int_param(params: str, name: str) -> int | None:
     return int(params[value_start:end])
 
 
+def _header(headers: dict[str, str], name: str) -> str | None:
+    """Return the request's value for ``name``, or None when it carries no such field.
+
+    The port of Go's covered-component read (``http.Header.Values`` + the RFC 9421
+    join), and it makes two distinctions the obvious ``headers.get(name, "")`` erases.
+
+    ABSENT is not EMPTY. None means the request carried no field line under this
+    name at all; "" means it carried one whose value is empty. The base is rebuilt
+    from the request that ARRIVED, so a covered name with nothing under it cannot be
+    reconstructed, while an empty one reconstructs to the empty value the signer
+    bound — which is the whole reason an empty covered header is put on the wire.
+
+    Repeated spellings JOIN, they do not shadow. Header names are case-insensitive
+    on the wire and a Python dict's keys are not, so a caller's ``Authorization``
+    and a signer's ``authorization`` are two field lines under ONE covered name.
+    The oracle joins them with ", " before rebuilding the base, so the covered value
+    changes and the signature no longer reproduces. Returning the first match
+    instead would hand back the signed value and accept whatever was slipped in
+    beside it — the token injection the covered set exists to prevent.
+
+    See docs/design-history.md, "A covered header the peer never receives is not
+    bound".
+    """
+    lower = name.lower()
+    values = [value for key, value in headers.items() if key.lower() == lower]
+    if not values:
+        return None
+    return ", ".join(values).strip()
+
+
 def _has_entitlement_header(headers: dict[str, str]) -> bool:
     """Return True if the entitlement-token header is present (non-empty).
 
-    Header names are matched case-insensitively (mirrors Go http.Header.Get), so a
-    caller passing the canonical ``X-Entitlement-Token`` form is honoured
-    alongside the lowercased-key convention this face otherwise reads.
+    Case-insensitive, so a caller passing the canonical ``X-Entitlement-Token`` form
+    is honoured alongside the lowercased-key convention this face otherwise reads.
+
+    Deliberately the FIRST field line rather than the join ``_header`` returns: this
+    is a presence test feeding a coverage rule, and the oracle spells it
+    ``h.Get(entitlementHeader) != ""`` (enforceEntitlementCoverage). The join belongs
+    to covered-VALUE reads, where a second line has to change the value.
     """
-    for name, value in headers.items():
-        if name.lower() == _ENTITLEMENT_HEADER and value != "":
-            return True
+    for key, value in headers.items():
+        if key.lower() == _ENTITLEMENT_HEADER:
+            return value != ""
     return False
 
 
@@ -262,8 +296,12 @@ def verify_request_server(
 ) -> VerifiedRequest:
     """Verify an inbound single-signature RAMP request; return a reason-tagged verdict.
 
-    ``headers`` is a lowercased-key mapping carrying at least ``signature-input``,
-    ``signature``, ``content-digest``, ``authorization``, and ``signature-agent``.
+    ``headers`` carries at least ``signature-input``, ``signature``,
+    ``content-digest``, ``authorization``, and ``signature-agent``. Lowercased keys
+    are the convention, but every name is matched case-insensitively and repeated
+    spellings of one name are JOINED with ", " before the base is rebuilt — the wire
+    has one field per name however a mapping spells it, and the oracle reads it that
+    way. A covered header the request does not carry at all is refused.
     Keys resolve ONLY through ``resolver`` (SDK owns no keys); replay state lives
     ONLY in ``replay_store`` when supplied (omit it to disable replay detection);
     time is ``now`` (unix seconds — SDK owns no wall clock). ``max_signature_age``
@@ -272,21 +310,21 @@ def verify_request_server(
     The verdict's reason mirrors the Go connectserver taxonomy: ``"signature"`` (the
     default — authenticity/freshness/key/covered-set/lifetime failures) or ``"replay"``.
     """
-    signature_input = headers.get("signature-input", "")
-    signature = headers.get("signature", "")
-    content_digest = headers.get("content-digest", "")
+    # Every read goes through the case-insensitive, duplicate-joining fold — see
+    # _header for why both properties are load-bearing. These three fail closed on
+    # their own: an absent one folds to "" and the parse or the digest comparison
+    # then rejects, landing on the same reason the oracle does.
+    signature_input = _header(headers, "signature-input") or ""
+    signature = _header(headers, "signature") or ""
+    content_digest = _header(headers, "content-digest") or ""
 
-    # ABSENT is not EMPTY for a covered header, and the difference is the whole reason
-    # an empty one is put on the wire at all. The base is rebuilt from the request that
-    # ARRIVED, so a name the signature covers and the request does not carry cannot be
-    # reconstructed — defaulting it to "" here would invent a value the signer may never
-    # have bound and accept a request the oracle refuses (it reads these with Values,
-    # not Get, precisely to tell the two apart). See docs/design-history.md, "A covered
-    # header the peer never receives is not bound".
-    if "authorization" not in headers or "signature-agent" not in headers:
+    # The two covered headers whose value may legitimately be EMPTY have no such
+    # fallback: "" is a value the signer may have bound, so an absent one has to be
+    # refused explicitly rather than defaulted into it.
+    authorization = _header(headers, "authorization")
+    signature_agent = _header(headers, "signature-agent")
+    if authorization is None or signature_agent is None:
         return _reject(_REASON_SIGNATURE)
-    authorization = headers["authorization"]
-    signature_agent = headers["signature-agent"]
 
     parsed = _parse_signature_input(signature_input)
     if parsed is None or parsed.keyid is None:
@@ -494,9 +532,16 @@ def verify_multisig_request_server(
     lifetime (``expires - created``); 0 / omitted means unbounded, inclusive at the
     bound (mirrors Go VerifyOptions.MaxSignatureAge). Keys resolve ONLY through
     ``resolver``; time is ``now``.
+
+    ``headers`` carries at least ``signature-input``, ``signature``,
+    ``content-digest``, ``authorization`` and ``signature-agent``. Lowercased keys
+    are the convention, but every name is matched case-insensitively and repeated
+    spellings of one name are JOINED with ", " before the base is rebuilt — the wire
+    has one field per name however a mapping spells it, and the oracle reads it that
+    way. A covered header the request does not carry at all is refused.
     """
-    signature_input = headers.get("signature-input", "")
-    signature = headers.get("signature", "")
+    signature_input = _header(headers, "signature-input") or ""
+    signature = _header(headers, "signature") or ""
     members = parse_multisig_signature_input([signature_input])
     if not members:
         return MultisigVerdict(False, _REASON_SIGNATURE)
@@ -505,13 +550,23 @@ def verify_multisig_request_server(
     if not _enforce_chain(members):
         return MultisigVerdict(False, _REASON_BROKEN_CHAIN)
 
+    # A covered header the request never carried is refused here and NOT sooner: the
+    # oracle finds it while rebuilding a hop's base, which happens after the budget
+    # and the chain are enforced. Checking earlier would answer "signature" to an
+    # over-budget or reordered chain that the oracle answers "hop_budget" and
+    # "broken_chain" for — the corpus pins all three.
+    authorization = _header(headers, "authorization")
+    signature_agent = _header(headers, "signature-agent")
+    if authorization is None or signature_agent is None:
+        return MultisigVerdict(False, _REASON_SIGNATURE)
+
     sig_map = signature_bytes_by_label(signature)
     fields = _RequestFields(
         method=method,
         url=url,
-        digest_header=headers.get("content-digest", ""),
-        authorization=headers.get("authorization", ""),
-        signature_agent=headers.get("signature-agent", ""),
+        digest_header=_header(headers, "content-digest") or "",
+        authorization=authorization,
+        signature_agent=signature_agent,
         body=body,
     )
     keyids: list[str] = []

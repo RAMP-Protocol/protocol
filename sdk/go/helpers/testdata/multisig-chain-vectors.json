@@ -186,6 +186,107 @@
       "expected_verified": false,
       "expected_keyids": null,
       "expected_reason": "signature"
+    },
+    {
+      "name": "absent_authorization_two_hop",
+      "method": "POST",
+      "url": "https://exchange.example.com/ramp.v1.ExchangeService/ExecuteTransaction",
+      "body_hex": "7b226964656d706f74656e63795f6b6579223a226964656d2d31227d",
+      "authorization": "",
+      "signature_agent": "",
+      "created": 1700000000,
+      "expires": 1700000600,
+      "content_digest": "sha-256=:aqbQCL+PR0Yt3lChg8nyhajBCVVVwuDJL2CxMyU+zRg=:",
+      "signature_input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"agent-demo.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600, sig2=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\" \"signature\";key=\"sig1\");keyid=\"broker.relay.a\";alg=\"ed25519\";created=1700000000;expires=1700000600",
+      "signature": "sig1=:vW6CskK5mliLzIvHhnB0DyBEOqw8U8a2Tc0TUCbueWuJ2PcjlavAEJCDtMrzRjzAoYc+fnMOdfrhOSfbMkxJBw==:, sig2=:dsbeJE0blYPjSK7v5C/h9KswcFGfJ8N67qsqD7avPjn+nTsRgyCgyU5DtVs2D9yphZk7U1YgtZhysOcoR6rlDw==:",
+      "hops": [
+        {
+          "keyid": "agent-demo.v1",
+          "pubkey_b64url": "0uuZO2MUNSjnDc3H65yiEBDddpvpUlDCxbq_rRXUWOI",
+          "seed_hex": "909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf"
+        },
+        {
+          "keyid": "broker.relay.a",
+          "pubkey_b64url": "ujxzXNvkI15srfgcQSuIOjRy0QRfrqGJ9YT4vspG40M",
+          "seed_hex": "9192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0"
+        }
+      ],
+      "max_signatures": 0,
+      "expected_verified": false,
+      "expected_keyids": null,
+      "expected_reason": "signature",
+      "omit_headers": [
+        "Authorization"
+      ]
+    },
+    {
+      "name": "absent_authorization_over_budget",
+      "method": "POST",
+      "url": "https://exchange.example.com/ramp.v1.ExchangeService/ExecuteTransaction",
+      "body_hex": "7b226964656d706f74656e63795f6b6579223a226964656d2d31227d",
+      "authorization": "",
+      "signature_agent": "",
+      "created": 1700000000,
+      "expires": 1700000600,
+      "content_digest": "sha-256=:aqbQCL+PR0Yt3lChg8nyhajBCVVVwuDJL2CxMyU+zRg=:",
+      "signature_input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"agent-demo.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600, sig2=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\" \"signature\";key=\"sig1\");keyid=\"broker.relay.a\";alg=\"ed25519\";created=1700000000;expires=1700000600, sig3=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\" \"signature\";key=\"sig2\");keyid=\"broker.relay.b\";alg=\"ed25519\";created=1700000000;expires=1700000600",
+      "signature": "sig1=:vW6CskK5mliLzIvHhnB0DyBEOqw8U8a2Tc0TUCbueWuJ2PcjlavAEJCDtMrzRjzAoYc+fnMOdfrhOSfbMkxJBw==:, sig2=:dsbeJE0blYPjSK7v5C/h9KswcFGfJ8N67qsqD7avPjn+nTsRgyCgyU5DtVs2D9yphZk7U1YgtZhysOcoR6rlDw==:, sig3=:0fKYDf52vrmaUc/3q7t8DuBlxXqD8OY+qoA2dWpc94xV3JUuh+T4JkoWFx6qtjyBPDhn2xqzYPurYGGYtQg+Bg==:",
+      "hops": [
+        {
+          "keyid": "agent-demo.v1",
+          "pubkey_b64url": "0uuZO2MUNSjnDc3H65yiEBDddpvpUlDCxbq_rRXUWOI",
+          "seed_hex": "909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf"
+        },
+        {
+          "keyid": "broker.relay.a",
+          "pubkey_b64url": "ujxzXNvkI15srfgcQSuIOjRy0QRfrqGJ9YT4vspG40M",
+          "seed_hex": "9192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0"
+        },
+        {
+          "keyid": "broker.relay.b",
+          "pubkey_b64url": "TgbbPwgfiQd4wXPLrwdvbCv-on770J2Pk6IISpLAhaI",
+          "seed_hex": "92939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1"
+        }
+      ],
+      "max_signatures": 2,
+      "expected_verified": false,
+      "expected_keyids": null,
+      "expected_reason": "hop_budget",
+      "omit_headers": [
+        "Authorization"
+      ]
+    },
+    {
+      "name": "absent_signature_agent_reordered",
+      "method": "POST",
+      "url": "https://exchange.example.com/ramp.v1.ExchangeService/ExecuteTransaction",
+      "body_hex": "7b226964656d706f74656e63795f6b6579223a226964656d2d31227d",
+      "authorization": "",
+      "signature_agent": "",
+      "created": 1700000000,
+      "expires": 1700000600,
+      "content_digest": "sha-256=:aqbQCL+PR0Yt3lChg8nyhajBCVVVwuDJL2CxMyU+zRg=:",
+      "signature_input": "sig2=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\" \"signature\";key=\"sig1\");keyid=\"broker.relay.a\";alg=\"ed25519\";created=1700000000;expires=1700000600, sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"agent-demo.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600",
+      "signature": "sig2=:dsbeJE0blYPjSK7v5C/h9KswcFGfJ8N67qsqD7avPjn+nTsRgyCgyU5DtVs2D9yphZk7U1YgtZhysOcoR6rlDw==:, sig1=:vW6CskK5mliLzIvHhnB0DyBEOqw8U8a2Tc0TUCbueWuJ2PcjlavAEJCDtMrzRjzAoYc+fnMOdfrhOSfbMkxJBw==:",
+      "hops": [
+        {
+          "keyid": "agent-demo.v1",
+          "pubkey_b64url": "0uuZO2MUNSjnDc3H65yiEBDddpvpUlDCxbq_rRXUWOI",
+          "seed_hex": "909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf"
+        },
+        {
+          "keyid": "broker.relay.a",
+          "pubkey_b64url": "ujxzXNvkI15srfgcQSuIOjRy0QRfrqGJ9YT4vspG40M",
+          "seed_hex": "9192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0"
+        }
+      ],
+      "max_signatures": 0,
+      "expected_verified": false,
+      "expected_keyids": null,
+      "expected_reason": "broken_chain",
+      "omit_headers": [
+        "Signature-Agent"
+      ]
     }
   ]
 }

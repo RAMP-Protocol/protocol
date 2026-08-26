@@ -24,6 +24,7 @@ import {
 	signatureBytesByLabel,
 } from "./multisig-parse.ts";
 import {
+	readHeader,
 	type RequestKeyResolver,
 	type RequestVerifyFields,
 	verifyParsedSignature,
@@ -41,8 +42,14 @@ export type MultisigRejectReason = "signature" | "broken_chain" | "hop_budget";
  * through it (the SDK owns no keys). Structurally identical to RequestKeyResolver. */
 export type MultisigKeyResolver = RequestKeyResolver;
 
-/** The lowercased request headers a multisig server-verify reads. */
-export interface MultisigVerifyHeaders {
+/**
+ * The request headers a multisig server-verify reads.
+ *
+ * Read exactly as the single-sig sibling reads them: case-insensitively, joining
+ * repeated spellings of one name. Declared as a type alias for the same reason —
+ * a real request carries names beyond the ones spelled out below.
+ */
+export type MultisigVerifyHeaders = {
 	"content-digest": string;
 	"signature-input": string;
 	signature: string;
@@ -141,16 +148,11 @@ function chainLinkFor(
 export async function verifyMultisigRequestServer(
 	input: VerifyMultisigRequestInput,
 ): Promise<MultisigVerifyVerdict> {
-	// ABSENT is not EMPTY. See the header type for why the distinction is the whole
-	// point of putting an empty covered header on the wire.
-	if (
-		input.headers.authorization === undefined ||
-		input.headers["signature-agent"] === undefined
-	) {
-		return rejectMultisig("signature");
-	}
-
-	const members = parseMultisigSignatureInput([input.headers["signature-input"]]);
+	// Every read goes through the case-insensitive, duplicate-joining fold — see
+	// readHeader for why both properties are load-bearing.
+	const members = parseMultisigSignatureInput([
+		readHeader(input.headers, "signature-input") ?? "",
+	]);
 	if (!members) return rejectMultisig("signature");
 
 	const budget = input.maxSignatures ?? 0;
@@ -158,21 +160,31 @@ export async function verifyMultisigRequestServer(
 
 	if (!enforceSignatureChain(members)) return rejectMultisig("broken_chain");
 
-	const sigMap = signatureBytesByLabel(input.headers.signature);
+	// A covered header the request never carried is refused here and NOT sooner: the
+	// oracle finds it while rebuilding a hop's base, which happens after the budget
+	// and the chain are enforced. Checking earlier would answer "signature" to an
+	// over-budget or reordered chain that the oracle answers "hop_budget" and
+	// "broken_chain" for — the corpus pins all three.
+	const authorization = readHeader(input.headers, "authorization");
+	const signatureAgent = readHeader(input.headers, "signature-agent");
+	if (authorization === undefined || signatureAgent === undefined) {
+		return rejectMultisig("signature");
+	}
+
+	const sigMap = signatureBytesByLabel(readHeader(input.headers, "signature") ?? "");
 	const nowSec = Math.floor(input.now());
+	const entitlement = readHeader(input.headers, "x-entitlement-token");
 	const fields: RequestVerifyFields = {
 		method: input.method,
 		url: input.url,
-		digestHeader: input.headers["content-digest"],
-		authorization: input.headers.authorization,
-		signatureAgent: input.headers["signature-agent"],
+		digestHeader: readHeader(input.headers, "content-digest") ?? "",
+		authorization,
+		signatureAgent,
 		body: input.body,
 		// Thread the entitlement-token header so enforceEntitlementCoverage gates
 		// EVERY hop (Go runs it inside verifySingleSignature, called per hop). When
 		// present without per-hop coverage the hop is rejected "signature".
-		...(input.headers["x-entitlement-token"]
-			? { entitlementHeader: input.headers["x-entitlement-token"] }
-			: {}),
+		...(entitlement ? { entitlementHeader: entitlement } : {}),
 	};
 
 	const keyids: string[] = [];

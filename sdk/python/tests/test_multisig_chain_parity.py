@@ -61,7 +61,7 @@ def _resolver(hops: list[dict[str, object]]) -> StaticKeyResolver:
     return StaticKeyResolver(keys)
 
 
-def test_vector_set_covers_the_positive_and_all_four_negative_chain_cases() -> None:
+def test_vector_set_covers_the_positive_and_every_negative_chain_case() -> None:
     names = {v["name"] for v in _VECTORS}
     assert {
         "positive_two_hop",
@@ -70,7 +70,34 @@ def test_vector_set_covers_the_positive_and_all_four_negative_chain_cases() -> N
         "broken_chain_stripped_middle",
         "broken_chain_missing_link",
         "tampered_predecessor",
+        # The same chains missing a covered header — which pin WHERE that is
+        # noticed relative to the budget and chain gates, not only that it is.
+        "absent_authorization_two_hop",
+        "absent_authorization_over_budget",
+        "absent_signature_agent_reordered",
     } <= names
+
+
+def _headers_for(v: dict[str, object]) -> dict[str, str]:
+    """The header bag a vector describes: the base five, minus what the request does
+    not carry, plus any extra field line spelled in another case.
+
+    ``omit_headers`` drops the key entirely, so the face sees a covered name with no
+    field line under it rather than an empty one. ``extra_headers`` is applied AFTER
+    the base ones so the join order matches the order the oracle added them.
+    """
+    headers = {
+        "content-digest": str(v["content_digest"]),
+        "signature-input": str(v["signature_input"]),
+        "signature": str(v["signature"]),
+        "authorization": str(v["authorization"]),
+        "signature-agent": str(v["signature_agent"]),
+    }
+    for name in v.get("omit_headers") or []:  # type: ignore[union-attr]
+        headers.pop(str(name).lower(), None)
+    for name, value in (v.get("extra_headers") or {}).items():  # type: ignore[union-attr]
+        headers[str(name)] = str(value)
+    return headers
 
 
 def test_positive_two_hop_verifies_and_returns_keyids_in_order() -> None:
@@ -170,6 +197,9 @@ def test_append_to_unsigned_request_equals_sign_request_n1() -> None:
         "broken_chain_stripped_middle",
         "broken_chain_missing_link",
         "tampered_predecessor",
+        "absent_authorization_two_hop",
+        "absent_authorization_over_budget",
+        "absent_signature_agent_reordered",
     ],
 )
 def test_negative_chain_case_rejects_with_go_reason(name: str) -> None:
@@ -182,13 +212,7 @@ def test_negative_chain_case_rejects_with_go_reason(name: str) -> None:
         method=str(v["method"]),
         url=str(v["url"]),
         body=bytes.fromhex(str(v["body_hex"])),
-        headers={
-            "content-digest": str(v["content_digest"]),
-            "signature-input": str(v["signature_input"]),
-            "signature": str(v["signature"]),
-            "authorization": str(v["authorization"]),
-            "signature-agent": str(v["signature_agent"]),
-        },
+        headers=_headers_for(v),
         resolver=_resolver(v["hops"]),  # type: ignore[arg-type]
         now=now,
         max_signatures=int(v["max_signatures"]),  # type: ignore[call-overload]

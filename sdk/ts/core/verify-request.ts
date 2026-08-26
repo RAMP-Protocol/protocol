@@ -57,8 +57,16 @@ export interface ReplayStore {
 	seenOrAdd(nonce: string): Promise<boolean>;
 }
 
-/** The lowercased request headers a server-verify reads. */
-export interface VerifyRequestHeaders {
+/**
+ * The request headers a server-verify reads.
+ *
+ * Lowercased keys are the convention and the members below spell them that way, but
+ * every name is matched case-insensitively and repeated spellings of one name are
+ * JOINED before the base is rebuilt — the wire has one field per name however an
+ * object spells it. Declared as a type alias rather than an interface so a header
+ * bag carrying names beyond these is assignable, which is what a real request is.
+ */
+export type VerifyRequestHeaders = {
 	"content-digest": string;
 	"signature-input": string;
 	signature: string;
@@ -123,6 +131,42 @@ const ENTITLEMENT_COVERED = "x-entitlement-token";
 
 const REASON_SIGNATURE: RejectReason = "signature";
 const REASON_REPLAY: RejectReason = "replay";
+
+/**
+ * Read the request's value for `name`, or undefined when it carries no such field.
+ *
+ * The port of the oracle's covered-component read (`http.Header.Values` plus the
+ * RFC 9421 join), and it makes two distinctions a plain property lookup erases.
+ *
+ * ABSENT is not EMPTY. undefined means the request carried no field line under this
+ * name at all; "" means it carried one whose value is empty. The base is rebuilt
+ * from the request that ARRIVED, so a covered name with nothing under it cannot be
+ * reconstructed, while an empty one reconstructs to the empty value the signer
+ * bound — which is the whole reason an empty covered header is put on the wire.
+ *
+ * Repeated spellings JOIN, they do not shadow. Header names are case-insensitive on
+ * the wire and a JavaScript object's keys are not, so a caller's `Authorization` and
+ * a signer's `authorization` are two field lines under ONE covered name. The oracle
+ * joins them with ", " before rebuilding the base, so the covered value changes and
+ * the signature no longer reproduces. Returning the first match instead would hand
+ * back the signed value and accept whatever was slipped in beside it — the token
+ * injection the covered set exists to prevent.
+ *
+ * Exported for the multisig sibling, which reads the same request the same way.
+ * See docs/design-history.md, "A covered header the peer never receives is not bound".
+ */
+export function readHeader(
+	headers: Record<string, string | undefined>,
+	name: string,
+): string | undefined {
+	const lower = name.toLowerCase();
+	const values: string[] = [];
+	for (const [key, value] of Object.entries(headers)) {
+		if (key.toLowerCase() === lower && value !== undefined) values.push(value);
+	}
+	if (values.length === 0) return undefined;
+	return values.join(", ").trim();
+}
 
 const reject = (reason: RejectReason): VerifyVerdict => ({
 	valid: false,
@@ -325,19 +369,28 @@ export async function verifyParsedSignature(
 export async function verifyRequestServer(
 	input: VerifyRequestServerInput,
 ): Promise<VerifyVerdict> {
-	// ABSENT is not EMPTY. See the header type for why the distinction is the whole
-	// point of putting an empty covered header on the wire.
-	if (
-		input.headers.authorization === undefined ||
-		input.headers["signature-agent"] === undefined
-	) {
+	// Every read goes through the case-insensitive, duplicate-joining fold — see
+	// readHeader for why both properties are load-bearing. These two fail closed on
+	// their own: an absent one folds to "" and the parse then rejects, landing on
+	// the same reason the oracle does.
+	const signatureInput = readHeader(input.headers, "signature-input") ?? "";
+	const signatureHeader = readHeader(input.headers, "signature") ?? "";
+
+	// The two covered headers whose value may legitimately be EMPTY have no such
+	// fallback: "" is a value the signer may have bound, so an absent one has to be
+	// refused explicitly rather than defaulted into it.
+	const authorization = readHeader(input.headers, "authorization");
+	const signatureAgent = readHeader(input.headers, "signature-agent");
+	if (authorization === undefined || signatureAgent === undefined) {
 		return reject(REASON_SIGNATURE);
 	}
-	const parsed = parseSignatureInput(input.headers["signature-input"]);
+
+	const parsed = parseSignatureInput(signatureInput);
 	if (!parsed) return reject(REASON_SIGNATURE);
 
 	const nowSec = Math.floor(input.now());
-	const sigBytes = parseSignatureBytes(input.headers.signature);
+	const sigBytes = parseSignatureBytes(signatureHeader);
+	const entitlement = readHeader(input.headers, ENTITLEMENT_COVERED);
 
 	// The full per-signature core (covered set / window / digest / key / Ed25519),
 	// shared with the multisig path; replay stays here so the multisig loop never
@@ -346,13 +399,11 @@ export async function verifyRequestServer(
 		{
 			method: input.method,
 			url: input.url,
-			digestHeader: input.headers["content-digest"],
-			authorization: input.headers.authorization,
-			signatureAgent: input.headers["signature-agent"],
+			digestHeader: readHeader(input.headers, "content-digest") ?? "",
+			authorization,
+			signatureAgent,
 			body: input.body,
-			...(input.headers["x-entitlement-token"]
-				? { entitlementHeader: input.headers["x-entitlement-token"] }
-				: {}),
+			...(entitlement ? { entitlementHeader: entitlement } : {}),
 		},
 		parsed,
 		sigBytes,

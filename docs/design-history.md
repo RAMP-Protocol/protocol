@@ -936,8 +936,42 @@ the same shape as a corpus row that names a file and reads none of its columns.
 default-to-empty (`headers.get("authorization", "")`), which collapses *absent* into
 *empty* and accepts exactly the request Go refuses — the oracle reads them with `Values`
 rather than `Get` precisely to tell the two apart. Defaulting there invents a value the
-signer may never have bound. Both now refuse an absent covered header and still accept a
-present-and-empty one, which is the distinction the empty header exists to carry.
+signer may never have bound. All four server-verify faces now refuse an absent covered
+header and still accept a present-and-empty one, which is the distinction the empty
+header exists to carry.
+
+**Reading a header case-sensitively is the same defect one tier down.** The absent-header
+guard first landed on three of the four faces, and it landed as a plain key test
+(`"authorization" not in headers`). Both halves of that were wrong in the same way the
+emit had been. A header bag whose keys are strings can hold `Authorization` and
+`authorization` at once, where the wire has one field name spelled two ways — so the peer
+DID send the header, under a spelling the reader never looked for. A guard that misses it
+reports absent; a reader that misses it substitutes empty and rebuilds a base that
+matches, accepting an unsigned bearer token sitting beside the signed empty one. That is
+precisely the injection the covered set exists to prevent, and it was open on every face
+before the fold landed.
+
+The fix is a fold **and a join**, never a fold and a pick. Measured on the oracle, a
+request carrying `authorization: ""` and `Authorization: Bearer …` resolves to
+`", Bearer …"` — `http.Header.Values` returns both and RFC 9421 joins them with `", "`
+before the base is rebuilt, so the covered value CHANGES and the signature fails. A port
+that folds the case but returns the first match reads back the signer's empty value and
+accepts the token next to it: the fold makes the bug harder to see without removing it.
+Absent stays a distinct answer from either — zero field lines, not an empty one.
+
+Both properties are pinned by Go-derived corpus rows rather than by prose, and the rows
+are signed with EMPTY covered values on purpose. Omit a header whose signer bound a
+non-empty value and the request is refused either way — a port that defaults the missing
+header to `""` still reconstructs the wrong value, so the case cannot tell *refused
+because absent* from *refused because the value differs*, and gates nothing. The first
+attempt at these vectors made exactly that mistake and passed with the guard deleted.
+
+The chain corpus pins one thing more, which only a chain can express: **where** the
+missing header is noticed. The oracle finds it while rebuilding a hop's base, which runs
+after the hop budget and the structural chain are enforced — so an over-budget chain
+still answers `hop_budget` and a reordered one still answers `broken_chain`, even with a
+covered header removed. A port that tests for the header before those gates answers
+`signature` to all three and silently diverges on two.
 
 ## SDK layering: a dial-free trust core, a vetted-client I/O tier
 

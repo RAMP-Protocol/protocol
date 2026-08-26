@@ -99,6 +99,14 @@ type NegVerifyVector = {
   // enforceEntitlementCoverage to reject "signature" since the base covered set
   // does not commit to it.
   entitlement?: string;
+  // names the request does NOT carry — the key is DELETED after the base ones are
+  // set, so the face sees a covered name with no field line under it rather than an
+  // empty one. Absent is not empty, and the two must not verify alike.
+  omit_headers?: string[];
+  // field lines ADDED beside the base ones, spelled in a DIFFERENT case so an object
+  // holds both. Two keys, one covered name: the values join before the base is
+  // rebuilt, which is what stops an unsigned token riding under a signed empty one.
+  extra_headers?: Record<string, string>;
 };
 
 function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
@@ -175,7 +183,7 @@ describe("sdk/ts full-RPC single-sig server-verify mirrors the Go connectserver 
   const signDoc = signRequestVectors as { vectors: SignRequestVector[] };
   const negDoc = negVerifyVectors as { vectors: NegVerifyVector[] };
 
-  it("negative-verify vector set covers the five single-sig reject cases", () => {
+  it("negative-verify vector set covers every single-sig reject case", () => {
     // The Go emitter must produce exactly these named single-sig negatives; the
     // multisig cases (broken_chain / hop_budget) are out of scope.
     const names = new Set(negDoc.vectors.map((v) => v.name));
@@ -185,6 +193,12 @@ describe("sdk/ts full-RPC single-sig server-verify mirrors the Go connectserver 
     expect(names.has("neg_wrong_key")).toBe(true);
     expect(names.has("neg_tampered_authorization")).toBe(true);
     expect(names.has("neg_entitlement_uncovered")).toBe(true);
+    // How a covered header is READ, which is a separate claim from whether its
+    // value was tampered with: a name the request does not carry at all, and a
+    // second field line beside the signed one under a different spelling.
+    expect(names.has("neg_absent_authorization")).toBe(true);
+    expect(names.has("neg_absent_signature_agent")).toBe(true);
+    expect(names.has("neg_duplicate_authorization")).toBe(true);
   });
 
   // POSITIVE: every sign-request oracle vector verifies through the server face
@@ -289,6 +303,14 @@ describe("sdk/ts full-RPC single-sig server-verify mirrors the Go connectserver 
       // covered set does NOT commit to, so enforceEntitlementCoverage rejects it.
       if (v.entitlement) {
         headers["x-entitlement-token"] = v.entitlement;
+      }
+      for (const name of v.omit_headers ?? []) {
+        delete (headers as Record<string, string | undefined>)[name.toLowerCase()];
+      }
+      // AFTER the base ones, so the join order matches the order the oracle added
+      // them. Verbatim spelling — the case difference is the whole point.
+      for (const [name, value] of Object.entries(v.extra_headers ?? {})) {
+        (headers as Record<string, string | undefined>)[name] = value;
       }
 
       const req = {

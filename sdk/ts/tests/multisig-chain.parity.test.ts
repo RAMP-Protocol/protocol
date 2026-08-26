@@ -33,6 +33,7 @@ import {
   verifyMultisigRequestServer,
   type MultisigRejectReason,
   type MultisigKeyResolver,
+  type MultisigVerifyHeaders,
 } from "../core/verify-multisig-request.ts";
 import multisigVectors from "../../go/helpers/testdata/multisig-chain-vectors.json";
 
@@ -63,6 +64,12 @@ type MultisigChainVector = {
   expected_verified: boolean;
   expected_keyids: string[] | null;
   expected_reason: string;
+  // names the request does NOT carry — deleted after the base ones are set, so a
+  // covered name has no field line under it rather than an empty one.
+  omit_headers?: string[];
+  // field lines ADDED beside the base ones, spelled in a different case so an
+  // object holds both; their values join before a hop's base is rebuilt.
+  extra_headers?: Record<string, string>;
 };
 
 function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
@@ -124,7 +131,7 @@ describe("sdk/ts multisig forwarding-chain append+verify mirrors the Go oracle",
     return h;
   };
 
-  it("vector set covers the positive + all four negative chain cases", () => {
+  it("vector set covers the positive + every negative chain case", () => {
     const names = new Set(doc.vectors.map((v) => v.name));
     expect(names.has("positive_two_hop")).toBe(true);
     expect(names.has("hop_budget_three_over_two")).toBe(true);
@@ -132,7 +139,31 @@ describe("sdk/ts multisig forwarding-chain append+verify mirrors the Go oracle",
     expect(names.has("broken_chain_stripped_middle")).toBe(true);
     expect(names.has("broken_chain_missing_link")).toBe(true);
     expect(names.has("tampered_predecessor")).toBe(true);
+    // The same chains missing a covered header — which pin WHERE that is noticed
+    // relative to the budget and chain gates, not only that it is.
+    expect(names.has("absent_authorization_two_hop")).toBe(true);
+    expect(names.has("absent_authorization_over_budget")).toBe(true);
+    expect(names.has("absent_signature_agent_reordered")).toBe(true);
   });
+
+  // The header bag a vector describes: the base five, minus what the request does
+  // not carry, plus any extra field line spelled in another case. Extras land AFTER
+  // the base ones so the join order matches the order the oracle added them.
+  const headersFor = (v: MultisigChainVector): MultisigVerifyHeaders => {
+    const headers: MultisigVerifyHeaders = {
+      "content-digest": v.content_digest,
+      "signature-input": v.signature_input,
+      signature: v.signature,
+      authorization: v.authorization,
+      "signature-agent": v.signature_agent,
+    };
+    const bag = headers as Record<string, string | undefined>;
+    for (const name of v.omit_headers ?? []) delete bag[name.toLowerCase()];
+    for (const [name, value] of Object.entries(v.extra_headers ?? {})) {
+      bag[name] = value;
+    }
+    return headers;
+  };
 
   // POSITIVE: the Go-signed 2-hop chain verifies through the TS face and returns
   // the verified keyids in chain order (sig1 agent, sig2 broker).
@@ -231,6 +262,9 @@ describe("sdk/ts multisig forwarding-chain append+verify mirrors the Go oracle",
     "broken_chain_stripped_middle",
     "broken_chain_missing_link",
     "tampered_predecessor",
+    "absent_authorization_two_hop",
+    "absent_authorization_over_budget",
+    "absent_signature_agent_reordered",
   ]) {
     it(`${name} rejects with the Go-emitted reason`, async () => {
       const v = byName(name);
@@ -239,13 +273,7 @@ describe("sdk/ts multisig forwarding-chain append+verify mirrors the Go oracle",
         method: v.method,
         url: v.url,
         body: hexToBytes(v.body_hex),
-        headers: {
-          "content-digest": v.content_digest,
-          "signature-input": v.signature_input,
-          signature: v.signature,
-          authorization: v.authorization,
-          "signature-agent": v.signature_agent,
-        },
+        headers: headersFor(v),
         resolve: hopResolver(v.hops),
         now: fixedClock(now),
         maxSignatures: v.max_signatures,
