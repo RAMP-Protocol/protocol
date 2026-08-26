@@ -67,11 +67,13 @@ class SignedRequest:
     signature: str
     signature_base: str
     #: Echoed from the input so a caller attaching what this returns sends what was
-    #: signed. Empty is a value, not an absence.
-    authorization: str = ""
-    #: The signer's WBA directory, echoed for the same reason. Empty is the
-    #: static-bootstrap case and is still carried.
-    signature_agent: str = ""
+    #: signed. Empty is a value, not an absence — and REQUIRED, no default: a field
+    #: that can be left out re-creates the "empty is a safe default" assumption the
+    #: transport now relies on this echo to remove.
+    authorization: str
+    #: The signer's WBA directory, echoed for the same reason and required for the
+    #: same reason. Empty is the static-bootstrap case and is still carried.
+    signature_agent: str
 
 
 @dataclass(frozen=True)
@@ -146,7 +148,9 @@ def sign_request(
     """Sign a request over the RAMP covered set; return the RFC 9421 headers.
 
     ``created``/``expires`` are injected unix seconds (L1-pure, no wall clock).
-    Authorization is always bound — pass an empty string to pin its absence.
+    Authorization is always bound — pass an empty string when the caller holds no
+    token, which BINDS that emptiness. The header is still emitted and still sent;
+    an absent header is a different thing entirely and a verifier refuses it.
     ``signature_agent`` is the signer's WBA key-directory URL, bound the same
     way (empty string for the static bootstrap path), mirroring Go's
     ``bindSignatureAgent``.

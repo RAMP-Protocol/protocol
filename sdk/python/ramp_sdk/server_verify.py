@@ -241,18 +241,14 @@ def _header(headers: dict[str, str], name: str) -> str | None:
 def _has_entitlement_header(headers: dict[str, str]) -> bool:
     """Return True if the entitlement-token header is present (non-empty).
 
-    Case-insensitive, so a caller passing the canonical ``X-Entitlement-Token`` form
-    is honoured alongside the lowercased-key convention this face otherwise reads.
-
-    Deliberately the FIRST field line rather than the join ``_header`` returns: this
-    is a presence test feeding a coverage rule, and the oracle spells it
-    ``h.Get(entitlementHeader) != ""`` (enforceEntitlementCoverage). The join belongs
-    to covered-VALUE reads, where a second line has to change the value.
+    Read through the same fold every other header read uses, and for the same reason.
+    Returning only the FIRST matching line is shadowable: a request may carry the name
+    twice, and an empty line placed ahead of a real capability token makes the answer
+    "", so the coverage rule never runs and an unsigned token rides in under a
+    signature that never committed to it. Joining removes the shadow — any second
+    line makes the value non-empty.
     """
-    for key, value in headers.items():
-        if key.lower() == _ENTITLEMENT_HEADER:
-            return value != ""
-    return False
+    return (_header(headers, _ENTITLEMENT_HEADER) or "") != ""
 
 
 def _reject(reason: str) -> VerifiedRequest:
@@ -316,15 +312,15 @@ def verify_request_server(
     # then rejects, landing on the same reason the oracle does.
     signature_input = _header(headers, "signature-input") or ""
     signature = _header(headers, "signature") or ""
-    content_digest = _header(headers, "content-digest") or ""
 
-    # The two covered headers whose value may legitimately be EMPTY have no such
-    # fallback: "" is a value the signer may have bound, so an absent one has to be
-    # refused explicitly rather than defaulted into it.
-    authorization = _header(headers, "authorization")
-    signature_agent = _header(headers, "signature-agent")
-    if authorization is None or signature_agent is None:
+    # A covered header the request does not CARRY cannot be reconstructed, and "" is a
+    # value the signer may legitimately have bound — so absent is refused rather than
+    # defaulted. Derived from the covered set; see _request_fields.
+    fields = _request_fields(method=method, url=url, body=body, headers=headers)
+    if fields is None:
         return _reject(_REASON_SIGNATURE)
+    authorization = fields.authorization
+    signature_agent = fields.signature_agent
 
     parsed = _parse_signature_input(signature_input)
     if parsed is None or parsed.keyid is None:
@@ -367,7 +363,7 @@ def verify_request_server(
         body=body,
         signature_input=signature_input,
         signature=signature,
-        content_digest=content_digest,
+        content_digest=fields.digest_header,
         authorization=authorization,
         pubkey=pub,
         now=now,
@@ -422,6 +418,50 @@ class _RequestFields:
     authorization: str
     signature_agent: str
     body: bytes
+
+
+#: The covered names that are HEADER fields. Derived from _REQUIRED_COVERED rather
+#: than restated, so a name added to the covered set is absent-checked the day it is
+#: added: the two "@" components are reconstructed from the request line, every other
+#: covered name has to arrive as a field. Sorted for a deterministic check order.
+_COVERED_HEADER_NAMES: tuple[str, ...] = tuple(
+    sorted(name for name in _REQUIRED_COVERED if not name.startswith("@"))
+)
+
+
+def _request_fields(
+    *, method: str, url: str, body: bytes, headers: dict[str, str]
+) -> _RequestFields | None:
+    """Assemble the request-level covered fields, or None when the request does not
+    CARRY one of the headers its signature covers.
+
+    The absent-header rule lives here rather than at each entry point, because it is a
+    property of the covered SET and not of any one face: every name in
+    ``_COVERED_HEADER_NAMES`` must arrive, and an absent one cannot be defaulted to ""
+    — that would invent a value the signer may never have bound. The oracle draws the
+    same line one layer down, in its component resolver, for any covered name at all.
+
+    Callers keep their own reject reason and their own place in the gate sequence: the
+    single-sig and multisig faces refuse at different points on purpose, and the corpus
+    pins that difference.
+
+    Note the base builder still renders a fixed component list, so a name added to the
+    covered set is guarded here but does not yet reach the signature base.
+    """
+    covered: dict[str, str] = {}
+    for name in _COVERED_HEADER_NAMES:
+        value = _header(headers, name)
+        if value is None:
+            return None
+        covered[name] = value
+    return _RequestFields(
+        method=method,
+        url=url,
+        digest_header=covered["content-digest"],
+        authorization=covered["authorization"],
+        signature_agent=covered["signature-agent"],
+        body=body,
+    )
 
 
 def _enforce_chain(members: list[MultisigMember]) -> bool:
@@ -555,20 +595,11 @@ def verify_multisig_request_server(
     # and the chain are enforced. Checking earlier would answer "signature" to an
     # over-budget or reordered chain that the oracle answers "hop_budget" and
     # "broken_chain" for — the corpus pins all three.
-    authorization = _header(headers, "authorization")
-    signature_agent = _header(headers, "signature-agent")
-    if authorization is None or signature_agent is None:
+    fields = _request_fields(method=method, url=url, body=body, headers=headers)
+    if fields is None:
         return MultisigVerdict(False, _REASON_SIGNATURE)
 
     sig_map = signature_bytes_by_label(signature)
-    fields = _RequestFields(
-        method=method,
-        url=url,
-        digest_header=_header(headers, "content-digest") or "",
-        authorization=authorization,
-        signature_agent=signature_agent,
-        body=body,
-    )
     keyids: list[str] = []
     for i, member in enumerate(members):
         chain_link = _chain_link_for(i, sig_map) if i > 0 else None

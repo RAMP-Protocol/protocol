@@ -112,6 +112,9 @@ def test_neg_vector_set_covers_every_single_sig_reject_case() -> None:
         "neg_absent_authorization",
         "neg_absent_signature_agent",
         "neg_duplicate_authorization",
+        # The entitlement name carried twice with an empty line first — the coverage
+        # rule is skipped entirely by a reader that resolves the name to one line.
+        "neg_shadowed_entitlement",
     } <= names
 
 

@@ -199,6 +199,9 @@ describe("sdk/ts full-RPC single-sig server-verify mirrors the Go connectserver 
     expect(names.has("neg_absent_authorization")).toBe(true);
     expect(names.has("neg_absent_signature_agent")).toBe(true);
     expect(names.has("neg_duplicate_authorization")).toBe(true);
+    // The entitlement name carried twice with an empty line first — the coverage rule
+    // is skipped entirely by a reader that resolves the name to one line.
+    expect(names.has("neg_shadowed_entitlement")).toBe(true);
   });
 
   // POSITIVE: every sign-request oracle vector verifies through the server face

@@ -264,7 +264,9 @@ func enforceRequiredComponents(covered []CoveredComponent) error {
 // slipped under a valid signature). Format-neutral: it checks coverage, never
 // the token's contents, so it holds identically for JWT/opaque tokens.
 func enforceEntitlementCoverage(h http.Header, covered []CoveredComponent) error {
-	if h.Get(entitlementHeader) == "" {
+	// Every field line under the name, joined — see entitlementValue for why the
+	// first one alone is shadowable.
+	if entitlementValue(h) == "" {
 		return nil
 	}
 	for _, c := range covered {

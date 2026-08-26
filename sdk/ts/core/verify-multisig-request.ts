@@ -26,7 +26,7 @@ import {
 import {
 	readHeader,
 	type RequestKeyResolver,
-	type RequestVerifyFields,
+	requestVerifyFields,
 	verifyParsedSignature,
 } from "./verify-request.ts";
 
@@ -165,27 +165,14 @@ export async function verifyMultisigRequestServer(
 	// and the chain are enforced. Checking earlier would answer "signature" to an
 	// over-budget or reordered chain that the oracle answers "hop_budget" and
 	// "broken_chain" for — the corpus pins all three.
-	const authorization = readHeader(input.headers, "authorization");
-	const signatureAgent = readHeader(input.headers, "signature-agent");
-	if (authorization === undefined || signatureAgent === undefined) {
-		return rejectMultisig("signature");
-	}
+	//
+	// The fields carry the entitlement-token header too, so enforceEntitlementCoverage
+	// gates EVERY hop (Go runs it inside verifySingleSignature, called per hop).
+	const fields = requestVerifyFields(input.method, input.url, input.body, input.headers);
+	if (fields === undefined) return rejectMultisig("signature");
 
 	const sigMap = signatureBytesByLabel(readHeader(input.headers, "signature") ?? "");
 	const nowSec = Math.floor(input.now());
-	const entitlement = readHeader(input.headers, "x-entitlement-token");
-	const fields: RequestVerifyFields = {
-		method: input.method,
-		url: input.url,
-		digestHeader: readHeader(input.headers, "content-digest") ?? "",
-		authorization,
-		signatureAgent,
-		body: input.body,
-		// Thread the entitlement-token header so enforceEntitlementCoverage gates
-		// EVERY hop (Go runs it inside verifySingleSignature, called per hop). When
-		// present without per-hop coverage the hop is rejected "signature".
-		...(entitlement ? { entitlementHeader: entitlement } : {}),
-	};
 
 	const keyids: string[] = [];
 	for (let i = 0; i < members.length; i += 1) {

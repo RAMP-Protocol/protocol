@@ -966,6 +966,31 @@ header to `""` still reconstructs the wrong value, so the case cannot tell *refu
 because absent* from *refused because the value differs*, and gates nothing. The first
 attempt at these vectors made exactly that mistake and passed with the guard deleted.
 
+**The last read to learn the rule was the oracle's own, and it was the most exposed.**
+The entitlement-coverage gate — present-but-uncovered token, refuse — asked `Get`, the
+first field line. Everything above applies to it, with one difference that inverts the
+usual ranking: the ports need a header bag holding two differently-cased keys, which no
+mainstream adapter produces, while Go needs only the header sent twice. That is ordinary
+HTTP and no case trick at all. Measured on the oracle: `Add("")` then `Add("STOLEN")`
+gives `Get()=""`, the gate never runs, and a capability token no signature committed to
+is accepted. The signer half had the same shadow — `coveredFor` resolving the name with
+`Get` leaves it UNCOVERED whenever an empty line precedes a real one, binding a value it
+never committed to — so both sites moved, not just the gate.
+
+Two lessons worth separating. A presence test is not exempt from how a header is
+defined: "does the request carry this name" is answered by all of its field lines, not
+by whichever one a map hands back first. And *parity with the oracle* is a rule about
+where the answer comes from, not a licence to copy a hole — the port that had already
+been fixed was the one diverging, and it was diverging by being right.
+
+A negative vector cannot finish this. It separates a first-match reader from the join,
+because both a last-match reader and the join refuse a tampered covered value — so a
+port could resolve a covered name to its LAST field line and pass every rejection case
+in the corpus. Only a POSITIVE case signed over two field lines, whose covered value
+*is* the join, tells them apart: first-match and last-match each reconstruct a different
+base and every hop fails. The same shape catches a case-sensitive reader, as a chain
+whose bag is spelled the conventional way and which must still verify.
+
 The chain corpus pins one thing more, which only a chain can express: **where** the
 missing header is noticed. The oracle finds it while rebuilding a hop's base, which runs
 after the hop budget and the structural chain are enforced — so an over-budget chain

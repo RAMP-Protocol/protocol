@@ -124,12 +124,31 @@ func signMultisigChainWith(
 	t *testing.T, body []byte, hops []hopSpec, authorization, signatureAgent string,
 ) (*http.Request, []multisigHop) {
 	t.Helper()
+	return signMultisigChainOverLines(t, body, hops, []string{authorization}, signatureAgent)
+}
+
+// signMultisigChainOverLines signs a chain whose Authorization arrives as SEVERAL
+// field lines. The covered value is then what the join produces, so the emitted
+// chain verifies ONLY against a reader that joins: resolving the name to its first
+// or its last line reconstructs a different base and every hop fails. That is the
+// distinction no negative vector can draw — a first-match and a last-match reader
+// both reject a request whose covered value was tampered with, and only a positive
+// case signed over two lines separates either of them from the join.
+func signMultisigChainOverLines(
+	t *testing.T, body []byte, hops []hopSpec, authorizationLines []string, signatureAgent string,
+) (*http.Request, []multisigHop) {
+	t.Helper()
 	ctx := context.Background()
 	req, err := http.NewRequest(msMethod, msURL, nil)
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
-	req.Header.Set("Authorization", authorization)
+	// Add, not Set: each entry is its own field line under the one covered name.
+	// bindAuthorization only fills in an EMPTY Authorization, so lines supplied here
+	// survive into the covered value untouched.
+	for _, line := range authorizationLines {
+		req.Header.Add("Authorization", line)
+	}
 	req.Header.Set(SignatureAgentHeader, signatureAgent)
 	opts := SignOptions{Created: msCreated, Expires: msExpires}
 	out := make([]multisigHop, 0, len(hops))
@@ -267,9 +286,46 @@ func buildMultisigChainVectors(t *testing.T) []multisigChainVector {
 	absentReordered.Signature = msSwapTwoMembers(absentReordered.Signature)
 	absentReordered.OmitHeaders = []string{SignatureAgentHeader}
 
+	// Three chains that exercise how a covered header is READ. Until these existed the
+	// whole fold could be stripped out of either port's multisig face and every test
+	// stayed green: nothing in this corpus ever put two spellings of one name in the
+	// bag, so a plain property lookup answered identically.
+
+	// A second Authorization field line beside the signed one, spelled in another case.
+	// Both lines belong to the one covered name and join before a hop's base is rebuilt,
+	// so the covered value changes and the chain is refused. A reader resolving the name
+	// to its first line reads back the signed empty value and accepts the token beside it.
+	reqD, hopsD := signMultisigChainWith(t, body, []hopSpec{agent, brokerA}, "", "")
+	dupTwoHop := mkChainVectorWith("duplicate_authorization_two_hop", reqD, hopsD, body, 0, "", "")
+	dupTwoHop.ExtraHeaders = map[string]string{"Authorization": "Bearer unsigned-token"}
+
+	// The same chain reached through a header bag spelled the CONVENTIONAL way. Omitting
+	// the lowercase keys and re-adding the identical values canonically is a pure case
+	// change, so the oracle still verifies it — a port matching names case-sensitively
+	// finds nothing under either covered name and refuses traffic Go accepts. Positive,
+	// because that failure is a refusal and only a positive case can catch it.
+	reqC, hopsC := signMultisigChainWith(t, body, []hopSpec{agent, brokerA}, msAuth, msSigAgent)
+	canonCase := mkChainVectorWith("canonical_case_two_hop", reqC, hopsC, body, 0, msAuth, msSigAgent)
+	canonCase.OmitHeaders = []string{"Authorization", SignatureAgentHeader}
+	canonCase.ExtraHeaders = map[string]string{
+		"Authorization":      msAuth,
+		SignatureAgentHeader: msSigAgent,
+	}
+
+	// A chain legitimately SIGNED over two Authorization field lines: the covered value
+	// is the join, so only a reader that joins reconstructs the base. This is the one
+	// shape that separates the join from a LAST-match reader — a last-match reader
+	// rejects every negative duplicate case just as the join does, and passes them all.
+	reqJ, hopsJ := signMultisigChainOverLines(
+		t, body, []hopSpec{agent, brokerA}, []string{"Bearer first-line", "Bearer second-line"}, msSigAgent)
+	dupBound := mkChainVectorWith(
+		"duplicate_bound_two_hop", reqJ, hopsJ, body, 0, "Bearer first-line", msSigAgent)
+	dupBound.ExtraHeaders = map[string]string{"Authorization": "Bearer second-line"}
+
 	out := []multisigChainVector{
 		positive, hopBudget, reordered, stripped, missingLink, tampered,
 		absentTwoHop, absentOverBudget, absentReordered,
+		dupTwoHop, canonCase, dupBound,
 	}
 	for i := range out {
 		keyids, reason := multisigOracleReason(t, out[i])

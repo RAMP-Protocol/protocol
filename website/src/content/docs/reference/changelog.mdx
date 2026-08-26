@@ -37,6 +37,18 @@ value and is refused — previously it was read past and the request was accepte
 face. If you built a header mapping for these faces by lowercasing keys, nothing changes
 for you; if you passed one straight from a framework, it now behaves as the oracle does.
 
+**The Go entitlement-coverage check reads every field line too, and this one is a
+behaviour change in `sdk/go/helpers`.** It resolved `X-Entitlement-Token` with
+`Header.Get` — the first line only — at both the sign site (whether the covered set
+commits to the header) and the verify site (whether an unsigned token is being slipped
+in). A request that simply sends the header **twice**, an empty line ahead of a real
+capability token, made both answer `""`: the signer left the header uncovered and the
+verifier skipped the rule, so the token rode in under a signature that never committed
+to it. Ordinary HTTP, no unusual client. Both sites now join every line, so any second
+line makes the value non-empty. Nothing in a single-line request moves — no API changes,
+both functions are unexported — but a peer that sends the header twice is now refused
+where it was accepted.
+
 A **`null` means the field has no value**, and the TypeScript wire policy now reads it
 that way. The canonical wire is proto-JSON, where a null is a field's default — for **any**
 field, not only a message-typed one — so the policy drops it wherever the schema does not

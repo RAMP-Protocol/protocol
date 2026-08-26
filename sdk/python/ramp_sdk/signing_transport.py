@@ -138,8 +138,10 @@ class SigningTransport:
     ) -> SignedOutbound:
         """Sign an outbound request; return it with the RFC 9421 headers attached.
 
-        Authorization is always bound — pass an empty string to pin its absence
-        (mirror the L1 sign_request contract).
+        Authorization is always bound — pass an empty string when the caller holds no
+        token, which BINDS that emptiness (mirrors the L1 sign_request contract). The
+        header is still emitted and still sent; an absent header is a different thing
+        entirely and a verifier refuses it.
         """
         created, expires = self._window()
         signed = sign_request(

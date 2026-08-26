@@ -144,6 +144,12 @@ describe("sdk/ts multisig forwarding-chain append+verify mirrors the Go oracle",
     expect(names.has("absent_authorization_two_hop")).toBe(true);
     expect(names.has("absent_authorization_over_budget")).toBe(true);
     expect(names.has("absent_signature_agent_reordered")).toBe(true);
+    // How a covered header is READ on a chain: a second field line beside the signed
+    // one, a bag spelled the conventional way, and a chain whose covered value IS the
+    // join of two lines.
+    expect(names.has("duplicate_authorization_two_hop")).toBe(true);
+    expect(names.has("canonical_case_two_hop")).toBe(true);
+    expect(names.has("duplicate_bound_two_hop")).toBe(true);
   });
 
   // The header bag a vector describes: the base five, minus what the request does
@@ -256,16 +262,36 @@ describe("sdk/ts multisig forwarding-chain append+verify mirrors the Go oracle",
   // NEGATIVES: each Go-emitted chain reject case rejects (valid=false) with the
   // exact taxonomy token, honoring the hop_budget → broken_chain → signature
   // precedence encoded in the vectors.
-  for (const name of [
-    "hop_budget_three_over_two",
-    "broken_chain_reordered",
-    "broken_chain_stripped_middle",
-    "broken_chain_missing_link",
-    "tampered_predecessor",
-    "absent_authorization_two_hop",
-    "absent_authorization_over_budget",
-    "absent_signature_agent_reordered",
-  ]) {
+  // The reject and accept cases, DERIVED from the corpus rather than hand-listed. A
+  // hand-written name list is how a vector lands and is never replayed — the corpus grew
+  // the duplicate-header plumbing and sat unexercised because nothing enumerated it.
+  // Every row the emitter adds is now driven the day it is committed.
+  const NEGATIVE = doc.vectors.filter((v) => !v.expected_verified).map((v) => v.name);
+  const POSITIVE = doc.vectors.filter((v) => v.expected_verified).map((v) => v.name);
+
+  for (const name of POSITIVE) {
+    it(`${name} verifies and returns the Go-emitted keyids`, async () => {
+      // Every chain the oracle ACCEPTS verifies here too. The rejects below cannot
+      // stand in for this: a face that refuses everything passes all of them. This is
+      // what catches a reader resolving a covered header to one field line where the
+      // oracle joins, and a reader matching header names case-sensitively.
+      const v = byName(name);
+      const now = Math.floor((v.created + v.expires) / 2);
+      const verdict = await verifyMultisigRequestServer({
+        method: v.method,
+        url: v.url,
+        body: hexToBytes(v.body_hex),
+        headers: headersFor(v),
+        resolve: hopResolver(v.hops),
+        now: fixedClock(now),
+        maxSignatures: v.max_signatures,
+      });
+      expect(verdict.valid, `${name}: ${verdict.reason}`).toBe(true);
+      expect(verdict.keyids).toEqual(v.expected_keyids);
+    });
+  }
+
+  for (const name of NEGATIVE) {
     it(`${name} rejects with the Go-emitted reason`, async () => {
       const v = byName(name);
       const now = Math.floor((v.created + v.expires) / 2);

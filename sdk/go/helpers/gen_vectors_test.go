@@ -1025,15 +1025,68 @@ func buildVerifyRequestNegVectors(t *testing.T) []verifyRequestNegVector {
 	dupAuthz := mkEmpty("neg_duplicate_authorization", freshNow)
 	dupAuthz.ExtraHeaders = map[string]string{"Authorization": "Bearer unsigned-token"}
 
+	// neg_shadowed_entitlement: the entitlement-token header carried TWICE, an empty
+	// line ahead of a real capability token, on a signature whose covered set does not
+	// commit to it. Resolving the name to its first field line answers "", the coverage
+	// rule never runs, and the unsigned token is accepted — no case trick and no
+	// unusual client, two field lines is ordinary HTTP. Joining answers ", jwt:…",
+	// which is non-empty, so the coverage rule fires and the request is refused.
+	//
+	// The EMPTY value has to sit under the capitalised spelling. Both the emitted JSON
+	// and the ports' replay order follow the map's sorted key order, and "X-" sorts
+	// before "x-" — so this is what puts the empty line first. Reversed, the first
+	// line carries the token, every reading refuses it, and the case proves nothing.
+	shadowedEntitlement := mkEmpty("neg_shadowed_entitlement", freshNow)
+	shadowedEntitlement.ExtraHeaders = map[string]string{
+		"X-Entitlement-Token": "",
+		"x-entitlement-token": "jwt:unsigned-capability-token",
+	}
+
 	out := []verifyRequestNegVector{
-		badSig, replay, expired, wrongKey, tampered, entitlement,
+		badSig, replay, expired, wrongKey, tampered, entitlement, shadowedEntitlement,
 		absentAuthz, absentAgent, dupAuthz,
 	}
 	// Derive expected_reason from the REAL Go verify path — never hand-author it.
 	for i := range out {
+		assertExtraHeaderSpelling(t, out[i].Name, out[i].ExtraHeaders)
 		out[i].ExpectedReason = oracleNegReason(t, out[i])
 	}
 	return out
+}
+
+// baseVectorHeaderNames are the field names a replay writes into its header bag from
+// the vector's own scalar columns, lowercased — the entries an extra line has to land
+// BESIDE rather than replace.
+var baseVectorHeaderNames = map[string]bool{
+	"content-digest": true, "signature-input": true, "signature": true,
+	"authorization": true, signatureAgentLower: true,
+}
+
+// assertExtraHeaderSpelling enforces the rule the ExtraHeaders doc states, which is
+// otherwise only a comment: an extra line duplicating a name the replay already wrote
+// from a scalar column MUST be spelled in a different case.
+//
+// Go collapses both spellings onto one canonical key and keeps two values whatever the
+// case, so the oracle would emit the same expected_reason either way — but a replay's
+// header map is keyed by string. Spell the key exactly as the base entry and the port
+// OVERWRITES rather than adding beside it, the bag holds one line, and a case that
+// exists to prove two lines join proves nothing while every test still passes.
+//
+// A name with no base counterpart (the entitlement pair, which no scalar column writes)
+// carries both its own lines and is unconstrained here.
+func assertExtraHeaderSpelling(t *testing.T, name string, extra map[string]string) {
+	t.Helper()
+	for key := range extra {
+		lower := strings.ToLower(key)
+		if !baseVectorHeaderNames[lower] {
+			continue
+		}
+		if key == lower {
+			t.Fatalf("vector %s: extra header %q duplicates a base header name in the SAME "+
+				"spelling — a replay's map would overwrite the base entry instead of adding "+
+				"a second field line, and the case would assert nothing", name, key)
+		}
+	}
 }
 
 // oracleNegReason runs the emitted vector through the REAL Go verify path and

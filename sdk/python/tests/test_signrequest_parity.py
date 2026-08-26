@@ -87,7 +87,10 @@ def test_sign_outbound_emits_the_header_set_the_oracle_emits(
         body=bytes.fromhex(str(vector["body_hex"])),
         authorization=str(vector["authorization"]),
     )
-    emitted = {name.lower(): [value] for name, value in signed.headers.items()}
+    # Keys VERBATIM, never lowercased first. Normalising here would erase the property
+    # under test: emitting a covered name in the wrong case is what put the name on the
+    # wire twice and broke the merge, and a gate that folds the case cannot see it.
+    emitted = {name: [value] for name, value in signed.headers.items()}
     assert emitted == vector["emitted_headers"]
 
 
