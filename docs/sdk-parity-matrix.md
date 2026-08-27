@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 116 symbols at cross-language parity · 14 documented divergences · 173 Go-idiomatic exclusions · 33 conformance corpora, each tri-replayed.
+**At a glance:** 129 symbols at cross-language parity · 14 documented divergences · 173 Go-idiomatic exclusions · 34 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -32,6 +32,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `BareDomainPattern` | `BARE_DOMAIN_PATTERN` | `bareDomainPattern` |
 | `CanonicalAcceptanceBytes` | `jcs_acceptance_payload` | `acceptancePayload` |
 | `CanonicalOfferBytes` | `canonical_offer_payload` | `canonicalOfferPayload` |
+| `CanonicalRestrictionToken` | `canonical_restriction_token` | `canonicalRestrictionToken` |
 | `CanonicalizeMoney` | `canonicalize_money` | `canonicalizeMoney` |
 | `CatalogRejectionDetail` | `catalog_rejection_detail` | `catalogRejectionDetail` |
 | `CheckAudience` | `check_audience` | `checkAudience` |
@@ -44,6 +45,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `ContentTypeProto` | `ContentTypeProto` | `ContentTypeProto` |
 | `DisputeFailureDetail` | `dispute_failure_detail` | `disputeFailureDetail` |
 | `DomainVerificationFailureDetail` | `domain_verification_failure_detail` | `domainVerificationFailureDetail` |
+| `EntryVerdict` | `EntryVerdict` | `EntryVerdict` |
 | `ErrUnknownKey` | `UnknownKeyError` | `UnknownKey` |
 | `FormatMoney` | `format_money` | `formatMoney` |
 | `HashURL` | `hash_url` | `hashUrl` |
@@ -53,6 +55,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `IsBareHost` | `is_bare_host` | `isBareHost` |
 | `IsSafeSchemaPattern` | `is_safe_schema_pattern` | `isSafeSchemaPattern` |
 | `KeyResolver` | `KeyResolver` | `RequestKeyResolver` |
+| `KnownRestrictionToken` | `known_restriction_token` | `knownRestrictionToken` |
 | `MaxBareDomainLen` | `MAX_BARE_DOMAIN_LEN` | `maxBareDomainLen` |
 | `MaxRegistrationDataBytes` | `MAX_REGISTRATION_DATA_BYTES` | `maxRegistrationDataBytes` |
 | `MaxRegistrationDataDepth` | `MAX_REGISTRATION_DATA_DEPTH` | `maxRegistrationDataDepth` |
@@ -65,6 +68,8 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `MaxRegistrationSchemaEvaluations` | `MAX_REGISTRATION_SCHEMA_EVALUATIONS` | `maxRegistrationSchemaEvaluations` |
 | `MaxRegistrationSchemaRefHops` | `MAX_REGISTRATION_SCHEMA_REF_HOPS` | `maxRegistrationSchemaRefHops` |
 | `NewIdempotencyKey` | `generate_idempotency_key` | `generateIdempotencyKey` |
+| `NormalizeLicenseTerm` | `normalize_license_term` | `normalizeLicenseTerm` |
+| `NormalizeResourceEntry` | `normalize_resource_entry` | `normalizeResourceEntry` |
 | `NormalizeScopes` | `normalize_scopes` | `normalizeScopes` |
 | `OfferSignatureAlgorithm` | `OFFER_SIGNATURE_ALGORITHM` | `OFFER_SIGNATURE_ALGORITHM` |
 | `ParseMoney` | `parse_money` | `parseMoney` |
@@ -76,6 +81,12 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `RegistrationSchemaDialect` | `REGISTRATION_SCHEMA_DIALECT` | `registrationSchemaDialect` |
 | `RequestIDHeader` | `RequestIDHeader` | `RequestIDHeader` |
 | `RetrievalAuthFailureDetail` | `retrieval_auth_failure_detail` | `retrievalAuthFailureDetail` |
+| `RuleObligationOtherRequiresDetail` | `RULE_OBLIGATION_OTHER_REQUIRES_DETAIL` | `RULE_OBLIGATION_OTHER_REQUIRES_DETAIL` |
+| `RulePricingUnitRegistered` | `RULE_PRICING_UNIT_REGISTERED` | `RULE_PRICING_UNIT_REGISTERED` |
+| `RuleQuotaMetricRegistered` | `RULE_QUOTA_METRIC_REGISTERED` | `RULE_QUOTA_METRIC_REGISTERED` |
+| `RuleRestrictionTokenRegistered` | `RULE_RESTRICTION_TOKEN_REGISTERED` | `RULE_RESTRICTION_TOKEN_REGISTERED` |
+| `RuleViolation` | `RuleViolation` | `RuleViolation` |
+| `RuleWarning` | `RuleWarning` | `RuleWarning` |
 | `SchemaVerdict` | `SchemaVerdict` | `SchemaVerdict` |
 | `ScopesSubset` | `scopes_subset` | `scopesSubset` |
 | `SignAgentBinding` | `sign_agent_binding` | `signInbound` |
@@ -89,6 +100,8 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `TransactionDenialDetail` | `transaction_denial_detail` | `transactionDenialDetail` |
 | `UsageReportRejectionDetail` | `usage_report_rejection_detail` | `usageReportRejectionDetail` |
 | `ValidateIdempotencyKey` | `validate_idempotency_key` | `validateIdempotencyKey` |
+| `ValidateLicenseTerm` | `validate_license_term` | `validateLicenseTerm` |
+| `ValidateResourceEntry` | `validate_resource_entry` | `validateResourceEntry` |
 | `ValidationRuleIDs` | `cross_field_rule_ids` | `crossFieldRuleIds` |
 | `VerifyMultisigRequest` | `verify_multisig_request_server` | `verifyMultisigRequestServer` |
 | `VerifyOfferAcceptance` | `verify_offer_acceptance_jcs` | `verifyOfferAcceptance` |
@@ -380,6 +393,7 @@ Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness
 | `helpers/testdata/hashurl-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/host-rule-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/idempotency-validate-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/licenseterm-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/money-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/multisig-chain-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/offer-verify-vectors.json` | ✅ | ✅ | ✅ |

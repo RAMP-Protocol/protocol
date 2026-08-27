@@ -1,0 +1,1847 @@
+{
+  "entry": [
+    {
+      "name": "valid_minimal",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": true,
+      "structural": false,
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "domain_with_port_and_single_label_accepted",
+      "entry": {
+        "domain": "edge:8787",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": true,
+      "structural": false,
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "alias_resolved_before_membership_no_warning",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "restrictions": [
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "Generative-AI"
+                ]
+              }
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": true,
+      "structural": false,
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "unknown_token_warns_with_entry_path",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "restrictions": [
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train",
+                  "flibbertigibbet"
+                ]
+              }
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": true,
+      "structural": false,
+      "term_rules": [],
+      "warnings": [
+        {
+          "rule": "restriction.token.registered",
+          "path": "terms[1].restrictions[0].permitted[1]",
+          "token": "flibbertigibbet",
+          "message": "unregistered RESTRICTION_KIND_FUNCTION restriction token \"flibbertigibbet\" (term accepted)"
+        }
+      ]
+    },
+    {
+      "name": "structural_path_without_slash",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": true,
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "structural_empty_domain",
+      "entry": {
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": true,
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "structural_domain_with_scheme",
+      "entry": {
+        "domain": "https://publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": true,
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "structural_padded_token_fails_wire_before_fold",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "restrictions": [
+              {
+                "kind": "RESTRICTION_KIND_GEOGRAPHY",
+                "permitted": [
+                  " de "
+                ]
+              }
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": true,
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "structural_term_without_pricing",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": true,
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "structural_nested_cel_only",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "currency": "USD",
+              "model": "PRICING_MODEL_PER_UNIT",
+              "rate": "0.05"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": true,
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "structural_too_many_terms",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": true,
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "term_reject_pricing_unit",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "currency": "USD",
+              "model": "PRICING_MODEL_PER_UNIT",
+              "rate": "0.07",
+              "unit": "frobnications"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": false,
+      "term_rules": [
+        "pricing.unit.registered"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "term_reject_second_term_quota",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "quotas": [
+              {
+                "limit": "1",
+                "metric": "gizmos",
+                "window": "QUOTA_WINDOW_DAILY"
+              }
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": false,
+      "term_rules": [
+        "quota.metric.registered"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "term_reject_drops_that_terms_warnings",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "currency": "USD",
+              "model": "PRICING_MODEL_PER_UNIT",
+              "rate": "0.07",
+              "unit": "frobnications"
+            },
+            "restrictions": [
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "flibbertigibbet"
+                ]
+              }
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "obligations": [
+              {
+                "kind": "OBLIGATION_KIND_OTHER",
+                "trigger": "OBLIGATION_TRIGGER_ON_USE"
+              }
+            ],
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": false,
+      "term_rules": [
+        "pricing.unit.registered"
+      ],
+      "warnings": [
+        {
+          "rule": "obligation.other.requires_detail",
+          "path": "terms[1].obligations[0].detail",
+          "token": "",
+          "message": "obligation of kind OTHER has no detail (term accepted)"
+        }
+      ]
+    },
+    {
+      "name": "structural_and_term_reject_both_reported",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "x",
+        "terms": [
+          {
+            "pricing": {
+              "currency": "USD",
+              "model": "PRICING_MODEL_PER_UNIT",
+              "rate": "0.07",
+              "unit": "frobnications"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": true,
+      "term_rules": [
+        "pricing.unit.registered"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "no_terms_accepted",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html"
+      },
+      "ok": true,
+      "structural": false,
+      "term_rules": [],
+      "warnings": []
+    }
+  ],
+  "fold": [
+    {
+      "name": "function_alias_tdm",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "tdm",
+      "canonical": "text-and-data-mining"
+    },
+    {
+      "name": "function_alias_mixed_case_padded",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "  Generative-AI ",
+      "canonical": "ai-input"
+    },
+    {
+      "name": "function_registered_upper",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "AI-INPUT",
+      "canonical": "ai-input"
+    },
+    {
+      "name": "function_unknown_lowercased",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "Flibbertigibbet",
+      "canonical": "flibbertigibbet"
+    },
+    {
+      "name": "function_alias_derivative",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "Derivative",
+      "canonical": "modify"
+    },
+    {
+      "name": "user_type_alias_business",
+      "kind": "RESTRICTION_KIND_USER_TYPE",
+      "token": "Business",
+      "canonical": "commercial_entity"
+    },
+    {
+      "name": "user_type_registered_untouched",
+      "kind": "RESTRICTION_KIND_USER_TYPE",
+      "token": "commercial_entity",
+      "canonical": "commercial_entity"
+    },
+    {
+      "name": "geography_lower_to_upper",
+      "kind": "RESTRICTION_KIND_GEOGRAPHY",
+      "token": "us",
+      "canonical": "US"
+    },
+    {
+      "name": "geography_padded",
+      "kind": "RESTRICTION_KIND_GEOGRAPHY",
+      "token": " de ",
+      "canonical": "DE"
+    },
+    {
+      "name": "geography_wildcard",
+      "kind": "RESTRICTION_KIND_GEOGRAPHY",
+      "token": "*",
+      "canonical": "*"
+    },
+    {
+      "name": "geography_special_eea",
+      "kind": "RESTRICTION_KIND_GEOGRAPHY",
+      "token": "eea",
+      "canonical": "EEA"
+    },
+    {
+      "name": "other_untouched",
+      "kind": "RESTRICTION_KIND_OTHER",
+      "token": "  Custom-Token ",
+      "canonical": "  Custom-Token "
+    },
+    {
+      "name": "unspecified_kind_untouched",
+      "kind": "RESTRICTION_KIND_UNSPECIFIED",
+      "token": "AI-Train",
+      "canonical": "AI-Train"
+    },
+    {
+      "name": "kelvin_sign_not_folded",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "KEEP",
+      "canonical": "Keep"
+    },
+    {
+      "name": "dotted_capital_i_not_folded",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "İnput",
+      "canonical": "İnput"
+    },
+    {
+      "name": "eszett_not_folded",
+      "kind": "RESTRICTION_KIND_USER_TYPE",
+      "token": "STRAßE",
+      "canonical": "straße"
+    },
+    {
+      "name": "nbsp_not_trimmed",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": " tdm ",
+      "canonical": " tdm "
+    },
+    {
+      "name": "ideographic_space_not_trimmed",
+      "kind": "RESTRICTION_KIND_GEOGRAPHY",
+      "token": "　us　",
+      "canonical": "　US　"
+    },
+    {
+      "name": "rfc8259_whitespace_trimmed",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "\t\ntdm\r ",
+      "canonical": "text-and-data-mining"
+    },
+    {
+      "name": "namespaced_lowercased_not_aliased",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "Acme:Custom-Use",
+      "canonical": "acme:custom-use"
+    },
+    {
+      "name": "empty",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "",
+      "canonical": ""
+    }
+  ],
+  "known": [
+    {
+      "name": "function_registered",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "ai-train",
+      "known": true
+    },
+    {
+      "name": "function_registered_second",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "ai-input",
+      "known": true
+    },
+    {
+      "name": "function_unknown",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "ai-foo",
+      "known": false
+    },
+    {
+      "name": "function_alias_is_not_registered",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "tdm",
+      "known": false
+    },
+    {
+      "name": "function_uppercase_not_registered",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "AI-TRAIN",
+      "known": false
+    },
+    {
+      "name": "geography_iso_alpha2",
+      "kind": "RESTRICTION_KIND_GEOGRAPHY",
+      "token": "US",
+      "known": true
+    },
+    {
+      "name": "geography_iso_alpha2_any_two_letters",
+      "kind": "RESTRICTION_KIND_GEOGRAPHY",
+      "token": "ZZ",
+      "known": true
+    },
+    {
+      "name": "geography_special_wildcard",
+      "kind": "RESTRICTION_KIND_GEOGRAPHY",
+      "token": "*",
+      "known": true
+    },
+    {
+      "name": "geography_special_eea",
+      "kind": "RESTRICTION_KIND_GEOGRAPHY",
+      "token": "EEA",
+      "known": true
+    },
+    {
+      "name": "geography_lowercase",
+      "kind": "RESTRICTION_KIND_GEOGRAPHY",
+      "token": "us",
+      "known": false
+    },
+    {
+      "name": "geography_three_letters",
+      "kind": "RESTRICTION_KIND_GEOGRAPHY",
+      "token": "USA",
+      "known": false
+    },
+    {
+      "name": "geography_non_ascii_two_letters",
+      "kind": "RESTRICTION_KIND_GEOGRAPHY",
+      "token": "ÉE",
+      "known": false
+    },
+    {
+      "name": "user_type_registered",
+      "kind": "RESTRICTION_KIND_USER_TYPE",
+      "token": "commercial_entity",
+      "known": true
+    },
+    {
+      "name": "user_type_unknown",
+      "kind": "RESTRICTION_KIND_USER_TYPE",
+      "token": "robots",
+      "known": false
+    },
+    {
+      "name": "user_type_alias_is_not_registered",
+      "kind": "RESTRICTION_KIND_USER_TYPE",
+      "token": "business",
+      "known": false
+    },
+    {
+      "name": "other_never_known",
+      "kind": "RESTRICTION_KIND_OTHER",
+      "token": "ai-train",
+      "known": false
+    },
+    {
+      "name": "unspecified_never_known",
+      "kind": "RESTRICTION_KIND_UNSPECIFIED",
+      "token": "ai-train",
+      "known": false
+    },
+    {
+      "name": "empty_not_known",
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "token": "",
+      "known": false
+    }
+  ],
+  "normalize": [
+    {
+      "name": "function_permitted_aliases",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "generative-ai",
+              "train-ai",
+              "tdm"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "normalized": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "ai-input",
+              "ai-train",
+              "text-and-data-mining"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      }
+    },
+    {
+      "name": "function_prohibited_aliases",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "prohibited": [
+              "scrape",
+              "copy",
+              "adapt",
+              "derivative"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "normalized": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "prohibited": [
+              "crawl",
+              "reproduce",
+              "modify",
+              "modify"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      }
+    },
+    {
+      "name": "function_mixed_case_padding",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "  Generative-AI ",
+              "AI-INPUT"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "normalized": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "ai-input",
+              "ai-input"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      }
+    },
+    {
+      "name": "user_type_aliases",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_USER_TYPE",
+            "permitted": [
+              "personal",
+              "business",
+              "enterprise"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "normalized": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_USER_TYPE",
+            "permitted": [
+              "individual",
+              "commercial_entity",
+              "commercial_entity"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      }
+    },
+    {
+      "name": "geography_upper",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_GEOGRAPHY",
+            "permitted": [
+              "us",
+              " de ",
+              "eu",
+              "*"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "normalized": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_GEOGRAPHY",
+            "permitted": [
+              "US",
+              "DE",
+              "EU",
+              "*"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      }
+    },
+    {
+      "name": "other_untouched",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_OTHER",
+            "permitted": [
+              "Custom-Token",
+              "  Spaced  "
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "normalized": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_OTHER",
+            "permitted": [
+              "Custom-Token",
+              "  Spaced  "
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      }
+    },
+    {
+      "name": "function_unknown_lowercased",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "Search",
+              "Display"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "normalized": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "search",
+              "display"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      }
+    },
+    {
+      "name": "three_axes_at_once",
+      "term": {
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.07",
+          "unit": "tokens"
+        },
+        "quotas": [
+          {
+            "limit": "10",
+            "metric": "tokens",
+            "window": "QUOTA_WINDOW_DAILY"
+          }
+        ],
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "TDM"
+            ],
+            "prohibited": [
+              "Scrape"
+            ]
+          },
+          {
+            "kind": "RESTRICTION_KIND_GEOGRAPHY",
+            "permitted": [
+              "gb",
+              "eea"
+            ]
+          },
+          {
+            "kind": "RESTRICTION_KIND_OTHER",
+            "permitted": [
+              "Left-Alone"
+            ]
+          }
+        ],
+        "scopes": [
+          "Subscription:Premium"
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "normalized": {
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.07",
+          "unit": "tokens"
+        },
+        "quotas": [
+          {
+            "limit": "10",
+            "metric": "tokens",
+            "window": "QUOTA_WINDOW_DAILY"
+          }
+        ],
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "text-and-data-mining"
+            ],
+            "prohibited": [
+              "crawl"
+            ]
+          },
+          {
+            "kind": "RESTRICTION_KIND_GEOGRAPHY",
+            "permitted": [
+              "GB",
+              "EEA"
+            ]
+          },
+          {
+            "kind": "RESTRICTION_KIND_OTHER",
+            "permitted": [
+              "Left-Alone"
+            ]
+          }
+        ],
+        "scopes": [
+          "Subscription:Premium"
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      }
+    },
+    {
+      "name": "restriction_without_tokens",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION"
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "normalized": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION"
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      }
+    },
+    {
+      "name": "non_ascii_untouched",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "KEEP",
+              " tdm"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "normalized": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "Keep",
+              " tdm"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      }
+    },
+    {
+      "name": "empty_term",
+      "term": {},
+      "normalized": {}
+    }
+  ],
+  "note": "Go-emitted oracle for the ingest-tier license-term checks. fold: CanonicalRestrictionToken; normalize: NormalizeLicenseTerm (idempotent); known: KnownRestrictionToken; validate: ValidateLicenseTerm over canonical terms; entry: ValidateResourceEntry (wire tier over the raw entry, then the ingest tier over a canonicalised copy). Messages are the exact strings the Exchange puts in PushResourcesResponse.warnings. Regenerate with RAMP_UPDATE_VECTORS=1 go test ./sdk/go/helpers/ -run TestGenerateLicenseTermVectors.",
+  "validate": [
+    {
+      "name": "reference_only_with_restrictions_accepted",
+      "term": {
+        "license": {
+          "uri": "https://example.com/license.txt",
+          "uri_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        },
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.07",
+          "unit": "accesses"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "ai-train"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_REFERENCE_ONLY"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "reference_only_bare_accepted",
+      "term": {
+        "license": {
+          "uri": "https://example.com/license.txt",
+          "uri_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        },
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.07",
+          "unit": "accesses"
+        },
+        "semantics": "TERM_SEMANTICS_REFERENCE_ONLY"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "pricing_unit_unregistered_rejected",
+      "term": {
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.07",
+          "unit": "frobnications"
+        },
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "pricing.unit.registered",
+        "path": "pricing.unit",
+        "token": "frobnications",
+        "message": "pricing unit \"frobnications\" is not a registered metering token"
+      },
+      "warnings": []
+    },
+    {
+      "name": "pricing_unit_registered_accepted",
+      "term": {
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.07",
+          "unit": "tokens"
+        },
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "pricing_unit_namespaced_accepted",
+      "term": {
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.07",
+          "unit": "acme:widgets"
+        },
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "pricing_unit_empty_not_checked",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "pricing_unit_uppercase_rejected",
+      "term": {
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.07",
+          "unit": "TOKENS"
+        },
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "pricing.unit.registered",
+        "path": "pricing.unit",
+        "token": "TOKENS",
+        "message": "pricing unit \"TOKENS\" is not a registered metering token"
+      },
+      "warnings": []
+    },
+    {
+      "name": "quota_metric_unregistered_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "quotas": [
+          {
+            "limit": "10",
+            "metric": "frobnications",
+            "window": "QUOTA_WINDOW_DAILY"
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "quota.metric.registered",
+        "path": "quotas[0].metric",
+        "token": "frobnications",
+        "message": "quota metric \"frobnications\" is not a registered quota token"
+      },
+      "warnings": []
+    },
+    {
+      "name": "quota_metric_second_quota_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "quotas": [
+          {
+            "limit": "10",
+            "metric": "tokens",
+            "window": "QUOTA_WINDOW_DAILY"
+          },
+          {
+            "limit": "10",
+            "metric": "frobnications",
+            "window": "QUOTA_WINDOW_DAILY"
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "quota.metric.registered",
+        "path": "quotas[1].metric",
+        "token": "frobnications",
+        "message": "quota metric \"frobnications\" is not a registered quota token"
+      },
+      "warnings": []
+    },
+    {
+      "name": "quota_metric_registered_accepted",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "quotas": [
+          {
+            "limit": "10",
+            "metric": "tokens",
+            "window": "QUOTA_WINDOW_DAILY"
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "quota_metric_namespaced_accepted",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "quotas": [
+          {
+            "limit": "10",
+            "metric": "acme:widgets",
+            "window": "QUOTA_WINDOW_DAILY"
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "pricing_unit_checked_before_quota",
+      "term": {
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.07",
+          "unit": "frobnications"
+        },
+        "quotas": [
+          {
+            "limit": "10",
+            "metric": "gizmos",
+            "window": "QUOTA_WINDOW_DAILY"
+          }
+        ],
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "flibbertigibbet"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "pricing.unit.registered",
+        "path": "pricing.unit",
+        "token": "frobnications",
+        "message": "pricing unit \"frobnications\" is not a registered metering token"
+      },
+      "warnings": []
+    },
+    {
+      "name": "distinct_kinds_disjoint_tokens_accepted",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "ai-train"
+            ],
+            "prohibited": [
+              "search"
+            ]
+          },
+          {
+            "kind": "RESTRICTION_KIND_GEOGRAPHY",
+            "permitted": [
+              "US"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "unregistered_token_advisory_warns",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "advisory": true,
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "flibbertigibbet"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": [
+        {
+          "rule": "restriction.token.registered",
+          "path": "restrictions[0].permitted[0]",
+          "token": "flibbertigibbet",
+          "message": "unregistered RESTRICTION_KIND_FUNCTION restriction token \"flibbertigibbet\" (term accepted)"
+        }
+      ]
+    },
+    {
+      "name": "unregistered_token_binding_also_only_warns",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "flibbertigibbet"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": [
+        {
+          "rule": "restriction.token.registered",
+          "path": "restrictions[0].permitted[0]",
+          "token": "flibbertigibbet",
+          "message": "unregistered RESTRICTION_KIND_FUNCTION restriction token \"flibbertigibbet\" (term accepted)"
+        }
+      ]
+    },
+    {
+      "name": "registered_token_binding_accepted_cleanly",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "ai-train"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "namespaced_token_bypasses_membership_on_other",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_OTHER",
+            "permitted": [
+              "acme:custom-use"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "bare_token_on_other_warns",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_OTHER",
+            "permitted": [
+              "custom-use"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": [
+        {
+          "rule": "restriction.token.registered",
+          "path": "restrictions[0].permitted[0]",
+          "token": "custom-use",
+          "message": "unregistered RESTRICTION_KIND_OTHER restriction token \"custom-use\" (term accepted)"
+        }
+      ]
+    },
+    {
+      "name": "warnings_in_report_order",
+      "term": {
+        "obligations": [
+          {
+            "kind": "OBLIGATION_KIND_OTHER",
+            "trigger": "OBLIGATION_TRIGGER_ON_USE"
+          },
+          {
+            "kind": "OBLIGATION_KIND_ATTRIBUTION",
+            "trigger": "OBLIGATION_TRIGGER_ON_USE"
+          },
+          {
+            "kind": "OBLIGATION_KIND_OTHER",
+            "trigger": "OBLIGATION_TRIGGER_ON_USE"
+          }
+        ],
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "ai-train",
+              "flib"
+            ],
+            "prohibited": [
+              "blib"
+            ]
+          },
+          {
+            "kind": "RESTRICTION_KIND_GEOGRAPHY",
+            "permitted": [
+              "US",
+              "usa"
+            ]
+          },
+          {
+            "kind": "RESTRICTION_KIND_USER_TYPE",
+            "permitted": [
+              "robots"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": [
+        {
+          "rule": "restriction.token.registered",
+          "path": "restrictions[0].permitted[1]",
+          "token": "flib",
+          "message": "unregistered RESTRICTION_KIND_FUNCTION restriction token \"flib\" (term accepted)"
+        },
+        {
+          "rule": "restriction.token.registered",
+          "path": "restrictions[0].prohibited[0]",
+          "token": "blib",
+          "message": "unregistered RESTRICTION_KIND_FUNCTION restriction token \"blib\" (term accepted)"
+        },
+        {
+          "rule": "restriction.token.registered",
+          "path": "restrictions[1].permitted[1]",
+          "token": "usa",
+          "message": "unregistered RESTRICTION_KIND_GEOGRAPHY restriction token \"usa\" (term accepted)"
+        },
+        {
+          "rule": "restriction.token.registered",
+          "path": "restrictions[2].permitted[0]",
+          "token": "robots",
+          "message": "unregistered RESTRICTION_KIND_USER_TYPE restriction token \"robots\" (term accepted)"
+        },
+        {
+          "rule": "obligation.other.requires_detail",
+          "path": "obligations[0].detail",
+          "token": "",
+          "message": "obligation of kind OTHER has no detail (term accepted)"
+        },
+        {
+          "rule": "obligation.other.requires_detail",
+          "path": "obligations[2].detail",
+          "token": "",
+          "message": "obligation of kind OTHER has no detail (term accepted)"
+        }
+      ]
+    },
+    {
+      "name": "other_obligation_without_detail_warns",
+      "term": {
+        "obligations": [
+          {
+            "kind": "OBLIGATION_KIND_OTHER",
+            "trigger": "OBLIGATION_TRIGGER_ON_USE"
+          }
+        ],
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": [
+        {
+          "rule": "obligation.other.requires_detail",
+          "path": "obligations[0].detail",
+          "token": "",
+          "message": "obligation of kind OTHER has no detail (term accepted)"
+        }
+      ]
+    },
+    {
+      "name": "other_obligation_with_detail_accepted",
+      "term": {
+        "obligations": [
+          {
+            "detail": "see appendix B",
+            "kind": "OBLIGATION_KIND_OTHER",
+            "trigger": "OBLIGATION_TRIGGER_ON_USE"
+          }
+        ],
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "attribution_obligation_without_detail_accepted",
+      "term": {
+        "obligations": [
+          {
+            "kind": "OBLIGATION_KIND_ATTRIBUTION",
+            "trigger": "OBLIGATION_TRIGGER_ON_USE"
+          }
+        ],
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "empty_term_accepted",
+      "term": {},
+      "violation": null,
+      "warnings": []
+    }
+  ]
+}

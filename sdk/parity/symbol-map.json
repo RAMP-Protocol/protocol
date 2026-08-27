@@ -358,6 +358,11 @@
       "python": "canonical_offer_payload",
       "ts": "canonicalOfferPayload"
     },
+    "helpers.CanonicalRestrictionToken": {
+      "allowlist_reason": null,
+      "python": "canonical_restriction_token",
+      "ts": "canonicalRestrictionToken"
+    },
     "helpers.CanonicalizeMoney": {
       "allowlist_reason": null,
       "python": "canonicalize_money",
@@ -418,6 +423,11 @@
       "python": "domain_verification_failure_detail",
       "ts": "domainVerificationFailureDetail"
     },
+    "helpers.EntryVerdict": {
+      "allowlist_reason": null,
+      "python": "EntryVerdict",
+      "ts": "EntryVerdict"
+    },
     "helpers.ErrUnknownKey": {
       "allowlist_reason": null,
       "python": "UnknownKeyError",
@@ -462,6 +472,11 @@
       "allowlist_reason": null,
       "python": "KeyResolver",
       "ts": "RequestKeyResolver"
+    },
+    "helpers.KnownRestrictionToken": {
+      "allowlist_reason": null,
+      "python": "known_restriction_token",
+      "ts": "knownRestrictionToken"
     },
     "helpers.MaxBareDomainLen": {
       "allowlist_reason": null,
@@ -528,6 +543,16 @@
       "python": null,
       "ts": "createStaticKeyResolver"
     },
+    "helpers.NormalizeLicenseTerm": {
+      "allowlist_reason": null,
+      "python": "normalize_license_term",
+      "ts": "normalizeLicenseTerm"
+    },
+    "helpers.NormalizeResourceEntry": {
+      "allowlist_reason": null,
+      "python": "normalize_resource_entry",
+      "ts": "normalizeResourceEntry"
+    },
     "helpers.NormalizeScopes": {
       "allowlist_reason": null,
       "python": "normalize_scopes",
@@ -582,6 +607,36 @@
       "allowlist_reason": null,
       "python": "retrieval_auth_failure_detail",
       "ts": "retrievalAuthFailureDetail"
+    },
+    "helpers.RuleObligationOtherRequiresDetail": {
+      "allowlist_reason": null,
+      "python": "RULE_OBLIGATION_OTHER_REQUIRES_DETAIL",
+      "ts": "RULE_OBLIGATION_OTHER_REQUIRES_DETAIL"
+    },
+    "helpers.RulePricingUnitRegistered": {
+      "allowlist_reason": null,
+      "python": "RULE_PRICING_UNIT_REGISTERED",
+      "ts": "RULE_PRICING_UNIT_REGISTERED"
+    },
+    "helpers.RuleQuotaMetricRegistered": {
+      "allowlist_reason": null,
+      "python": "RULE_QUOTA_METRIC_REGISTERED",
+      "ts": "RULE_QUOTA_METRIC_REGISTERED"
+    },
+    "helpers.RuleRestrictionTokenRegistered": {
+      "allowlist_reason": null,
+      "python": "RULE_RESTRICTION_TOKEN_REGISTERED",
+      "ts": "RULE_RESTRICTION_TOKEN_REGISTERED"
+    },
+    "helpers.RuleViolation": {
+      "allowlist_reason": null,
+      "python": "RuleViolation",
+      "ts": "RuleViolation"
+    },
+    "helpers.RuleWarning": {
+      "allowlist_reason": null,
+      "python": "RuleWarning",
+      "ts": "RuleWarning"
     },
     "helpers.SchemaVerdict": {
       "allowlist_reason": null,
@@ -647,6 +702,16 @@
       "allowlist_reason": null,
       "python": "validate_idempotency_key",
       "ts": "validateIdempotencyKey"
+    },
+    "helpers.ValidateLicenseTerm": {
+      "allowlist_reason": null,
+      "python": "validate_license_term",
+      "ts": "validateLicenseTerm"
+    },
+    "helpers.ValidateResourceEntry": {
+      "allowlist_reason": null,
+      "python": "validate_resource_entry",
+      "ts": "validateResourceEntry"
     },
     "helpers.ValidationRuleIDs": {
       "allowlist_reason": null,

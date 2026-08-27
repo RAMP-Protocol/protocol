@@ -14,8 +14,9 @@
 // thumbprints, signed-URL signing/verification and proof-of-possession, money
 // (canonical decimal string) parsing and formatting, the ADR-019 ErrorDetail
 // mapping, idempotency-key minting, scope/subscription plumbing, the cross-field
-// CEL validation rules, and the KeyResolver abstraction with a well-known
-// default.
+// CEL validation rules, license-term canonicalisation with the ingest-tier
+// registry-membership and coherence checks a publisher runs before pushing, and
+// the KeyResolver abstraction with a well-known default.
 //
 // # What L1 never does
 //
