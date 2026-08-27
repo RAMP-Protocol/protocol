@@ -63,6 +63,33 @@
       "idempotency_key": "",
       "key_minted": false,
       "requester_id": "agent-1"
+    },
+    {
+      "name": "push_resources",
+      "verb": "pushResources",
+      "path": "/ramp.v1.CatalogService/PushResources",
+      "ver": "1.0",
+      "idempotency_key": "",
+      "key_minted": false,
+      "requester_id": ""
+    },
+    {
+      "name": "remove_resources",
+      "verb": "removeResources",
+      "path": "/ramp.v1.CatalogService/RemoveResources",
+      "ver": "1.0",
+      "idempotency_key": "",
+      "key_minted": false,
+      "requester_id": ""
+    },
+    {
+      "name": "refresh_catalog",
+      "verb": "refreshCatalog",
+      "path": "/ramp.v1.CatalogService/RefreshCatalog",
+      "ver": "1.0",
+      "idempotency_key": "",
+      "key_minted": false,
+      "requester_id": ""
     }
   ]
 }

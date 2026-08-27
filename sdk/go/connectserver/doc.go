@@ -1,7 +1,8 @@
 // Package connectserver is the opt-in Connect-Go SERVER binding over the
-// transport-neutral sdk/go/core L2 substance: the verify http-seam handler
-// (NewExchangeServiceHandler — request-id outermost · verify · validate ·
-// error-detail), the reject→connect.Code mapping, and the EMIT direction of the
+// transport-neutral sdk/go/core L2 substance: the verify http-seam handlers
+// (NewExchangeServiceHandler, NewBrokerServiceHandler and NewCatalogServiceHandler
+// — request-id outermost · verify · validate · error-detail), the
+// reject→connect.Code mapping, and the EMIT direction of the
 // ADR-019 ErrorDetail↔Connect bridge (AsConnectError — a server emits a typed error
 // detail). KeyResolver and ReplayStore are injected by the application (ADR-020
 // §2/§3; the server interceptor order is deliberate — see NewExchangeServiceHandler).

@@ -20,6 +20,12 @@ from wire.models import (
     DiscoveryResponse,
     DisputeRequest,
     DisputeResponse,
+    PushResourcesRequest,
+    PushResourcesResponse,
+    RefreshCatalogRequest,
+    RefreshCatalogResponse,
+    RemoveResourcesRequest,
+    RemoveResourcesResponse,
     ResourceQuery,
     ResourceResponse,
     TransactionRequest,
@@ -50,7 +56,8 @@ from ._call import (
     rpc_url,
     validate_request,
 )
-from .errors import CallError, CallErrorKind, malformed
+from ..hosts import is_bare_host
+from .errors import CallError, CallErrorKind, malformed, not_sent
 from .route import EndpointResolver, vet_exchange_endpoint
 
 if TYPE_CHECKING:
@@ -61,6 +68,7 @@ if TYPE_CHECKING:
 
 EXCHANGE_SERVICE = "ramp.v1.ExchangeService"
 BROKER_SERVICE = "ramp.v1.BrokerService"
+CATALOG_SERVICE = "ramp.v1.CatalogService"
 
 
 @dataclass
@@ -455,6 +463,91 @@ def _plan_offer_derived(
     return _plan(
         cfg, _Route(op, endpoint, EXCHANGE_SERVICE, verb.method), sent, guarded=True
     )
+
+
+# ---------------------------------------------------------------------------
+# catalog: push / remove / refresh
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _CatalogVerb:
+    """One catalog verb: its name, its request model, and its RPC method."""
+
+    op: str
+    model: Any
+    method: str
+
+
+_PUSH_RESOURCES = _CatalogVerb("push resources", PushResourcesRequest, "PushResources")
+_REMOVE_RESOURCES = _CatalogVerb("remove resources", RemoveResourcesRequest, "RemoveResources")
+_REFRESH_CATALOG = _CatalogVerb("refresh catalog", RefreshCatalogRequest, "RefreshCatalog")
+
+
+def plan_push_resources(cfg: ClientConfig, request: dict[str, Any]) -> Plan:
+    """Assemble PushResources. See :func:`_plan_catalog` for the envelope rule."""
+    return _plan_catalog(cfg, _PUSH_RESOURCES, request)
+
+
+def finish_push_resources(plan: Plan, status: int, body: str) -> PushResourcesResponse:
+    return decode(plan.op, status, body, PushResourcesResponse)
+
+
+def plan_remove_resources(cfg: ClientConfig, request: dict[str, Any]) -> Plan:
+    """Assemble RemoveResources. See :func:`_plan_catalog` for the envelope rule."""
+    return _plan_catalog(cfg, _REMOVE_RESOURCES, request)
+
+
+def finish_remove_resources(plan: Plan, status: int, body: str) -> RemoveResourcesResponse:
+    return decode(plan.op, status, body, RemoveResourcesResponse)
+
+
+def plan_refresh_catalog(cfg: ClientConfig, request: dict[str, Any]) -> Plan:
+    """Assemble RefreshCatalog. See :func:`_plan_catalog` for the envelope rule."""
+    return _plan_catalog(cfg, _REFRESH_CATALOG, request)
+
+
+def finish_refresh_catalog(plan: Plan, status: int, body: str) -> RefreshCatalogResponse:
+    return decode(plan.op, status, body, RefreshCatalogResponse)
+
+
+def _plan_catalog(cfg: ClientConfig, verb: _CatalogVerb, message: dict[str, Any]) -> Plan:
+    """The one shape all three catalog verbs share.
+
+    The request is CLONED before ``ver`` is stamped (fill-when-empty; the caller's value
+    is theirs); no idempotency key is stamped, because the messages carry none — a catalog
+    push is an upsert and naturally idempotent, so a key there would be ceremony.
+    ``exchange`` is the caller's to set, the bare domain of the Exchange the call is meant
+    for; a request that names none, or names something that is not a bare host, is refused
+    before anything is signed or sent — a refusal to send, the verdict a report with no
+    routable recipient gets, not a malformed message.
+
+    The publisher chose the Exchange, so the origin is configuration and the leg runs on
+    the plain transport — the posture of the home Exchange, not of the offer-derived leg.
+    """
+    op = verb.op
+    sent = _stamp_ver(op, message)
+    _require_recipient(op, _str_field(sent, "exchange"))
+    validate_request(op, sent, verb.model, cfg.validation)
+    return _plan(cfg, _Route(op, cfg.base_url, CATALOG_SERVICE, verb.method), sent)
+
+
+def _stamp_ver(op: str, message: dict[str, Any]) -> dict[str, Any]:
+    sent = _clone(op, message)
+    if _str_field(sent, "ver") == "":
+        sent["ver"] = ProtocolVersion
+    return sent
+
+
+def _require_recipient(op: str, exchange: str) -> None:
+    if exchange == "":
+        raise not_sent(op, "request names no recipient; set exchange to the Exchange's bare domain")
+    try:
+        bare = is_bare_host(exchange)
+    except ValueError as exc:
+        raise not_sent(op, exc) from exc
+    if not bare:
+        raise not_sent(op, f"exchange {exchange!r} is not a bare host")
 
 
 # ---------------------------------------------------------------------------

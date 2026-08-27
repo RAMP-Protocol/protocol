@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	createBrokerClient,
+	createCatalogClient,
 	createClient,
 	type UnaryRequest,
 	type UnarySend,
@@ -126,6 +127,35 @@ async function call(name: string): Promise<UnaryRequest> {
 		await client.execute(await verifiedOffer(), { idempotencyKey: PINNED });
 	} else if (name === "resolve") {
 		await createBrokerClient("https://broker.test", options).resolve({});
+	} else if (name === "push_resources") {
+		await createCatalogClient("https://exchange.test", options).pushResources({
+			exchange: "exchange.test",
+			tenant_id: "tenant-1",
+			caller_id: "publisher.test",
+			entries: [
+				{
+					domain: "publisher.test",
+					path: "/x",
+					terms: [
+						{
+							semantics: "TERM_SEMANTICS_ENUMERATED",
+							pricing: { model: "PRICING_MODEL_FREE", rate: "0" },
+						},
+					],
+				},
+			],
+		});
+	} else if (name === "remove_resources") {
+		await createCatalogClient("https://exchange.test", options).removeResources({
+			exchange: "exchange.test",
+			tenant_id: "tenant-1",
+			paths: ["/x"],
+		});
+	} else if (name === "refresh_catalog") {
+		await createCatalogClient("https://exchange.test", options).refreshCatalog({
+			exchange: "exchange.test",
+			tenant_id: "tenant-1",
+		});
 	} else {
 		throw new Error(`no TypeScript driver for vector ${name}`);
 	}

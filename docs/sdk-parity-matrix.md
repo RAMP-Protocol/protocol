@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 129 symbols at cross-language parity · 14 documented divergences · 173 Go-idiomatic exclusions · 34 conformance corpora, each tri-replayed.
+**At a glance:** 130 symbols at cross-language parity · 16 documented divergences · 173 Go-idiomatic exclusions · 34 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -161,6 +161,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `BrokerClient` | `BrokerClient` | `BrokerClient` |
 | `CallError` | `CallError` | `RampCallError` |
 | `CallErrorKind` | `CallErrorKind` | `CallErrorKind` |
+| `CatalogClient` | `CatalogClient` | `CatalogClient` |
 | `Client` | `Client` | `Client` |
 | `DefaultCallTimeout` | `DEFAULT_CALL_TIMEOUT_SEC` | `DEFAULT_CALL_TIMEOUT_MS` |
 | `DefaultMaxRPCReadBytes` | `DEFAULT_MAX_RPC_READ_BYTES` | `DEFAULT_MAX_RPC_READ_BYTES` |
@@ -180,15 +181,17 @@ Deliberate, reason-backed asymmetries. The allowlist is **shrink-only** — a ne
 
 ### Architectural DECISIONs
 
-- **DECISION — full Connect handler binding.** Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md _(symbols: `connectserver.NewBrokerServiceHandler`, `connectserver.NewExchangeServiceHandler`)_
+- **DECISION — full Connect handler binding.** Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md _(symbols: `connectserver.NewBrokerServiceHandler`, `connectserver.NewCatalogServiceHandler`, `connectserver.NewExchangeServiceHandler`)_
 
 ### Mapped symbols with an intentional per-language gap
 
 | Go symbol | python | ts | rationale |
 |---|---|---|---|
 | `connect.NewBrokerClient` | — | `createBrokerClient` | Go NewX factory folds into the Python class constructor (BrokerClient(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix. |
+| `connect.NewCatalogClient` | — | `createCatalogClient` | Go NewX factory folds into the Python class constructor (CatalogClient(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix. |
 | `connect.NewClient` | — | `createClient` | Go NewX factory folds into the Python class constructor (Client(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix. |
 | `connectserver.NewBrokerServiceHandler` | — | — | Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md |
+| `connectserver.NewCatalogServiceHandler` | — | — | Go-only full Connect Catalog handler binding — OPEN DECISION in docs/sdk-parity-matrix.md |
 | `connectserver.NewExchangeServiceHandler` | — | — | Go-only full Connect Exchange handler binding — OPEN DECISION in docs/sdk-parity-matrix.md |
 | `core.NewVerifier` | — | `createVerifier` | Go NewVerifier factory folds into the Python class constructor (Verifier(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createVerifier factory. |
 | `helpers.NewStaticKeyResolver` | — | `createStaticKeyResolver` | Go NewStaticKeyResolver factory folds into the Python class constructor (StaticKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createStaticKeyResolver factory. |

@@ -22,6 +22,7 @@ import type { z } from "zod";
 import { clockWindow, type Window } from "../core/window.ts";
 import { fromWireOffer } from "../core/wire-canon.ts";
 import { signOfferAcceptance, ACCEPTANCE_SIGNATURE_ALGORITHM } from "../src/acceptance.ts";
+import { isBareHost } from "../src/hosts.ts";
 import { generateIdempotencyKey } from "../src/idempotency.ts";
 import { ProtocolVersion } from "../src/wire.ts";
 import {
@@ -29,6 +30,12 @@ import {
 	DiscoveryResponseSchema,
 	DisputeRequestSchema,
 	DisputeResponseSchema,
+	PushResourcesRequestSchema,
+	PushResourcesResponseSchema,
+	RefreshCatalogRequestSchema,
+	RefreshCatalogResponseSchema,
+	RemoveResourcesRequestSchema,
+	RemoveResourcesResponseSchema,
 	ResourceQuerySchema,
 	ResourceResponseSchema,
 	TransactionRequestSchema,
@@ -37,7 +44,7 @@ import {
 	UsageReportResponseSchema,
 } from "../../../gen/ts/wire/schemas.ts";
 import { type Content, fetchContent } from "./content.ts";
-import { malformed, RampCallError } from "./errors.ts";
+import { malformed, notSent, RampCallError } from "./errors.ts";
 import type { EndpointResolver } from "./route.ts";
 import { vetExchangeEndpoint } from "./route.ts";
 import { createUnarySend } from "./send.ts";
@@ -54,6 +61,7 @@ import {
 
 const EXCHANGE_SERVICE = "ramp.v1.ExchangeService";
 const BROKER_SERVICE = "ramp.v1.BrokerService";
+const CATALOG_SERVICE = "ramp.v1.CatalogService";
 
 /** How long a delivery-fetch proof stays valid, in seconds.
  *
@@ -746,6 +754,103 @@ function stringField(record: Record<string, unknown>, key: string): string {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
 	return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// ---------------------------------------------------------------------------
+// The publisher's verbs: CatalogService
+// ---------------------------------------------------------------------------
+
+/** The answer to a catalog push: accepted/rejected counts and the warnings the accepted terms carry. */
+export type PushResourcesResponse = z.infer<typeof PushResourcesResponseSchema>;
+/** The answer to a catalog removal. */
+export type RemoveResourcesResponse = z.infer<typeof RemoveResourcesResponseSchema>;
+/** The answer to a catalog refresh request. */
+export type RefreshCatalogResponse = z.infer<typeof RefreshCatalogResponseSchema>;
+
+/** The publisher-facing Catalog client. */
+export interface CatalogClient {
+	pushResources(request: Record<string, unknown>): Promise<PushResourcesResponse>;
+	removeResources(request: Record<string, unknown>): Promise<RemoveResourcesResponse>;
+	refreshCatalog(request: Record<string, unknown>): Promise<RefreshCatalogResponse>;
+}
+
+/**
+ * createCatalogClient builds a client against an Exchange's CATALOG endpoint — the
+ * publisher role's face: push, remove and refresh the catalog entries a publisher, or a
+ * contributor it authorised, supplies.
+ *
+ * A SEPARATE constructor, as the Broker's is, and for a related reason: the address is a
+ * different one. An Exchange advertises CatalogService at its manifest's
+ * `catalog_endpoint`, distinct from the ExchangeService endpoint the agent client dials,
+ * and the caller is a different party holding a different key — a contributor's, named
+ * by `caller_id`, never an agent's. Hanging the catalog verbs on the agent client would
+ * carry every agent-only holder into a client that uses none of them, and point one of
+ * the two roles at the wrong address.
+ *
+ * The publisher chose the Exchange, so the origin is configuration and the leg runs on
+ * the plain send — the posture of the agent client's home Exchange, not of its
+ * offer-derived leg. It takes the same options; `signer` is what a real push needs (an
+ * Exchange refuses an unsigned catalog call), and the agent-only ones — the requester,
+ * the agent key, the offer-key resolver, the endpoint resolver, the guarded send — are
+ * inert here rather than errors, so one option set can build every face.
+ */
+export function createCatalogClient(baseURL: string, options: ClientOptions = {}): CatalogClient {
+	const r = resolve(options);
+	return {
+		pushResources: (request) =>
+			catalogCall(r, baseURL, "push resources", "PushResources", PushResourcesRequestSchema, PushResourcesResponseSchema, request),
+		removeResources: (request) =>
+			catalogCall(r, baseURL, "remove resources", "RemoveResources", RemoveResourcesRequestSchema, RemoveResourcesResponseSchema, request),
+		refreshCatalog: (request) =>
+			catalogCall(r, baseURL, "refresh catalog", "RefreshCatalog", RefreshCatalogRequestSchema, RefreshCatalogResponseSchema, request),
+	};
+}
+
+/**
+ * catalogCall is the one shape all three catalog verbs share. The request is CLONED
+ * before `ver` is stamped (fill-when-empty; the caller's value is theirs); no
+ * idempotency key is stamped, because the messages carry none — a catalog push is an
+ * upsert and naturally idempotent, so a key there would be ceremony. `exchange` is the
+ * caller's to set, the bare domain of the Exchange the call is meant for; a request
+ * that names none, or names something that is not a bare host, is refused before
+ * anything is signed or sent — a refusal to send, the verdict a report with no
+ * routable recipient gets, not a malformed message.
+ */
+async function catalogCall<T>(
+	r: Resolved,
+	baseURL: string,
+	op: string,
+	method: string,
+	requestSchema: { safeParse: (v: unknown) => { success: boolean; data?: unknown } },
+	responseSchema: { safeParse: (v: unknown) => { success: boolean; data?: unknown } },
+	request: Record<string, unknown>,
+): Promise<T> {
+	const sent = stampVer(op, request);
+	requireRecipient(op, stringField(sent, "exchange"));
+	validateRequest(op, sent, requestSchema, r.opts.validation ?? "strict");
+	const raw = await call(r, op, baseURL, CATALOG_SERVICE, method, sent, false);
+	return parseMessage<T>(op, raw, responseSchema);
+}
+
+function stampVer(op: string, message: Record<string, unknown>): Record<string, unknown> {
+	const sent = clone(op, message);
+	if (sent["ver"] === undefined || sent["ver"] === "") sent["ver"] = ProtocolVersion;
+	return sent;
+}
+
+function requireRecipient(op: string, exchange: string): void {
+	if (exchange === "") {
+		throw notSent(op, new Error("request names no recipient; set exchange to the Exchange's bare domain"));
+	}
+	let bare = false;
+	try {
+		bare = isBareHost(exchange);
+	} catch (cause) {
+		throw notSent(op, cause);
+	}
+	if (!bare) {
+		throw notSent(op, new Error(`exchange ${JSON.stringify(exchange)} is not a bare host`));
+	}
 }
 
 export { RampCallError } from "./errors.ts";

@@ -44,6 +44,29 @@ func NewBrokerServiceHandler(svc rampv1connect.BrokerServiceHandler, opts ...Ser
 	return path, wrapped
 }
 
+// NewCatalogServiceHandler builds the CatalogService HTTP handler wrapped by the
+// SDK server face and returns the mount path and handler — the exchange-operator
+// role's starting point for the publisher-facing RPCs. It composes the same
+// stack as NewExchangeServiceHandler over the generated CatalogService handler:
+// request-id outermost, verify at the http seam (every /ramp. procedure is
+// gated, fail-closed, so an unsigned push never reaches the origin), validate and
+// error-detail as connect interceptors.
+//
+// What the binding gives is transport authentication, wire validation and typed
+// error emission. What stays the handler implementation's job is everything the
+// contract leaves to the Exchange: that caller_id names the verified signer,
+// that the caller is among the publisher's catalog_contributors, that tenant_id
+// matches, the ingest-tier term checks (sdk/go/helpers), and the per-entry
+// verdicts. An Exchange that resolves a contributor's key by caller_id rather
+// than by keyid injects that policy through WithKeyResolver, or narrows the seam
+// with WithVerifyGate and verifies inside the handler.
+func NewCatalogServiceHandler(svc rampv1connect.CatalogServiceHandler, opts ...ServerOption) (string, http.Handler) {
+	cfg := resolveServerConfig(opts)
+	path, connectHandler := rampv1connect.NewCatalogServiceHandler(svc, cfg.connectHandlerOptions()...)
+	wrapped := core.RequestIDMiddleware(cfg.requestID, verifyMiddleware(cfg, connectHandler))
+	return path, wrapped
+}
+
 // connectHandlerOptions assembles the generated handler's options: the
 // interceptor stack plus any raw pass-through handler options the app injected
 // (WithHandlerOptions — e.g. a custom codec).

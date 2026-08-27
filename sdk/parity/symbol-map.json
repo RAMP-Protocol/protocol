@@ -191,6 +191,11 @@
       "python": "CallErrorKind",
       "ts": "CallErrorKind"
     },
+    "connect.CatalogClient": {
+      "allowlist_reason": null,
+      "python": "CatalogClient",
+      "ts": "CatalogClient"
+    },
     "connect.Client": {
       "allowlist_reason": null,
       "python": "Client",
@@ -221,6 +226,11 @@
       "python": null,
       "ts": "createBrokerClient"
     },
+    "connect.NewCatalogClient": {
+      "allowlist_reason": "Go NewX factory folds into the Python class constructor (CatalogClient(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix.",
+      "python": null,
+      "ts": "createCatalogClient"
+    },
     "connect.NewClient": {
       "allowlist_reason": "Go NewX factory folds into the Python class constructor (Client(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix.",
       "python": null,
@@ -233,6 +243,12 @@
     },
     "connectserver.NewBrokerServiceHandler": {
       "allowlist_reason": "Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md",
+      "decision_anchor": "full Connect handler binding",
+      "python": null,
+      "ts": null
+    },
+    "connectserver.NewCatalogServiceHandler": {
+      "allowlist_reason": "Go-only full Connect Catalog handler binding — OPEN DECISION in docs/sdk-parity-matrix.md",
       "decision_anchor": "full Connect handler binding",
       "python": null,
       "ts": null
