@@ -12,25 +12,41 @@ import (
 )
 
 // rejectCode maps a verify-face rejection sentinel to the Connect code returned to
-// the client. A hop-budget rejection (ErrTooManyHops) is a resource/policy limit,
-// not an authentication failure, so it surfaces as ResourceExhausted; every other
+// the client. Two rejections are resource/policy limits rather than authentication
+// failures and say so: a hop-budget rejection (ErrTooManyHops), and a body past the
+// read cap, which the buffering read reports as *http.MaxBytesError. Every other
 // rejection (bad signature, replay, broken chain, expiry, missing headers) is an
-// authentication failure. It is a pure, stateless error→code mapping — the SDK
-// mechanics half of the hop-budget concern; the budget VALUE stays injected.
+// authentication failure. Classifying an over-size body as Unauthenticated would
+// tell a correctly-signed caller its credentials were wrong, and would hide the one
+// refusal a caller fixes by sending less. It is a pure, stateless error→code
+// mapping — the budget and cap VALUES stay injected.
 func rejectCode(err error) connectrpc.Code {
-	if errors.Is(err, helpers.ErrTooManyHops) {
+	if errors.Is(err, helpers.ErrTooManyHops) || isBodyTooLarge(err) {
 		return connectrpc.CodeResourceExhausted
 	}
 	return connectrpc.CodeUnauthenticated
 }
 
-// httpStatus maps the two codes the verify face emits to their canonical
-// Connect-over-HTTP statuses (ResourceExhausted → 429, Unauthenticated → 401).
-func httpStatus(code connectrpc.Code) int {
-	if code == connectrpc.CodeResourceExhausted {
+// isBodyTooLarge reports whether err is net/http's over-cap signal from the read
+// the body bound wraps.
+func isBodyTooLarge(err error) bool {
+	var maxBytes *http.MaxBytesError
+	return errors.As(err, &maxBytes)
+}
+
+// httpStatus maps a rejection to its canonical Connect-over-HTTP status. The two
+// ResourceExhausted causes separate here because they ask the caller for different
+// things: a body past the cap is 413 (send less), a hop budget is 429 (send fewer,
+// or slower). Unauthenticated is 401.
+func httpStatus(code connectrpc.Code, err error) int {
+	switch {
+	case isBodyTooLarge(err):
+		return http.StatusRequestEntityTooLarge
+	case code == connectrpc.CodeResourceExhausted:
 		return http.StatusTooManyRequests
+	default:
+		return http.StatusUnauthorized
 	}
-	return http.StatusUnauthorized
 }
 
 // writeReject emits a Connect-compatible error response so a Connect client sees a
@@ -40,7 +56,7 @@ func writeReject(w http.ResponseWriter, err error) {
 	code := rejectCode(err)
 	ce := connectrpc.NewError(code, err)
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(httpStatus(code))
+	w.WriteHeader(httpStatus(code, err))
 	body, _ := json.Marshal(map[string]string{"code": code.String(), "message": ce.Message()})
 	_, _ = w.Write(body)
 }

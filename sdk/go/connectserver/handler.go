@@ -26,7 +26,7 @@ func NewExchangeServiceHandler(svc rampv1connect.ExchangeServiceHandler, opts ..
 	cfg := resolveServerConfig(opts)
 	path, connectHandler := rampv1connect.NewExchangeServiceHandler(svc, cfg.connectHandlerOptions()...)
 	// verify wraps the connect handler; request-id wraps verify (outermost).
-	wrapped := core.RequestIDMiddleware(cfg.requestID, verifyMiddleware(cfg, connectHandler))
+	wrapped := core.RequestIDMiddleware(cfg.requestID, cfg.boundBody(verifyMiddleware(cfg, connectHandler)))
 	return path, wrapped
 }
 
@@ -40,7 +40,7 @@ func NewExchangeServiceHandler(svc rampv1connect.ExchangeServiceHandler, opts ..
 func NewBrokerServiceHandler(svc rampv1connect.BrokerServiceHandler, opts ...ServerOption) (string, http.Handler) {
 	cfg := resolveServerConfig(opts)
 	path, connectHandler := rampv1connect.NewBrokerServiceHandler(svc, cfg.connectHandlerOptions()...)
-	wrapped := core.RequestIDMiddleware(cfg.requestID, verifyMiddleware(cfg, connectHandler))
+	wrapped := core.RequestIDMiddleware(cfg.requestID, cfg.boundBody(verifyMiddleware(cfg, connectHandler)))
 	return path, wrapped
 }
 
@@ -63,7 +63,7 @@ func NewBrokerServiceHandler(svc rampv1connect.BrokerServiceHandler, opts ...Ser
 func NewCatalogServiceHandler(svc rampv1connect.CatalogServiceHandler, opts ...ServerOption) (string, http.Handler) {
 	cfg := resolveServerConfig(opts)
 	path, connectHandler := rampv1connect.NewCatalogServiceHandler(svc, cfg.connectHandlerOptions()...)
-	wrapped := core.RequestIDMiddleware(cfg.requestID, verifyMiddleware(cfg, connectHandler))
+	wrapped := core.RequestIDMiddleware(cfg.requestID, cfg.boundBody(verifyMiddleware(cfg, connectHandler)))
 	return path, wrapped
 }
 
@@ -71,8 +71,29 @@ func NewCatalogServiceHandler(svc rampv1connect.CatalogServiceHandler, opts ...S
 // interceptor stack plus any raw pass-through handler options the app injected
 // (WithHandlerOptions — e.g. a custom codec).
 func (cfg serverConfig) connectHandlerOptions() []connectrpc.HandlerOption {
-	out := []connectrpc.HandlerOption{connectrpc.WithInterceptors(handlerInterceptors(cfg)...)}
+	// The caller's options come last so an application can tighten (or widen) a
+	// default the SDK chose — the same ordering the client face uses.
+	out := []connectrpc.HandlerOption{
+		connectrpc.WithInterceptors(handlerInterceptors(cfg)...),
+		connectrpc.WithReadMaxBytes(int(cfg.maxRequestBytes)),
+	}
 	return append(out, cfg.handlerOpts...)
+}
+
+// boundBody caps the RAW request body, which is a different quantity from the
+// decompressed-message cap connectHandlerOptions sets: Connect's cap protects the
+// decode, this one protects the read that precedes it. The verify face must buffer
+// the whole body to check an RFC 9421 signature over the exact bytes, and it does
+// that BEFORE it knows who the caller is — so an unauthenticated caller can spend
+// server memory unless the read is bounded here.
+//
+// It is composed INSIDE request-id and OUTSIDE verify on purpose. Request-id stays
+// outermost so a rejection still carries the stamped X-Request-ID — a 413 that
+// cannot be correlated in the reject-path logs would regress exactly the property
+// the request-id ordering exists to give. Connect recognises the resulting
+// http.MaxBytesError and still answers with a well-formed Connect error.
+func (cfg serverConfig) boundBody(next http.Handler) http.Handler {
+	return http.MaxBytesHandler(next, cfg.maxRequestBytes)
 }
 
 // handlerInterceptors assembles the true connect.Interceptors composed onto the

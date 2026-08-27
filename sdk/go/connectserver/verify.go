@@ -117,6 +117,13 @@ func replayNonce(v *helpers.VerifiedRequest) string {
 
 // bufferBody reads the request body and re-seats it so the downstream handler
 // (and Connect's own decode) reads the same bytes verification checked.
+//
+// The read is unbounded HERE by design and bounded one layer out: the handler
+// composes http.MaxBytesHandler outside this face, so r.Body is already capped
+// when it arrives and a body past the cap fails this ReadAll with
+// http.MaxBytesError rather than being buffered whole. Putting the bound in this
+// function instead would leave a hand-composed verifyMiddleware — the seam an
+// application may mount itself — reading without one.
 func bufferBody(r *http.Request) ([]byte, error) {
 	if r.Body == nil {
 		return nil, nil

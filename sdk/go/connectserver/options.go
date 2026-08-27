@@ -17,6 +17,27 @@ import (
 // overrides it via WithReplayTTL, and owns the store itself.
 const replayTTL = 5 * time.Minute
 
+// DefaultMaxRequestBytes caps what a handler will read from one request. Connect
+// treats an unset cap as "any size" and decompresses every request, so without one
+// a caller can spend the server's memory and CPU at a ratio it chooses: a gzip
+// body inflates roughly a thousandfold, and the wire rules do NOT bound that work
+// — protovalidate walks every element it is handed and collects every violation
+// before any cardinality rule is reported, so an over-cap list is fully traversed
+// on its way to being refused. This is the bound that models that cost, which is
+// why it lives here and not on the fields.
+//
+// 4 MiB is chosen against both ends, measured. The largest CONFORMANT push — 256
+// entries each carrying the full 32 terms — is 0.31 MiB and validates in ~150ms,
+// so a real catalog batch fits with better than tenfold headroom. The worst
+// ADVERSARIAL shape that still fits under this cap costs ~1.6s of validation. That
+// is the number this constant buys: not a small cost, but a BOUNDED one, where an
+// uncapped handler has no worst case at all — the same shape at 22 MiB costs ~8s,
+// and nothing stops it growing.
+//
+// Lower it if the deployment does not accept a 256-entry batch; raising it raises
+// the worst case roughly linearly. Override per server with WithMaxRequestBytes.
+const DefaultMaxRequestBytes = 4 << 20 // 4 MiB
+
 // serverConfig is the resolved set of injected holders the server verify face runs
 // over: the request-signing KeyResolver, the ReplayStore, the hop budget, the
 // request-id source, and any application interceptors. All are injected — the SDK
@@ -34,6 +55,7 @@ type serverConfig struct {
 	handlerOpts     []connectrpc.HandlerOption
 	verifyGate      func(*http.Request) bool
 	onReject        func(*http.Request, error)
+	maxRequestBytes int64
 }
 
 // ServerOption configures the server verify face.
@@ -83,6 +105,20 @@ func WithoutReplayStore() ServerOption {
 // reject-reason→connect.Code mapping is SDK mechanics. 0 means unbounded.
 func WithMaxSignatures(n int) ServerOption {
 	return func(c *serverConfig) { c.maxSignatures = n }
+}
+
+// WithMaxRequestBytes overrides the per-request read cap (default
+// DefaultMaxRequestBytes). It bounds TWO distinct quantities, because a caller can
+// exhaust the server through either: the decompressed Connect message, refused as
+// CodeResourceExhausted, and the raw HTTP body the verify face buffers before it
+// can check a signature, refused as a 413. An unsigned caller reaches only the
+// second, which is why the body bound cannot wait for authentication.
+//
+// A non-positive value restores the default rather than disabling the cap: a
+// server that reads without a bound is the state this option exists to prevent,
+// and no accident should be able to select it.
+func WithMaxRequestBytes(n int64) ServerOption {
+	return func(c *serverConfig) { c.maxRequestBytes = n }
 }
 
 // WithValidation sets protovalidate strictness for the server face. The default is
@@ -152,6 +188,9 @@ func resolveServerConfig(opts []ServerOption) serverConfig {
 	}
 	if cfg.replayTTL <= 0 {
 		cfg.replayTTL = replayTTL
+	}
+	if cfg.maxRequestBytes <= 0 {
+		cfg.maxRequestBytes = DefaultMaxRequestBytes
 	}
 	// A server face with no replay store silently accepts a replayed signature
 	// within its window. That is a legitimate stateless-edge choice, but a
