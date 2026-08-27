@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import model_validator
 from wire.models import (
+    GetAccountStatusResponse,
     License,
     LicenseTerm,
     Obligation,
@@ -212,7 +213,15 @@ def cross_field_rule_ids(message: str, json: Any) -> list[str]:
 
 def _make_cross_field(base: type[Any], message: str) -> type[Any]:
     def _check(self: Any) -> Any:
-        violated = cross_field_rule_ids(message, self.model_dump(by_alias=True, exclude_none=True))
+        # mode="json" is load-bearing, not tidiness. The default dump renders an enum
+        # member as its Python repr ("ObligationKind.OBLIGATION_KIND_SHARE_ALIKE"),
+        # while every cross-field rule compares against the WIRE token
+        # ("OBLIGATION_KIND_SHARE_ALIKE"). Without it, each rule that reads an enum
+        # silently never fires: the model accepts a payload the Go oracle refuses, and
+        # no test noticed because the rule-id API is fed raw JSON and answers correctly.
+        violated = cross_field_rule_ids(
+            message, self.model_dump(by_alias=True, exclude_none=True, mode="json")
+        )
         if violated:
             joined = ", ".join(violated)
             msg = f"cross-field rule(s) violated: {joined}"
@@ -226,6 +235,9 @@ def _make_cross_field(base: type[Any], message: str) -> type[Any]:
     return type(f"{message}CrossField", (base,), namespace)
 
 
+GetAccountStatusResponseCrossField = _make_cross_field(
+    GetAccountStatusResponse, "GetAccountStatusResponse"
+)
 LicenseCrossField = _make_cross_field(License, "License")
 LicenseTermCrossField = _make_cross_field(LicenseTerm, "LicenseTerm")
 ObligationCrossField = _make_cross_field(Obligation, "Obligation")

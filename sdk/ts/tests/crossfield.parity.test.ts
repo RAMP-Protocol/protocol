@@ -28,6 +28,8 @@
 // set rather than merely being long enough.
 import { describe, it, expect } from "vitest";
 import { crossFieldRuleIds } from "../src/crossfield.ts";
+import * as crossfieldModule from "../src/crossfield.ts";
+import * as baseSchemas from "../../../gen/ts/wire/schemas.ts";
 import crossfield from "../../../conformance/corpus/crossfield.json";
 // Reference generated vocabulary tokens rather than string literals for the
 // axis-value fields (restriction terms use the FUNCTION token vocabulary).
@@ -230,4 +232,64 @@ describe("sdk/ts cross-field refinements do not over-reject valid instances", ()
       expect(got, `${v.name}: unexpected cross-field rule-ids ${JSON.stringify(got)}`).toEqual([]);
     });
   }
+});
+
+// Pins the REGISTRY to the COMPOSED EXPORTS. These are two hand-maintained lists that
+// must agree, and nothing made them agree before: a rule was added to the registry and
+// the matching composed schema was not, so crossFieldRuleIds answered correctly while
+// the composed schema — the surface a consumer is told to use — accepted the payload
+// the rule forbids, and the Go oracle refused it.
+//
+// Compared by NAME rather than by asking each schema what it validates, because the
+// failure being guarded is a MISSING schema: a check that iterates over the schemas
+// that exist can never see the one that was never created.
+describe("sdk/ts every registered cross-field rule has a composed schema", () => {
+  it("composed schema exports match the registered rule set", () => {
+    const composed = new Set(
+      Object.keys(crossfieldModule)
+        .filter((n) => n.endsWith("CrossFieldSchema"))
+        .map((n) => n.slice(0, -"CrossFieldSchema".length)),
+    );
+    expect(composed).toEqual(expectedMessages);
+  });
+});
+
+// The set-equality test above proves a schema EXISTS, not that it is wired up. A schema
+// attached with the wrong message name, or one whose refinement never runs, still passes
+// it. So drive the real corpus mutants through the composed schemas and require the
+// refusal, which is the behaviour a consumer depends on.
+//
+// Only the mutants the BASE schema accepts can prove anything: the corpus carries
+// minimal JSON, so a mutant that also misses a field-level requirement is refused before
+// the refinement ever runs — a refusal that would pass this test while proving nothing
+// about the layer under test. Those are skipped, and the count is asserted so the skip
+// cannot quietly become "all of them".
+describe("sdk/ts composed schemas actually run the cross-field layer", () => {
+  it("every field-valid mutant is refused, naming its rule", () => {
+    let checked = 0;
+    for (const c of crossfield as CorpusCase[]) {
+      if (c.valid) continue;
+      const composed = (crossfieldModule as Record<string, unknown>)[
+        `${c.message}CrossFieldSchema`
+      ] as { safeParse: (v: unknown) => { success: boolean; error?: { issues: unknown[] } } };
+      expect(composed, `no composed schema for ${c.message}`).toBeDefined();
+
+      const base = (baseSchemas as Record<string, unknown>)[`${c.message}Schema`] as {
+        safeParse: (v: unknown) => { success: boolean };
+      };
+      if (!base.safeParse(c.json).success) continue; // field-level refuses it first
+
+      const got = composed.safeParse(c.json);
+      expect(got.success, `${c.id}: composed schema accepted a mutant`).toBe(false);
+      const rendered = JSON.stringify(got.error?.issues ?? []);
+      for (const ruleId of c.rules) {
+        expect(rendered, `${c.id}: refused, but not for ${ruleId}`).toContain(ruleId);
+      }
+      checked += 1;
+    }
+    expect(
+      checked,
+      "every crossfield mutant was already refused at field level, so this test exercised no composed schema at all",
+    ).toBeGreaterThan(0);
+  });
 });

@@ -209,6 +209,77 @@ def test_every_registered_message_has_a_valid_instance() -> None:
     )
 
 
+def test_every_registered_rule_has_a_composed_model() -> None:
+    """Pins the REGISTRY to the COMPOSED EXPORTS.
+
+    These are two hand-maintained lists that must agree, and nothing made them agree
+    before: a rule was added to the registry and the matching composed model was not,
+    so ``cross_field_rule_ids`` answered correctly while the composed model — the
+    surface a consumer is told to use — accepted the payload the rule forbids. The Go
+    oracle refused it. Two conformant readers, two answers.
+
+    Compare by NAME rather than by asking each model what it validates, because the
+    failure being guarded is a MISSING model: a check that iterates over the models
+    that exist can never see the one that was never created.
+    """
+    from ramp_sdk import crossfield as _cf
+
+    composed = {n[: -len("CrossField")] for n in dir(_cf) if n.endswith("CrossField")}
+    registered = set(_cf._RULES_BY_MESSAGE)  # noqa: SLF001
+    assert composed == registered, (
+        f"registered but not composed: {sorted(registered - composed)}; "
+        f"composed but not registered: {sorted(composed - registered)}"
+    )
+
+
+def test_the_composed_model_actually_refuses_a_corpus_mutant() -> None:
+    """The set-equality test above proves a model EXISTS, not that it is wired up.
+
+    A composed model built from the wrong message name, or one whose validator never
+    runs, still passes it. So drive real corpus mutants through the composed models and
+    require the refusal, which is the behaviour a consumer depends on.
+
+    Only the mutants the BASE model accepts can prove anything here. The corpus carries
+    minimal JSON, so many mutants are also missing a field-level requirement, and the
+    composed model then refuses before the cross-field validator ever runs — a refusal
+    that would pass this test while proving nothing about the layer under test. Those
+    are skipped deliberately, and the count is asserted so the skip cannot quietly
+    become "all of them".
+    """
+    import pydantic
+
+    from ramp_sdk import crossfield as _cf
+
+    import wire.models as _wire
+
+    checked = 0
+    for case in _CASES:
+        if case["valid"]:
+            continue
+        model = getattr(_cf, f"{case['message']}CrossField", None)
+        assert model is not None, f"no composed model for {case['message']}"
+
+        base = getattr(_wire, str(case["message"]))
+        try:
+            base.model_validate(case["json"])
+        except pydantic.ValidationError:
+            continue  # field-level refuses it first; see the docstring
+
+        with pytest.raises(pydantic.ValidationError) as excinfo:
+            model.model_validate(case["json"])
+        rendered = str(excinfo.value)
+        for rule_id in case["rules"]:
+            assert rule_id in rendered, (
+                f"{case['id']}: composed model refused, but not for {rule_id}"
+            )
+        checked += 1
+
+    assert checked, (
+        "every crossfield mutant was already refused at field level, so this test "
+        "exercised no composed validator at all"
+    )
+
+
 @pytest.mark.parametrize(
     "instance",
     _VALID_INSTANCES,

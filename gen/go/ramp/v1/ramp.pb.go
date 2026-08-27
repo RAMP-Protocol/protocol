@@ -1592,11 +1592,28 @@ func (CatalogRejectionReason) EnumDescriptor() ([]byte, []int) {
 type RegistrationFailureReason int32
 
 const (
-	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_UNSPECIFIED               RegistrationFailureReason = 0 // unset — rejected at ingest
-	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED       RegistrationFailureReason = 1 // caller domain is not verified
-	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_KEY               RegistrationFailureReason = 2 // signing key malformed or unsupported
-	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_SIGNATURE_INVALID         RegistrationFailureReason = 3 // request signature invalid
-	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_ALREADY_REGISTERED        RegistrationFailureReason = 4 // identity already registered
+	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_UNSPECIFIED         RegistrationFailureReason = 0 // unset — rejected at ingest
+	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED RegistrationFailureReason = 1 // caller domain is not verified
+	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_KEY         RegistrationFailureReason = 2 // signing key malformed or unsupported
+	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_SIGNATURE_INVALID   RegistrationFailureReason = 3 // request signature invalid
+	// LEGACY, never emitted. Register MUST NOT emit this reason. Registering again
+	// for an agent that already holds an account SUCCEEDS: it is answered from the
+	// stored record and returns the existing billing_ref, so there is no refusal to
+	// report. See "Repeat registration" in the Agent Account Registration section.
+	//
+	// The number is retained and MUST NOT be reused, and this value MUST NOT be
+	// given a new meaning. It reads like a natural home for a future cross-account
+	// identity collision — one agent key claiming a business identity another
+	// account already holds — and that is exactly why it is closed off here: this
+	// contract defines no way for an Exchange to correlate business identity across
+	// accounts, since registration_data is operator-defined and passed through
+	// uninspected unless a schema is published. Repurposing 4 later would silently
+	// change what it means for every client already built against this text. If
+	// that case is ever specified, it needs its own identity model and its own
+	// named reason.
+	//
+	// Deprecated: Marked as deprecated in ramp/v1/ramp.proto.
+	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_ALREADY_REGISTERED        RegistrationFailureReason = 4
 	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_QUOTA_EXCEEDED            RegistrationFailureReason = 5 // registration quota exceeded
 	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA RegistrationFailureReason = 6 // registration_data does not conform to the Exchange's published AccountRegistration.data_schema
 	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE        RegistrationFailureReason = 7 // terms_digest does not match the currently published WellKnownManifest.terms_digest, or was omitted while the Exchange publishes one
@@ -6778,6 +6795,15 @@ type AccountRegistration struct {
 	// passed through to the system of record uninspected, so an Exchange that
 	// publishes no schema needs no change to stay conformant.
 	//
+	// The gate above runs on ACCOUNT CREATION ONLY. A repeat registration, for an
+	// agent that already holds an account, is answered from the stored record and
+	// runs no schema check at all — it discards registration_data rather than
+	// validating it. That exception is stated here rather than left to the section
+	// above, because this field calls itself the single home of the contract and a
+	// reader who comes here for the whole rule would otherwise leave with the wrong
+	// one. See "Repeat registration" in the Agent Account Registration section for
+	// why, and for the other gates it applies to.
+	//
 	// Absent means the field carries no bytes, or only JSON whitespace — space, tab,
 	// carriage return and line feed, RFC 8259's four and no others. Nothing else
 	// counts, and the distinction is load-bearing rather than pedantic: this is the
@@ -8431,28 +8457,36 @@ type RegisterRequest struct {
 	//	not a detail: a payload carrying 1e300 is seven bytes under one renderer and
 	//	three hundred under another.
 	//
-	// A payload with NO canonical form at all is refused in the same class as the
-	// three bounds. The reachable case is a non-finite number: JSON can represent
-	// neither NaN nor an infinity, while this member is a Struct, whose
-	// number_value is an IEEE-754 double that carries one perfectly well. Such a
-	// payload has no canonical encoding, so the byte cap above has nothing to
-	// measure.
+	// A payload with NO JSON REPRESENTATION at all is refused in the same class as
+	// the three bounds: it has no canonical encoding, so the byte cap above has
+	// nothing to measure. This member is a Struct, and a Struct can carry two such
+	// values — both of which the protobuf binary decoder accepts and proto-JSON
+	// refuses to render:
 	//
-	// That check MUST read the decoded protobuf value, never a native map
-	// converted from it. This is stated because two conformant implementations
-	// already answered the same signed request differently: some runtimes render a
-	// non-finite double as the STRING "NaN", "Infinity" or "-Infinity" while
-	// converting, and once that has happened the payload cannot be told apart from
-	// one that legitimately carries that text — an operator legally named NaN is a
-	// valid string value that has to be accepted. The conversion destroys the
-	// information, so the check has to precede it.
+	//	a NON-FINITE NUMBER. JSON can represent neither NaN nor an infinity, while
+	//	Struct's number_value is an IEEE-754 double that carries one perfectly well.
+	//
+	//	a VALUE WITH NO KIND SET. google.protobuf.Value holds its payload in a
+	//	oneof, and a oneof with no member set is well-formed on the wire. There is
+	//	no JSON value it denotes, so there is nothing to write.
+	//
+	// That check MUST read the decoded protobuf value, never a native map converted
+	// from it. This is stated because two conformant implementations already
+	// answered the same signed request differently, and because NEITHER value
+	// survives the conversion. Some runtimes render a non-finite double as the
+	// STRING "NaN", "Infinity" or "-Infinity", and once that has happened the
+	// payload cannot be told apart from one that legitimately carries that text —
+	// an operator legally named NaN is a valid string value that has to be
+	// accepted. A value with no kind set converts to the same empty result as a
+	// JSON null, which is a value the payload may legitimately carry. In both cases
+	// the conversion destroys the information, so the check has to precede it.
 	//
 	// ORDER. The four checks on this member run in this sequence, and the sequence
 	// is not free choice:
 	//
 	//  1. top-level member count
 	//  2. nesting depth
-	//  3. canonicalizability, which is where the non-finite check lives
+	//  3. canonicalizability, which is where both no-JSON-form checks live
 	//  4. canonical byte size
 	//
 	// The first two are counts, and they bound the document the third then has to
@@ -10402,13 +10436,13 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	",CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN\x10\x06\x12+\n" +
 	"'CATALOG_REJECTION_REASON_QUOTA_EXCEEDED\x10\a\x121\n" +
 	"-CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED\x10\b\x12,\n" +
-	"(CATALOG_REJECTION_REASON_URI_UNAVAILABLE\x10\t*\xb0\x03\n" +
+	"(CATALOG_REJECTION_REASON_URI_UNAVAILABLE\x10\t*\xb4\x03\n" +
 	"\x19RegistrationFailureReason\x12+\n" +
 	"'REGISTRATION_FAILURE_REASON_UNSPECIFIED\x10\x00\x123\n" +
 	"/REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED\x10\x01\x12+\n" +
 	"'REGISTRATION_FAILURE_REASON_INVALID_KEY\x10\x02\x121\n" +
-	"-REGISTRATION_FAILURE_REASON_SIGNATURE_INVALID\x10\x03\x122\n" +
-	".REGISTRATION_FAILURE_REASON_ALREADY_REGISTERED\x10\x04\x12.\n" +
+	"-REGISTRATION_FAILURE_REASON_SIGNATURE_INVALID\x10\x03\x126\n" +
+	".REGISTRATION_FAILURE_REASON_ALREADY_REGISTERED\x10\x04\x1a\x02\b\x01\x12.\n" +
 	"*REGISTRATION_FAILURE_REASON_QUOTA_EXCEEDED\x10\x05\x129\n" +
 	"5REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA\x10\x06\x122\n" +
 	".REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE\x10\a*\x95\x02\n" +

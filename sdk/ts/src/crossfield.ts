@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  GetAccountStatusResponseSchema,
   LicenseSchema,
   LicenseTermSchema,
   ObligationSchema,
@@ -246,6 +247,10 @@ function attach<T extends z.ZodTypeAny>(schema: T, message: string): z.ZodEffect
   });
 }
 
+export const GetAccountStatusResponseCrossFieldSchema = attach(
+  GetAccountStatusResponseSchema,
+  "GetAccountStatusResponse",
+);
 export const LicenseCrossFieldSchema = attach(LicenseSchema, "License");
 export const LicenseTermCrossFieldSchema = attach(LicenseTermSchema, "LicenseTerm");
 export const ObligationCrossFieldSchema = attach(ObligationSchema, "Obligation");

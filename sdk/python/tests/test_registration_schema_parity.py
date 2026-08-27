@@ -332,6 +332,12 @@ def test_the_depth_verdict_does_not_depend_on_the_runtime() -> None:
     assert check_registration_data(nest(MAX_REGISTRATION_DATA_DEPTH)) == "accepted"
     assert check_registration_data(nest(MAX_REGISTRATION_DATA_DEPTH + 1)) == "too_deep"
     # Far past every runtime limit measured, and still a verdict rather than a crash.
+    #
+    # This line also pins the ORDER: depth is checked before the payload is
+    # canonicalized. Canonicalize first and rfc8785 raises RecursionError on this input,
+    # which the caller reads as "uncanonicalizable", so the assertion below fails. That
+    # is why the Go and TypeScript ports carry an explicit precedence test and this one
+    # does not — do not delete this line as merely a runtime check.
     assert check_registration_data(nest(5000)) == "too_deep"
 
 

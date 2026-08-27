@@ -1625,13 +1625,24 @@ const (
 	// document.
 	RegistrationDataTooDeep
 
-	// RegistrationDataUncanonicalizable means the payload has no canonical JSON form —
-	// a non-finite number, since JSON has no NaN or Infinity while Struct's
-	// number_value is an IEEE-754 double that holds one. Only
-	// CheckRegistrationDataStruct reaches it: CheckRegistrationData is handed a payload
-	// that has already been converted, and the conversion has by then rendered the
-	// value as a string. It is a verdict rather than an error because this face, like
-	// the rest of the registration surface, does not throw.
+	// RegistrationDataUncanonicalizable means the payload has NO JSON REPRESENTATION,
+	// so it can be neither measured nor stored. The class has two members, and both
+	// are values the protobuf binary decoder accepts and protojson refuses:
+	//
+	//	a NON-FINITE NUMBER, since JSON has no NaN or Infinity while Struct's
+	//	number_value is an IEEE-754 double that holds one;
+	//
+	//	a Value with NO MEMBER OF ITS KIND ONEOF SET, which protojson refuses with
+	//	"none of the oneof fields is set".
+	//
+	// Only CheckRegistrationDataStruct reaches this verdict, and neither member can be
+	// moved to the map-based face, because AsMap is not invertible for either one: a
+	// non-finite number arrives as the string "NaN", "Infinity" or "-Infinity", which a
+	// payload may also carry legitimately, and an unset kind arrives as nil, which is
+	// also what a real JSON null gives. Both lose the evidence before the check runs.
+	//
+	// It is a verdict rather than an error because this face, like the rest of the
+	// registration surface, does not throw.
 	RegistrationDataUncanonicalizable
 )
 
@@ -1704,21 +1715,27 @@ func CheckRegistrationData(data map[string]any) RegistrationDataVerdict {
 //
 // It answers the same verdicts as CheckRegistrationData for every payload both can
 // see, and it delegates to it for the byte bound so the two cannot drift. What it adds
-// is the one case the map-based face is blind to: a non-finite number.
+// is the class the map-based face is blind to: a payload with no JSON representation.
 //
-// Struct's number_value is an IEEE-754 double, so a NaN or an infinity crosses the wire
-// intact — structpb.NewNumberValue does not refuse one and the binary codec carries it
-// unchanged. JSON can represent neither, so such a payload has no canonical form and no
-// measurable size, which is RegistrationDataUncanonicalizable. Converting first destroys
-// the evidence: AsMap renders the three values as the strings "NaN", "Infinity" and
-// "-Infinity", and those are legal string values a payload may legitimately carry.
+// Two kinds of value reach the walk intact and have no JSON form. Struct's number_value
+// is an IEEE-754 double, so a NaN or an infinity crosses the wire unchanged —
+// structpb.NewNumberValue does not refuse one and the binary codec carries it. And a
+// Value may arrive with no member of its kind oneof set at all, which the binary decoder
+// accepts and protojson refuses. Either one makes the payload
+// RegistrationDataUncanonicalizable: no canonical form, so no measurable size.
+//
+// Converting first destroys the evidence for both. AsMap renders the non-finite values
+// as the strings "NaN", "Infinity" and "-Infinity", which a payload may legitimately
+// carry, and renders an unset kind as nil, which is also what a real JSON null gives.
 //
 // The order is the one RegisterRequest.registration_data states, and each step is where
 // it is for a reason:
 //
-//	member count and depth run FIRST, on the raw Struct, because AsMap converts the
-//	whole payload RECURSIVELY — converting before the depth bound is known to hold
-//	would run the unbounded walk that the bound exists to prevent;
+//	member count and depth run FIRST, on the raw Struct, so that a payload already
+//	known to be too deep is never converted at all. AsMap walks the whole payload
+//	RECURSIVELY, and refusing first skips that work: the binary decoder admits
+//	nesting far past this bound, so the payloads this skips are ones that really do
+//	arrive over the wire, not only ones built in memory;
 //
 //	the non-finite check runs before the byte bound, because the byte bound is defined
 //	as the length of the canonical encoding, and a payload with no canonical form has
@@ -1729,11 +1746,11 @@ func CheckRegistrationDataStruct(data *structpb.Struct) RegistrationDataVerdict 
 	if len(data.GetFields()) > MaxRegistrationDataMembers {
 		return RegistrationDataTooManyMembers
 	}
-	depth, nonFinite := registrationStructWalk(data)
+	depth, noJSONForm := registrationStructWalk(data)
 	if depth > MaxRegistrationDataDepth {
 		return RegistrationDataTooDeep
 	}
-	if nonFinite {
+	if noJSONForm {
 		return RegistrationDataUncanonicalizable
 	}
 	// Both raw-only guards have passed, so the conversion is now bounded and lossless
@@ -1744,19 +1761,20 @@ func CheckRegistrationDataStruct(data *structpb.Struct) RegistrationDataVerdict 
 }
 
 // registrationStructWalk returns how many JSON containers the payload nests, counting
-// the payload itself as the first, and whether any number in it is non-finite. It is
-// the raw-Struct counterpart of registrationDataDepth, and it counts by the same rule:
-// only containers are pushed, so every frame on the stack is one.
+// the payload itself as the first, and whether any value in it has no JSON
+// representation. It is the raw-Struct counterpart of registrationDataDepth, and it
+// counts by the same rule: only containers are pushed, so every frame on the stack is
+// one.
 //
 // One walk answers both questions because the caller asks them in a fixed order. When
-// the depth bound is crossed the walk STOPS EARLY and nonFinite is whatever had been
+// the depth bound is crossed the walk STOPS EARLY and noJSONForm is whatever had been
 // seen by then — which is not a defect, because the caller returns the depth verdict
 // without reading it. Beyond that point the answer would cost a full traversal of a
 // payload already known to be refused.
 //
 // The walk is ITERATIVE for the reason registrationDataDepth's is: it runs before the
 // depth bound is known to hold, so it is the one walk that must survive any input.
-func registrationStructWalk(data *structpb.Struct) (depth int, nonFinite bool) {
+func registrationStructWalk(data *structpb.Struct) (depth int, noJSONForm bool) {
 	if data == nil {
 		return 1, false
 	}
@@ -1772,8 +1790,14 @@ func registrationStructWalk(data *structpb.Struct) (depth int, nonFinite bool) {
 			stack = append(stack, frame{node: child, depth: depth})
 		case *structpb.Value_NumberValue:
 			if math.IsNaN(kind.NumberValue) || math.IsInf(kind.NumberValue, 0) {
-				nonFinite = true
+				noJSONForm = true
 			}
+		case nil:
+			// No member of the kind oneof is set. The binary decoder accepts this and
+			// protojson refuses it, so the payload has no JSON form. GetKind returns a
+			// nil interface both for a Value that carries no kind and for a nil *Value;
+			// neither can be rendered, so both belong in this verdict.
+			noJSONForm = true
 		}
 	}
 	for len(stack) > 0 {
@@ -1785,7 +1809,7 @@ func registrationStructWalk(data *structpb.Struct) (depth int, nonFinite bool) {
 		// No need to walk past the bound: the answer is already decided, and a payload
 		// deep enough to matter is also deep enough to be expensive to finish walking.
 		if f.depth > MaxRegistrationDataDepth {
-			return f.depth, nonFinite
+			return f.depth, noJSONForm
 		}
 		switch v := f.node.GetKind().(type) {
 		case *structpb.Value_StructValue:
@@ -1798,7 +1822,7 @@ func registrationStructWalk(data *structpb.Struct) (depth int, nonFinite bool) {
 			}
 		}
 	}
-	return deepest, nonFinite
+	return deepest, noJSONForm
 }
 
 // registrationDataDepth returns how many JSON containers the payload nests, counting

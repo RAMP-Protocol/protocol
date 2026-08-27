@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -340,6 +341,92 @@ func nonFiniteStruct(t *testing.T, position string, n float64) *structpb.Struct 
 	return out
 }
 
+// kindlessStruct builds a payload carrying a Value with NO MEMBER of its kind oneof set,
+// at the same three positions nonFiniteStruct uses. structpb.NewStruct cannot produce
+// one — there is no Go value that maps to "no kind" — so the Value is assembled directly
+// and then ROUND-TRIPPED THROUGH THE BINARY CODEC, which is the point: this is not a
+// hand-made object that could never exist, it is what a peer can put on the wire.
+func kindlessStruct(t *testing.T, position string) *structpb.Struct {
+	t.Helper()
+	var payload *structpb.Struct
+	switch position {
+	case "top level":
+		payload = &structpb.Struct{Fields: map[string]*structpb.Value{"n": {}}}
+	case "nested object":
+		payload = &structpb.Struct{Fields: map[string]*structpb.Value{
+			"address": structpb.NewStructValue(&structpb.Struct{
+				Fields: map[string]*structpb.Value{"lat": {}},
+			}),
+		}}
+	case "list element":
+		payload = &structpb.Struct{Fields: map[string]*structpb.Value{
+			"scores": structpb.NewListValue(&structpb.ListValue{
+				Values: []*structpb.Value{structpb.NewNumberValue(1), {}},
+			}),
+		}}
+	default:
+		t.Fatalf("unknown position %q", position)
+	}
+	raw, err := proto.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal(%s): %v", position, err)
+	}
+	var back structpb.Struct
+	if err := proto.Unmarshal(raw, &back); err != nil {
+		t.Fatalf("the binary codec refused a kind-less Value (%s): %v", position, err)
+	}
+	return &back
+}
+
+// uncanonicalizableMembers is the whole class the raw entry point refuses: every value
+// the binary codec accepts and protojson cannot render. Tests range over it rather than
+// naming one member, so adding a third member to the class fails whatever it breaks
+// instead of silently going untested.
+func uncanonicalizableMembers(t *testing.T, position string) map[string]*structpb.Struct {
+	t.Helper()
+	return map[string]*structpb.Struct{
+		"NaN":        nonFiniteStruct(t, position, math.NaN()),
+		"+Inf":       nonFiniteStruct(t, position, math.Inf(1)),
+		"-Inf":       nonFiniteStruct(t, position, math.Inf(-1)),
+		"unset kind": kindlessStruct(t, position),
+	}
+}
+
+// TestOnlyTheRawStructEntryPointSeesTheUncanonicalizableClass is the ramp-4c7 half of the
+// regression below: a Value with no kind set is the SECOND member of the class, and it
+// fails in exactly the same shape as a non-finite number. protojson refuses it, the raw
+// walk refuses it, and the map-based face accepts it — because AsMap renders an unset
+// kind as nil, which is also what a real JSON null gives, so the evidence is gone.
+func TestOnlyTheRawStructEntryPointSeesTheUncanonicalizableClass(t *testing.T) {
+	for _, position := range []string{"top level", "nested object", "list element"} {
+		for name, payload := range uncanonicalizableMembers(t, position) {
+			t.Run(position+"/"+name, func(t *testing.T) {
+				if _, err := protojson.Marshal(payload); err == nil {
+					t.Fatalf("protojson rendered it, so it is not uncanonicalizable")
+				}
+				if got := helpers.CheckRegistrationDataStruct(payload); got != helpers.RegistrationDataUncanonicalizable {
+					t.Errorf("raw verdict = %s, want uncanonicalizable", got)
+				}
+				if got := helpers.CheckRegistrationData(payload.AsMap()); got != helpers.RegistrationDataAccepted {
+					t.Errorf("map verdict = %s, want accepted — if this changed, the map face "+
+						"gained sight it cannot have and the comment above is now wrong", got)
+				}
+			})
+		}
+	}
+}
+
+// TestARealJSONNullIsStillAccepted is the other side of the unset-kind refusal. NullValue
+// is a kind that IS set, and null is a value JSON can represent, so a payload carrying one
+// must pass. Without this, the cheapest wrong fix — treating every nil that AsMap produces
+// as uncanonicalizable — would look correct.
+func TestARealJSONNullIsStillAccepted(t *testing.T) {
+	payload := &structpb.Struct{Fields: map[string]*structpb.Value{"n": structpb.NewNullValue()}}
+	if got := helpers.CheckRegistrationDataStruct(payload); got != helpers.RegistrationDataAccepted {
+		t.Errorf("verdict = %s, want accepted", got)
+	}
+}
+
 // TestOnlyTheRawStructEntryPointSeesANonFiniteNumber is the regression this whole face
 // was reshaped around. Both halves are asserted together, because the second is what
 // makes the first necessary: the raw entry point refuses the payload, and the map-based
@@ -413,6 +500,47 @@ func TestTheRawEntryPointPinsTheOrderOfItsChecks(t *testing.T) {
 		}
 		if got := helpers.CheckRegistrationDataStruct(payload); got != helpers.RegistrationDataUncanonicalizable {
 			t.Fatalf("verdict = %s, want uncanonicalizable", got)
+		}
+	})
+
+	t.Run("the depth bound beats an uncanonicalizable value", func(t *testing.T) {
+		// The pair the proto orders and the branch had left unpinned. Both refusals
+		// apply. Depth wins because the canonicalizability answer is only trustworthy
+		// once the payload is known to be walkable at all — and because the walk that
+		// finds a non-renderable value is the same walk the depth bound exists to stop.
+		//
+		// Ranged over the WHOLE class, not one member: ramp-4c7 added unset-kind beside
+		// non-finite, and an order that held for one and not the other would be two
+		// different orders wearing one name.
+		//
+		// The offending value sits at TOP LEVEL on purpose. push() resolves every
+		// non-container child while the root frame is being processed, so the flag is
+		// set before any deeper frame runs. That makes the mutation's answer
+		// deterministic too — put the value deep instead and whether the early return
+		// has already fired depends on Go map iteration order, so a swapped
+		// implementation would fail only sometimes.
+		for name, bad := range map[string]*structpb.Value{
+			"NaN":        structpb.NewNumberValue(math.NaN()),
+			"+Inf":       structpb.NewNumberValue(math.Inf(1)),
+			"unset kind": {},
+		} {
+			t.Run(name, func(t *testing.T) {
+				deep := &structpb.Struct{Fields: map[string]*structpb.Value{"leaf": structpb.NewStringValue("x")}}
+				for i := 0; i <= helpers.MaxRegistrationDataDepth; i++ {
+					deep = &structpb.Struct{Fields: map[string]*structpb.Value{"n": structpb.NewStructValue(deep)}}
+				}
+				payload := &structpb.Struct{Fields: map[string]*structpb.Value{
+					"bad":  bad,
+					"deep": structpb.NewStructValue(deep),
+				}}
+				// Both faults are really present, or the test proves nothing.
+				if _, err := protojson.Marshal(payload); err == nil {
+					t.Fatalf("payload is renderable, so it is not uncanonicalizable")
+				}
+				if got := helpers.CheckRegistrationDataStruct(payload); got != helpers.RegistrationDataTooDeep {
+					t.Errorf("verdict = %s, want too_deep", got)
+				}
+			})
 		}
 	})
 
