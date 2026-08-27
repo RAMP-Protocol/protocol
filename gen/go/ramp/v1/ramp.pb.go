@@ -1521,7 +1521,13 @@ const (
 	CatalogRejectionReason_CATALOG_REJECTION_REASON_MALFORMED_ENTRY         CatalogRejectionReason = 5 // a resource entry failed schema/validation
 	CatalogRejectionReason_CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN     CatalogRejectionReason = 6 // an unregistered vocab token in a restriction/term
 	CatalogRejectionReason_CATALOG_REJECTION_REASON_QUOTA_EXCEEDED          CatalogRejectionReason = 7 // contributor push quota exceeded (per-caller)
-	CatalogRejectionReason_CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED    CatalogRejectionReason = 8 // a single entry carries more license terms than allowed (per-entry cap)
+	// A single entry carries more license terms than ResourceEntry.terms allows.
+	// Retired on the PushResources path: the cap is a wire rule now, so a push
+	// carrying an over-cap entry is refused whole, before any per-entry
+	// classification runs, and no rejection naming this reason can be produced for
+	// it. Kept for a deployment that applies the cap somewhere the wire rules do
+	// not reach — an entry that arrived by some other route than PushResources.
+	CatalogRejectionReason_CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED CatalogRejectionReason = 8
 	// The URI cannot be claimed by this caller's entries. Named from the caller's
 	// own perspective ON PURPOSE: it MUST NOT disclose that another resource/
 	// contributor already owns the URI. Within one publisher, mutually-untrusting
@@ -3709,10 +3715,17 @@ type LicenseTerm struct {
 	Semantics TermSemantics `protobuf:"varint,2,opt,name=semantics,proto3,enum=ramp.v1.TermSemantics" json:"semantics,omitempty"`
 	// Usage restrictions (function, geography, user-type).
 	// Multiple restrictions are AND-combined — the agent must satisfy all of them.
+	// At most 64, the bound every other per-message list in this contract carries.
+	// Only one restriction per axis is valid anyway, so the cap is far above any
+	// conformant term; it bounds what a single term can carry, not the work of
+	// checking one — a validator walks every element it is handed before the cap
+	// is reported, so the cost of checking is bounded at the transport instead.
 	Restrictions []*Restriction `protobuf:"bytes,3,rep,name=restrictions,proto3" json:"restrictions,omitempty"`
 	// Usage caps. The agent must not exceed any individual Quota.
+	// At most 64, for the reason restrictions carries.
 	Quotas []*Quota `protobuf:"bytes,4,rep,name=quotas,proto3" json:"quotas,omitempty"`
 	// Post-use behavioral requirements.
+	// At most 64, for the reason restrictions carries.
 	Obligations []*Obligation `protobuf:"bytes,5,rep,name=obligations,proto3" json:"obligations,omitempty"`
 	// Pricing for this term. REQUIRED for every term regardless of semantics —
 	// an agent cannot act on a priceless term, so absent Pricing is a validation
@@ -5114,7 +5127,12 @@ type PushResourcesRequest struct {
 	// Tenant identifier
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	// Content entries to push. At least one: an empty push asks for nothing and
-	// is refused rather than answered with zero counts.
+	// is refused rather than answered with zero counts. At most 256, the bound a
+	// caller-chosen batch carries elsewhere in this contract (see ResourceQuery.uris)
+	// — it bounds one submission, so a larger feed is pushed in several. The cap is
+	// over entries because every accepted entry is stored and every rejected one is
+	// named in the answer; it does not bound the work of checking a submission,
+	// which the recipient bounds at the transport.
 	Entries []*ResourceEntry `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
 	// Identity of the caller (who is pushing this data).
 	// The Exchange verifies this matches a registered CatalogService client.
@@ -5216,10 +5234,19 @@ func (x *PushResourcesRequest) GetExtCritical() []string {
 
 // ResourceEntry — one catalog row as a publisher (or an authorised contributor)
 // pushes it. The envelope fields carry their own wire rules, so an entry that
-// cannot become a catalog URI, or that would let one entry cost unbounded work,
-// is refused at the boundary rather than after ingestion; the licensing terms
-// inside carry the LicenseTerm rules. See CatalogService for the second,
-// ingest-time tier (token canonicalisation and registry membership).
+// cannot become a catalog URI is refused at the boundary rather than after
+// ingestion; the licensing terms inside carry the LicenseTerm rules. See
+// CatalogService for the second, ingest-time tier (token canonicalisation and
+// registry membership).
+//
+// The list caps here and on LicenseTerm bound the DOCUMENT: how large one entry
+// may be, what a push can store, and how much a rejection has to name back. They
+// do NOT bound the work of checking a push, and must not be read as doing so — a
+// validator walks every element it is handed and reports every violation before
+// any cardinality rule is applied, so an over-cap list is fully traversed on its
+// way to being refused. The work is bounded one layer down, by the maximum
+// request size the recipient will read; a deployment that exposes CatalogService
+// sets that cap, and the SDK's server binding sets a default.
 type ResourceEntry struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Provider domain — the bare host the resource lives on, in the shape
@@ -5268,9 +5295,11 @@ type ResourceEntry struct {
 	// See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST
 	// be present. For REFERENCE_ONLY terms, License.uri is authoritative.
 	// The Exchange validates ENUMERATED terms at push time and surfaces them
-	// in Offer.terms on discovery. At most 32 terms per entry — the per-entry
-	// cap CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED names, stated on the
-	// wire so every implementation refuses the same size.
+	// in Offer.terms on discovery. At most 32 terms per entry, stated on the wire
+	// so every implementation refuses the same size. Being a wire rule makes it
+	// batch-fatal on PushResources: an over-cap entry refuses the whole submission
+	// rather than dropping that one entry, the same as every other rule applied at
+	// the boundary.
 	Terms []*LicenseTerm `protobuf:"bytes,13,rep,name=terms,proto3" json:"terms,omitempty"`
 	// Optional mutability hint. When omitted, the Exchange applies the `STATIC`
 	// default at Offer build; an explicit `UNSPECIFIED` is rejected. A value in
@@ -5539,7 +5568,8 @@ type RemoveResourcesRequest struct {
 	// Tenant identifier
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	// Paths to remove — the absolute-path shape ResourceEntry.path carries, at
-	// least one.
+	// least one and at most 256, the same batch bound PushResourcesRequest.entries
+	// carries and for the same reason.
 	Paths []string `protobuf:"bytes,3,rep,name=paths,proto3" json:"paths,omitempty"`
 	// REQUIRED. Bare host of the recipient this request is addressed to (e.g.
 	// "exchange.example" or "exchange.example:8081"). See "Request recipient" in
@@ -9646,13 +9676,13 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01:\x9c\x02\xbaH\x98\x02\x1a\x95\x02\n" +
 	"-obligation.share_alike.requires_scope_license\x12DSHARE_ALIKE requires scope_license to identify a license (id or uri)\x1a\x9d\x01this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))B\x10\n" +
 	"\x0e_scope_licenseB\t\n" +
-	"\a_detail\"\xd5\x06\n" +
+	"\a_detail\"\xf3\x06\n" +
 	"\vLicenseTerm\x12/\n" +
 	"\alicense\x18\x01 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x12>\n" +
-	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsB\b\xbaH\x05\x82\x01\x02 \x00R\tsemantics\x128\n" +
-	"\frestrictions\x18\x03 \x03(\v2\x14.ramp.v1.RestrictionR\frestrictions\x12&\n" +
-	"\x06quotas\x18\x04 \x03(\v2\x0e.ramp.v1.QuotaR\x06quotas\x125\n" +
-	"\vobligations\x18\x05 \x03(\v2\x13.ramp.v1.ObligationR\vobligations\x127\n" +
+	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsB\b\xbaH\x05\x82\x01\x02 \x00R\tsemantics\x12B\n" +
+	"\frestrictions\x18\x03 \x03(\v2\x14.ramp.v1.RestrictionB\b\xbaH\x05\x92\x01\x02\x10@R\frestrictions\x120\n" +
+	"\x06quotas\x18\x04 \x03(\v2\x0e.ramp.v1.QuotaB\b\xbaH\x05\x92\x01\x02\x10@R\x06quotas\x12?\n" +
+	"\vobligations\x18\x05 \x03(\v2\x13.ramp.v1.ObligationB\b\xbaH\x05\x92\x01\x02\x10@R\vobligations\x127\n" +
 	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingB\x06\xbaH\x03\xc8\x01\x01H\x01R\apricing\x88\x01\x01\x12 \n" +
 	"\x06scopes\x18\a \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x12\"\n" +
 	"\n" +
@@ -9789,11 +9819,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\bcurrency\x18\x02 \x01(\tR\bcurrency\x12B\n" +
 	"\tunit_cost\x18\x03 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$H\x00R\bunitCost\x88\x01\x01B\f\n" +
 	"\n" +
-	"_unit_cost\"\xc6\x03\n" +
+	"_unit_cost\"\xc9\x03\n" +
 	"\x14PushResourcesRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
-	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12:\n" +
-	"\aentries\x18\x03 \x03(\v2\x16.ramp.v1.ResourceEntryB\b\xbaH\x05\x92\x01\x02\b\x01R\aentries\x12\x1b\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12=\n" +
+	"\aentries\x18\x03 \x03(\v2\x16.ramp.v1.ResourceEntryB\v\xbaH\b\x92\x01\x05\b\x01\x10\x80\x02R\aentries\x12\x1b\n" +
 	"\tcaller_id\x18\x04 \x01(\tR\bcallerId\x12\xd7\x01\n" +
 	"\bexchange\x18\x05 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
@@ -9835,11 +9865,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\brejected\x18\x03 \x01(\x05R\brejected\x12\x1a\n" +
 	"\bwarnings\x18\x04 \x03(\tR\bwarnings\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xe2\x02\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xe5\x02\n" +
 	"\x16RemoveResourcesRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
-	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12?\n" +
-	"\x05paths\x18\x03 \x03(\tB)\xbaH&\x92\x01#\b\x01\"\x1fr\x1d\x10\x01\x18\x80\x102\x16^/[^?#\\x00-\\x20\\x7f]*$R\x05paths\x12\xd7\x01\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12B\n" +
+	"\x05paths\x18\x03 \x03(\tB,\xbaH)\x92\x01&\b\x01\x10\x80\x02\"\x1fr\x1d\x10\x01\x18\x80\x102\x16^/[^?#\\x00-\\x20\\x7f]*$R\x05paths\x12\xd7\x01\n" +
 	"\bexchange\x18\x04 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\"E\n" +
 	"\x17RemoveResourcesResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x18\n" +

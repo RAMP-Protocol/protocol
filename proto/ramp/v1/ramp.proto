@@ -1387,13 +1387,20 @@ message LicenseTerm {
 
   // Usage restrictions (function, geography, user-type).
   // Multiple restrictions are AND-combined — the agent must satisfy all of them.
-  repeated Restriction restrictions = 3;
+  // At most 64, the bound every other per-message list in this contract carries.
+  // Only one restriction per axis is valid anyway, so the cap is far above any
+  // conformant term; it bounds what a single term can carry, not the work of
+  // checking one — a validator walks every element it is handed before the cap
+  // is reported, so the cost of checking is bounded at the transport instead.
+  repeated Restriction restrictions = 3 [(buf.validate.field).repeated.max_items = 64];
 
   // Usage caps. The agent must not exceed any individual Quota.
-  repeated Quota quotas = 4;
+  // At most 64, for the reason restrictions carries.
+  repeated Quota quotas = 4 [(buf.validate.field).repeated.max_items = 64];
 
   // Post-use behavioral requirements.
-  repeated Obligation obligations = 5;
+  // At most 64, for the reason restrictions carries.
+  repeated Obligation obligations = 5 [(buf.validate.field).repeated.max_items = 64];
 
   // Pricing for this term. REQUIRED for every term regardless of semantics —
   // an agent cannot act on a priceless term, so absent Pricing is a validation
@@ -2177,8 +2184,16 @@ message PushResourcesRequest {
   // Tenant identifier
   string tenant_id = 2;
   // Content entries to push. At least one: an empty push asks for nothing and
-  // is refused rather than answered with zero counts.
-  repeated ResourceEntry entries = 3 [(buf.validate.field).repeated.min_items = 1];
+  // is refused rather than answered with zero counts. At most 256, the bound a
+  // caller-chosen batch carries elsewhere in this contract (see ResourceQuery.uris)
+  // — it bounds one submission, so a larger feed is pushed in several. The cap is
+  // over entries because every accepted entry is stored and every rejected one is
+  // named in the answer; it does not bound the work of checking a submission,
+  // which the recipient bounds at the transport.
+  repeated ResourceEntry entries = 3 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 256
+  ];
 
   // Identity of the caller (who is pushing this data).
   // The Exchange verifies this matches a registered CatalogService client.
@@ -2207,10 +2222,19 @@ message PushResourcesRequest {
 
 // ResourceEntry — one catalog row as a publisher (or an authorised contributor)
 // pushes it. The envelope fields carry their own wire rules, so an entry that
-// cannot become a catalog URI, or that would let one entry cost unbounded work,
-// is refused at the boundary rather than after ingestion; the licensing terms
-// inside carry the LicenseTerm rules. See CatalogService for the second,
-// ingest-time tier (token canonicalisation and registry membership).
+// cannot become a catalog URI is refused at the boundary rather than after
+// ingestion; the licensing terms inside carry the LicenseTerm rules. See
+// CatalogService for the second, ingest-time tier (token canonicalisation and
+// registry membership).
+//
+// The list caps here and on LicenseTerm bound the DOCUMENT: how large one entry
+// may be, what a push can store, and how much a rejection has to name back. They
+// do NOT bound the work of checking a push, and must not be read as doing so — a
+// validator walks every element it is handed and reports every violation before
+// any cardinality rule is applied, so an over-cap list is fully traversed on its
+// way to being refused. The work is bounded one layer down, by the maximum
+// request size the recipient will read; a deployment that exposes CatalogService
+// sets that cap, and the SDK's server binding sets a default.
 message ResourceEntry {
   // Provider domain — the bare host the resource lives on, in the shape
   // "Request recipient" defines in the file header: a port is allowed, a
@@ -2273,9 +2297,11 @@ message ResourceEntry {
   // See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST
   // be present. For REFERENCE_ONLY terms, License.uri is authoritative.
   // The Exchange validates ENUMERATED terms at push time and surfaces them
-  // in Offer.terms on discovery. At most 32 terms per entry — the per-entry
-  // cap CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED names, stated on the
-  // wire so every implementation refuses the same size.
+  // in Offer.terms on discovery. At most 32 terms per entry, stated on the wire
+  // so every implementation refuses the same size. Being a wire rule makes it
+  // batch-fatal on PushResources: an over-cap entry refuses the whole submission
+  // rather than dropping that one entry, the same as every other rule applied at
+  // the boundary.
   repeated LicenseTerm terms = 13 [(buf.validate.field).repeated.max_items = 32];
 
   // Optional mutability hint. When omitted, the Exchange applies the `STATIC`
@@ -2328,9 +2354,11 @@ message RemoveResourcesRequest {
   // Tenant identifier
   string tenant_id = 2;
   // Paths to remove — the absolute-path shape ResourceEntry.path carries, at
-  // least one.
+  // least one and at most 256, the same batch bound PushResourcesRequest.entries
+  // carries and for the same reason.
   repeated string paths = 3 [
     (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 256,
     (buf.validate.field).repeated.items.string.min_len = 1,
     (buf.validate.field).repeated.items.string.max_len = 2048,
     (buf.validate.field).repeated.items.string.pattern = "^/[^?#\\x00-\\x20\\x7f]*$"
@@ -3932,7 +3960,13 @@ enum CatalogRejectionReason {
   CATALOG_REJECTION_REASON_MALFORMED_ENTRY = 5;         // a resource entry failed schema/validation
   CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN = 6;     // an unregistered vocab token in a restriction/term
   CATALOG_REJECTION_REASON_QUOTA_EXCEEDED = 7;          // contributor push quota exceeded (per-caller)
-  CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED = 8;    // a single entry carries more license terms than allowed (per-entry cap)
+  // A single entry carries more license terms than ResourceEntry.terms allows.
+  // Retired on the PushResources path: the cap is a wire rule now, so a push
+  // carrying an over-cap entry is refused whole, before any per-entry
+  // classification runs, and no rejection naming this reason can be produced for
+  // it. Kept for a deployment that applies the cap somewhere the wire rules do
+  // not reach — an entry that arrived by some other route than PushResources.
+  CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED = 8;
   // The URI cannot be claimed by this caller's entries. Named from the caller's
   // own perspective ON PURPOSE: it MUST NOT disclose that another resource/
   // contributor already owns the URI. Within one publisher, mutually-untrusting

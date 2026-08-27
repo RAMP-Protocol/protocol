@@ -735,7 +735,8 @@ class RemoveResourcesRequest(WireModel):
         | None
     ) = Field(
         None,
-        description='Paths to remove — the absolute-path shape ResourceEntry.path carries, at\n least one.',
+        description='Paths to remove — the absolute-path shape ResourceEntry.path carries, at\n least one and at most 256, the same batch bound PushResourcesRequest.entries\n carries and for the same reason.',
+        max_length=256,
         min_length=1,
     )
     tenant_id: str | None = Field('', description='Tenant identifier')
@@ -1784,7 +1785,9 @@ class LicenseTerm(WireModel):
         description='Governing license document. Authoritative for REFERENCE_ONLY terms, which\n MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that\n references nothing is rejected at ingest.',
     )
     obligations: list[Obligation] | None = Field(
-        None, description='Post-use behavioral requirements.'
+        None,
+        description='Post-use behavioral requirements.\n At most 64, for the reason restrictions carries.',
+        max_length=64,
     )
     part_label: str | None = Field(
         None,
@@ -1795,11 +1798,14 @@ class LicenseTerm(WireModel):
         description='Pricing for this term. REQUIRED for every term regardless of semantics —\n an agent cannot act on a priceless term, so absent Pricing is a validation\n error at ingest. model = FREE must be stated explicitly (absent Pricing is\n not free). A REFERENCE_ONLY term states its price here too; its License\n governs the human-readable terms but does not replace the machine-readable\n price.',
     )
     quotas: list[Quota] | None = Field(
-        None, description='Usage caps. The agent must not exceed any individual Quota.'
+        None,
+        description='Usage caps. The agent must not exceed any individual Quota.\n At most 64, for the reason restrictions carries.',
+        max_length=64,
     )
     restrictions: list[Restriction] | None = Field(
         None,
-        description='Usage restrictions (function, geography, user-type).\n Multiple restrictions are AND-combined — the agent must satisfy all of them.',
+        description='Usage restrictions (function, geography, user-type).\n Multiple restrictions are AND-combined — the agent must satisfy all of them.\n At most 64, the bound every other per-message list in this contract carries.\n Only one restriction per axis is valid anyway, so the cap is far above any\n conformant term; it bounds what a single term can carry, not the work of\n checking one — a validator walks every element it is handed before the cap\n is reported, so the cost of checking is bounded at the transport instead.',
+        max_length=64,
     )
     scopes: list[str] | None = Field(
         None,
@@ -1964,7 +1970,7 @@ class ResourceEntry(WireModel):
     )
     terms: list[LicenseTerm] | None = Field(
         None,
-        description='Publisher-declared licensing terms for this resource.\n See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST\n be present. For REFERENCE_ONLY terms, License.uri is authoritative.\n The Exchange validates ENUMERATED terms at push time and surfaces them\n in Offer.terms on discovery. At most 32 terms per entry — the per-entry\n cap CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED names, stated on the\n wire so every implementation refuses the same size.',
+        description='Publisher-declared licensing terms for this resource.\n See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST\n be present. For REFERENCE_ONLY terms, License.uri is authoritative.\n The Exchange validates ENUMERATED terms at push time and surfaces them\n in Offer.terms on discovery. At most 32 terms per entry, stated on the wire\n so every implementation refuses the same size. Being a wire rule makes it\n batch-fatal on PushResources: an over-cap entry refuses the whole submission\n rather than dropping that one entry, the same as every other rule applied at\n the boundary.',
         max_length=32,
     )
     title: constr(max_length=512) | None = Field(None, description='Content title')
@@ -2065,7 +2071,8 @@ class PushResourcesRequest(WireModel):
     )
     entries: list[ResourceEntry] | None = Field(
         None,
-        description='Content entries to push. At least one: an empty push asks for nothing and\n is refused rather than answered with zero counts.',
+        description='Content entries to push. At least one: an empty push asks for nothing and\n is refused rather than answered with zero counts. At most 256, the bound a\n caller-chosen batch carries elsewhere in this contract (see ResourceQuery.uris)\n — it bounds one submission, so a larger feed is pushed in several. The cap is\n over entries because every accepted entry is stored and every rejected one is\n named in the answer; it does not bound the work of checking a submission,\n which the recipient bounds at the transport.',
+        max_length=256,
         min_length=1,
     )
     exchange: constr(
