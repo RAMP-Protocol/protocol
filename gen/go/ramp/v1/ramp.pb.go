@@ -258,9 +258,10 @@ func (TermSemantics) EnumDescriptor() ([]byte, []int) {
 // RestrictionKind — Which dimension a Restriction constrains.
 //
 // The token vocabulary for each open axis is authored ONLY in the
-// (ramp.v1.vocab_enum) entries on the corresponding enum value below; the
-// functiontokens / geographytokens / usertypes constants + IsRegistered derive
-// from them. GEOGRAPHY lists only the non-ISO specials (*, EU, EEA) — ISO
+// (ramp.v1.vocab_enum) entries on the corresponding enum value below, and its
+// accepted aliases ONLY in the (ramp.v1.vocab_enum_alias) entries beside them;
+// the functiontokens / geographytokens / usertypes constants, IsRegistered,
+// Aliases and Canonical derive from them. GEOGRAPHY lists only the non-ISO specials (*, EU, EEA) — ISO
 // 3166-1 alpha-2 codes are validated structurally (two-letter uppercase),
 // not enumerated.
 type RestrictionKind int32
@@ -5112,7 +5113,8 @@ type PushResourcesRequest struct {
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Tenant identifier
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Content entries to push
+	// Content entries to push. At least one: an empty push asks for nothing and
+	// is refused rather than answered with zero counts.
 	Entries []*ResourceEntry `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
 	// Identity of the caller (who is pushing this data).
 	// The Exchange verifies this matches a registered CatalogService client.
@@ -5212,11 +5214,23 @@ func (x *PushResourcesRequest) GetExtCritical() []string {
 	return nil
 }
 
+// ResourceEntry — one catalog row as a publisher (or an authorised contributor)
+// pushes it. The envelope fields carry their own wire rules, so an entry that
+// cannot become a catalog URI, or that would let one entry cost unbounded work,
+// is refused at the boundary rather than after ingestion; the licensing terms
+// inside carry the LicenseTerm rules. See CatalogService for the second,
+// ingest-time tier (token canonicalisation and registry membership).
 type ResourceEntry struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Provider domain
+	// Provider domain — the bare host the resource lives on, in the shape
+	// "Request recipient" defines in the file header: a port is allowed, a
+	// scheme, path, query or userinfo is not. With path it forms the catalog URI
+	// by concatenation, so a value carrying anything but a host would choose the
+	// URI rather than merely name the host.
 	Domain string `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
-	// Content path
+	// Content path — an absolute URL path such as "/premium/article-42.html":
+	// starts with "/", carries no query or fragment delimiter, no whitespace and
+	// no control character, and is at most 2048 bytes.
 	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	// Content identifier
 	ContentId *string `protobuf:"bytes,3,opt,name=content_id,json=contentId,proto3,oneof" json:"content_id,omitempty"`
@@ -5226,7 +5240,9 @@ type ResourceEntry struct {
 	WordCount *int32 `protobuf:"varint,5,opt,name=word_count,json=wordCount,proto3,oneof" json:"word_count,omitempty"`
 	// Estimated quantity in the metering unit
 	EstimatedQuantity *int32 `protobuf:"varint,6,opt,name=estimated_quantity,json=estimatedQuantity,proto3,oneof" json:"estimated_quantity,omitempty"`
-	// Content hash
+	// Content hash, carried as the publisher computed it — a bare hex digest or a
+	// "method:hexdigest" form; bounded in length, never format-checked, because
+	// hash_method names the algorithm.
 	ContentHash *string `protobuf:"bytes,7,opt,name=content_hash,json=contentHash,proto3,oneof" json:"content_hash,omitempty"`
 	// Hash algorithm
 	HashMethod *string `protobuf:"bytes,8,opt,name=hash_method,json=hashMethod,proto3,oneof" json:"hash_method,omitempty"`
@@ -5252,7 +5268,9 @@ type ResourceEntry struct {
 	// See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST
 	// be present. For REFERENCE_ONLY terms, License.uri is authoritative.
 	// The Exchange validates ENUMERATED terms at push time and surfaces them
-	// in Offer.terms on discovery.
+	// in Offer.terms on discovery. At most 32 terms per entry — the per-entry
+	// cap CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED names, stated on the
+	// wire so every implementation refuses the same size.
 	Terms []*LicenseTerm `protobuf:"bytes,13,rep,name=terms,proto3" json:"terms,omitempty"`
 	// Optional mutability hint. When omitted, the Exchange applies the `STATIC`
 	// default at Offer build; an explicit `UNSPECIFIED` is rejected. A value in
@@ -5520,7 +5538,8 @@ type RemoveResourcesRequest struct {
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Tenant identifier
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Paths to remove
+	// Paths to remove — the absolute-path shape ResourceEntry.path carries, at
+	// least one.
 	Paths []string `protobuf:"bytes,3,rep,name=paths,proto3" json:"paths,omitempty"`
 	// REQUIRED. Bare host of the recipient this request is addressed to (e.g.
 	// "exchange.example" or "exchange.example:8081"). See "Request recipient" in
@@ -7022,7 +7041,15 @@ type WellKnownManifest struct {
 	Endpoint *string `protobuf:"bytes,12,opt,name=endpoint,proto3,oneof" json:"endpoint,omitempty"`
 	// Exchange-only. Health check endpoint URL.
 	HealthEndpoint *string `protobuf:"bytes,13,opt,name=health_endpoint,json=healthEndpoint,proto3,oneof" json:"health_endpoint,omitempty"`
-	// Exchange-only. CatalogService endpoint URL (if exposed).
+	// Exchange-only. CatalogService endpoint URL (if exposed). It carries the
+	// same binding as endpoint: it MUST be on the same host AND PORT that serve
+	// this manifest, or on a subdomain of that host on that port, and MUST NOT
+	// carry userinfo. A consumer refuses a catalog endpoint anywhere else — a
+	// publisher's push is a signed call, and a manifest naming an unrelated host
+	// would redirect it to a party the signature never covered. The host match is
+	// on a full dot-delimited label boundary, and a port equal to the scheme's
+	// default and an omitted port are the SAME port. Absent means this Exchange
+	// does not expose CatalogService; a consumer does not fall back to endpoint.
 	CatalogEndpoint *string `protobuf:"bytes,14,opt,name=catalog_endpoint,json=catalogEndpoint,proto3,oneof" json:"catalog_endpoint,omitempty"`
 	// Exchange-only. Supported RAMP protocol versions (e.g. ["1.0"]).
 	ProtocolVersionsSupported []string `protobuf:"bytes,16,rep,name=protocol_versions_supported,json=protocolVersionsSupported,proto3" json:"protocol_versions_supported,omitempty"`
@@ -9762,33 +9789,33 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\bcurrency\x18\x02 \x01(\tR\bcurrency\x12B\n" +
 	"\tunit_cost\x18\x03 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$H\x00R\bunitCost\x88\x01\x01B\f\n" +
 	"\n" +
-	"_unit_cost\"\xbc\x03\n" +
+	"_unit_cost\"\xc6\x03\n" +
 	"\x14PushResourcesRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
-	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x120\n" +
-	"\aentries\x18\x03 \x03(\v2\x16.ramp.v1.ResourceEntryR\aentries\x12\x1b\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12:\n" +
+	"\aentries\x18\x03 \x03(\v2\x16.ramp.v1.ResourceEntryB\b\xbaH\x05\x92\x01\x02\b\x01R\aentries\x12\x1b\n" +
 	"\tcaller_id\x18\x04 \x01(\tR\bcallerId\x12\xd7\x01\n" +
 	"\bexchange\x18\x05 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xa8\a\n" +
-	"\rResourceEntry\x12\x16\n" +
-	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\x12\"\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xe1\t\n" +
+	"\rResourceEntry\x12\xd3\x01\n" +
+	"\x06domain\x18\x01 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\x06domain\x126\n" +
+	"\x04path\x18\x02 \x01(\tB\"\xbaH\x1fr\x1d\x10\x01\x18\x80\x102\x16^/[^?#\\x00-\\x20\\x7f]*$R\x04path\x12,\n" +
 	"\n" +
-	"content_id\x18\x03 \x01(\tH\x00R\tcontentId\x88\x01\x01\x12\x19\n" +
-	"\x05title\x18\x04 \x01(\tH\x01R\x05title\x88\x01\x01\x12\"\n" +
+	"content_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\xff\x01H\x00R\tcontentId\x88\x01\x01\x12#\n" +
+	"\x05title\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04H\x01R\x05title\x88\x01\x01\x12+\n" +
 	"\n" +
-	"word_count\x18\x05 \x01(\x05H\x02R\twordCount\x88\x01\x01\x122\n" +
-	"\x12estimated_quantity\x18\x06 \x01(\x05H\x03R\x11estimatedQuantity\x88\x01\x01\x12&\n" +
-	"\fcontent_hash\x18\a \x01(\tH\x04R\vcontentHash\x88\x01\x01\x12$\n" +
-	"\vhash_method\x18\b \x01(\tH\x05R\n" +
+	"word_count\x18\x05 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\x02R\twordCount\x88\x01\x01\x12;\n" +
+	"\x12estimated_quantity\x18\x06 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\x03R\x11estimatedQuantity\x88\x01\x01\x120\n" +
+	"\fcontent_hash\x18\a \x01(\tB\b\xbaH\x05r\x03\x18\xff\x01H\x04R\vcontentHash\x88\x01\x01\x12-\n" +
+	"\vhash_method\x18\b \x01(\tB\a\xbaH\x04r\x02\x18@H\x05R\n" +
 	"hashMethod\x88\x01\x01\x125\n" +
-	"\x06source\x18\t \x01(\x0e2\x18.ramp.v1.IngestionSourceH\x06R\x06source\x88\x01\x01\x120\n" +
+	"\x06source\x18\t \x01(\x0e2\x18.ramp.v1.IngestionSourceH\x06R\x06source\x88\x01\x01\x12:\n" +
 	"\x11provenance_source\x18\n" +
-	" \x01(\tH\aR\x10provenanceSource\x88\x01\x01\x12R\n" +
-	"\x14provenance_timestamp\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\bR\x13provenanceTimestamp\x88\x01\x01\x12@\n" +
-	"\fattestations\x18\f \x03(\v2\x1c.ramp.v1.ResourceAttestationR\fattestations\x12*\n" +
-	"\x05terms\x18\r \x03(\v2\x14.ramp.v1.LicenseTermR\x05terms\x12[\n" +
+	" \x01(\tB\b\xbaH\x05r\x03\x18\x84\x02H\aR\x10provenanceSource\x88\x01\x01\x12R\n" +
+	"\x14provenance_timestamp\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\bR\x13provenanceTimestamp\x88\x01\x01\x12J\n" +
+	"\fattestations\x18\f \x03(\v2\x1c.ramp.v1.ResourceAttestationB\b\xbaH\x05\x92\x01\x02\x10@R\fattestations\x124\n" +
+	"\x05terms\x18\r \x03(\v2\x14.ramp.v1.LicenseTermB\b\xbaH\x05\x92\x01\x02\x10 R\x05terms\x12[\n" +
 	"\x13resource_mutability\x18\x0e \x01(\x0e2\x1b.ramp.v1.ResourceMutabilityB\b\xbaH\x05\x82\x01\x02 \x00H\tR\x12resourceMutability\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\r\n" +
@@ -9808,11 +9835,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\brejected\x18\x03 \x01(\x05R\brejected\x12\x1a\n" +
 	"\bwarnings\x18\x04 \x03(\tR\bwarnings\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xb7\x02\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xe2\x02\n" +
 	"\x16RemoveResourcesRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
-	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x14\n" +
-	"\x05paths\x18\x03 \x03(\tR\x05paths\x12\xd7\x01\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12?\n" +
+	"\x05paths\x18\x03 \x03(\tB)\xbaH&\x92\x01#\b\x01\"\x1fr\x1d\x10\x01\x18\x80\x102\x16^/[^?#\\x00-\\x20\\x7f]*$R\x05paths\x12\xd7\x01\n" +
 	"\bexchange\x18\x04 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\"E\n" +
 	"\x17RemoveResourcesResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x18\n" +
@@ -10168,16 +10195,16 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\rTermSemantics\x12\x1e\n" +
 	"\x1aTERM_SEMANTICS_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19TERM_SEMANTICS_ENUMERATED\x10\x01\x12!\n" +
-	"\x1dTERM_SEMANTICS_REFERENCE_ONLY\x10\x02*\xe5\x04\n" +
+	"\x1dTERM_SEMANTICS_REFERENCE_ONLY\x10\x02*\xcd\x06\n" +
 	"\x0fRestrictionKind\x12 \n" +
-	"\x1cRESTRICTION_KIND_UNSPECIFIED\x10\x00\x12\xbe\x02\n" +
-	"\x19RESTRICTION_KIND_FUNCTION\x10\x01\x1a\x9e\x02\x92\xb5\x18\x03all\x92\xb5\x18\x06ai-all\x92\xb5\x18\bai-train\x92\xb5\x18\bai-input\x92\xb5\x18\bai-index\x92\xb5\x18\x06search\x92\xb5\x18\x05crawl\x92\xb5\x18\x14text-and-data-mining\x92\xb5\x18\x03tts\x92\xb5\x18\n" +
+	"\x1cRESTRICTION_KIND_UNSPECIFIED\x10\x00\x12\xd0\x03\n" +
+	"\x19RESTRICTION_KIND_FUNCTION\x10\x01\x1a\xb0\x03\x92\xb5\x18\x03all\x92\xb5\x18\x06ai-all\x92\xb5\x18\bai-train\x92\xb5\x18\bai-input\x92\xb5\x18\bai-index\x92\xb5\x18\x06search\x92\xb5\x18\x05crawl\x92\xb5\x18\x14text-and-data-mining\x92\xb5\x18\x03tts\x92\xb5\x18\n" +
 	"commercial\x92\xb5\x18\vadvertising\x92\xb5\x18\teditorial\x92\xb5\x18\bresearch\x92\xb5\x18\treproduce\x92\xb5\x18\n" +
-	"distribute\x92\xb5\x18\x06modify\x92\xb5\x18\adisplay\x92\xb5\x18\x04sync\x92\xb5\x18\tbroadcast\x92\xb5\x18\x06stream\x92\xb5\x18\x05print\x92\xb5\x18\vmanufacture\x92\xb5\x18\x04sell\xa2\xb5\x18\x0efunctiontokens\x12E\n" +
-	"\x1aRESTRICTION_KIND_GEOGRAPHY\x10\x02\x1a%\x92\xb5\x18\x01*\x92\xb5\x18\x02EU\x92\xb5\x18\x03EEA\xa2\xb5\x18\x0fgeographytokens\x12\x8b\x01\n" +
-	"\x1aRESTRICTION_KIND_USER_TYPE\x10\x03\x1ak\x92\xb5\x18\n" +
+	"distribute\x92\xb5\x18\x06modify\x92\xb5\x18\adisplay\x92\xb5\x18\x04sync\x92\xb5\x18\tbroadcast\x92\xb5\x18\x06stream\x92\xb5\x18\x05print\x92\xb5\x18\vmanufacture\x92\xb5\x18\x04sell\xa2\xb5\x18\x0efunctiontokens\xaa\xb5\x18\x11train-ai=ai-train\xaa\xb5\x18\x16generative-ai=ai-input\xaa\xb5\x18\fscrape=crawl\xaa\xb5\x18\x18tdm=text-and-data-mining\xaa\xb5\x18\x0ecopy=reproduce\xaa\xb5\x18\fadapt=modify\xaa\xb5\x18\x11derivative=modify\x12E\n" +
+	"\x1aRESTRICTION_KIND_GEOGRAPHY\x10\x02\x1a%\x92\xb5\x18\x01*\x92\xb5\x18\x02EU\x92\xb5\x18\x03EEA\xa2\xb5\x18\x0fgeographytokens\x12\xe1\x01\n" +
+	"\x1aRESTRICTION_KIND_USER_TYPE\x10\x03\x1a\xc0\x01\x92\xb5\x18\n" +
 	"individual\x92\xb5\x18\bacademic\x92\xb5\x18\n" +
-	"non_profit\x92\xb5\x18\x0enews_publisher\x92\xb5\x18\vbroadcaster\x92\xb5\x18\x11commercial_entity\xa2\xb5\x18\tusertypes\x12\x1a\n" +
+	"non_profit\x92\xb5\x18\x0enews_publisher\x92\xb5\x18\vbroadcaster\x92\xb5\x18\x11commercial_entity\xa2\xb5\x18\tusertypes\xaa\xb5\x18\x13personal=individual\xaa\xb5\x18\x1abusiness=commercial_entity\xaa\xb5\x18\x1centerprise=commercial_entity\x12\x1a\n" +
 	"\x16RESTRICTION_KIND_OTHER\x10\x04*\x8e\x01\n" +
 	"\vQuotaWindow\x12\x1c\n" +
 	"\x18QUOTA_WINDOW_UNSPECIFIED\x10\x00\x12\x17\n" +

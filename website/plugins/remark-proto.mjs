@@ -35,7 +35,7 @@ const RE_TYPE = /^[A-Z][A-Za-z0-9]+$/;
 let state;
 function setup() {
   if (state) return state;
-  const { enums, messages, services, symbols, vocab } = loadSchema();
+  const { enums, messages, services, symbols, vocab, vocabAliases } = loadSchema();
   // A symbol is linkable iff some reference page carries a heading whose slug is the
   // symbol's type name — pageOf maps that slug to the page owning it (no dead anchors, and
   // no anchor on the WRONG page). Restricted to SYMBOL slugs: `## Services` is a heading on
@@ -72,7 +72,7 @@ function setup() {
   // value, so it must resolve (a renamed/removed value fails the build) — unlike a
   // bare short form (PER_UNIT) or a non-proto ALL_CAPS token (RFC_9421).
   const enumPrefixes = Object.keys(enums).map((n) => screamingSnake(n) + '_');
-  state = { enums, messages, services, symbols, vocab, pageOf, ignore, enumPrefixes };
+  state = { enums, messages, services, symbols, vocab, vocabAliases, pageOf, ignore, enumPrefixes };
   return state;
 }
 
@@ -117,10 +117,20 @@ function serviceTableNodes(rows) {
   return fromMarkdown(md, { extensions: [gfmTable()], mdastExtensions: [gfmTableFromMarkdown()] }).children;
 }
 
-function vocabParagraph(tokens) {
+function vocabParagraph(tokens, aliases = []) {
   if (!tokens.length) return { type: 'paragraph', children: [{ type: 'emphasis', children: [text('(no registered tokens)')] }] };
   const kids = [];
   tokens.forEach((t, i) => { if (i) kids.push(text(' ')); kids.push(code(t)); });
+  if (aliases.length) {
+    // The accepted spellings an Exchange canonicalises at ingest, rendered from the
+    // same descriptor option that generates the Aliases / canonical faces.
+    kids.push({ type: 'break' });
+    kids.push({ type: 'emphasis', children: [text('Accepted aliases, canonicalised at ingest: ')] });
+    aliases.forEach((a, i) => {
+      if (i) kids.push(text(', '));
+      kids.push(code(a.alias), text(' → '), code(a.canonical));
+    });
+  }
   return { type: 'paragraph', children: kids };
 }
 
@@ -132,7 +142,7 @@ function directiveText(node) {
 
 export default function remarkProto() {
   return (tree, file) => {
-    const { enums, messages, services, symbols, vocab, pageOf, ignore, enumPrefixes } = setup();
+    const { enums, messages, services, symbols, vocab, vocabAliases, pageOf, ignore, enumPrefixes } = setup();
     const where = file?.path ?? 'doc';
 
     // 1. expand directives into tables / token lists
@@ -163,7 +173,7 @@ export default function remarkProto() {
       if (node.name === 'proto-vocab') {
         const axis = attrs.axis || directiveText(node);
         if (!vocab[axis]) throw new Error(`${where}: proto-vocab references unknown axis "${axis}"`);
-        parent.children[index] = vocabParagraph(vocab[axis]);
+        parent.children[index] = vocabParagraph(vocab[axis], vocabAliases[axis] ?? []);
         return [SKIP, index + 1];
       }
     });

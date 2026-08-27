@@ -53,4 +53,16 @@ extend google.protobuf.EnumValueOptions {
   // (e.g. "functiontokens"). Required on any enum value that carries
   // (ramp.v1.vocab_enum).
   optional string vocab_enum_package = 50004;
+
+  // vocab_enum_alias carries the accepted alias spellings of an axis, one
+  // "alias=canonical" entry each, authored beside the tokens they resolve to.
+  // An alias is a spelling another vocabulary uses for a registered token
+  // (AIPREF's "train-ai" for "ai-train", the industry's "generative-ai" for
+  // "ai-input"); a consumer canonicalises it to the registered token at ingest
+  // and never stores or emits it. The plugin refuses an alias that is itself
+  // a token, a canonical that is not one, a duplicate, and a spelling that is
+  // not already trimmed and lowercase — the SDK folds a token before it looks
+  // it up, so any other spelling could never match. Enum-value axes only; the
+  // field-axis twin takes 50006 when an axis needs one.
+  repeated string vocab_enum_alias = 50005;
 }

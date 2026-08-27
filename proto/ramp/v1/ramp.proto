@@ -1022,9 +1022,10 @@ enum TermSemantics {
 // RestrictionKind — Which dimension a Restriction constrains.
 //
 // The token vocabulary for each open axis is authored ONLY in the
-// (ramp.v1.vocab_enum) entries on the corresponding enum value below; the
-// functiontokens / geographytokens / usertypes constants + IsRegistered derive
-// from them. GEOGRAPHY lists only the non-ISO specials (*, EU, EEA) — ISO
+// (ramp.v1.vocab_enum) entries on the corresponding enum value below, and its
+// accepted aliases ONLY in the (ramp.v1.vocab_enum_alias) entries beside them;
+// the functiontokens / geographytokens / usertypes constants, IsRegistered,
+// Aliases and Canonical derive from them. GEOGRAPHY lists only the non-ISO specials (*, EU, EEA) — ISO
 // 3166-1 alpha-2 codes are validated structurally (two-letter uppercase),
 // not enumerated.
 enum RestrictionKind {
@@ -1056,7 +1057,15 @@ enum RestrictionKind {
     (ramp.v1.vocab_enum) = "stream",
     (ramp.v1.vocab_enum) = "print",
     (ramp.v1.vocab_enum) = "manufacture",
-    (ramp.v1.vocab_enum) = "sell"
+    (ramp.v1.vocab_enum) = "sell",
+    // Accepted aliases, canonicalised at ingest (see vocab.proto).
+    (ramp.v1.vocab_enum_alias) = "train-ai=ai-train",
+    (ramp.v1.vocab_enum_alias) = "generative-ai=ai-input",
+    (ramp.v1.vocab_enum_alias) = "scrape=crawl",
+    (ramp.v1.vocab_enum_alias) = "tdm=text-and-data-mining",
+    (ramp.v1.vocab_enum_alias) = "copy=reproduce",
+    (ramp.v1.vocab_enum_alias) = "adapt=modify",
+    (ramp.v1.vocab_enum_alias) = "derivative=modify"
   ];
 
   // Where the agent may use the content. ISO 3166-1 alpha-2 codes (US, DE, GB)
@@ -1076,7 +1085,11 @@ enum RestrictionKind {
     (ramp.v1.vocab_enum) = "non_profit",
     (ramp.v1.vocab_enum) = "news_publisher",
     (ramp.v1.vocab_enum) = "broadcaster",
-    (ramp.v1.vocab_enum) = "commercial_entity"
+    (ramp.v1.vocab_enum) = "commercial_entity",
+    // Accepted aliases, canonicalised at ingest (see vocab.proto).
+    (ramp.v1.vocab_enum_alias) = "personal=individual",
+    (ramp.v1.vocab_enum_alias) = "business=commercial_entity",
+    (ramp.v1.vocab_enum_alias) = "enterprise=commercial_entity"
   ];
 
   RESTRICTION_KIND_OTHER = 4;  // Custom axis; values carried in permitted/prohibited
@@ -2110,6 +2123,21 @@ enum IngestionSource {
 
 // CatalogService — Optional RPC for providers/CMS/third-party intelligence
 // providers to push resource metadata to an Exchange.
+//
+// Every pushed entry is checked in two tiers, and both are stated here so a
+// publisher can run them before sending. The wire tier is protovalidate: the
+// ResourceEntry envelope rules and the LicenseTerm structural and cross-field
+// rules, applied to the request exactly as received. The ingest tier runs over
+// the canonicalised terms: restriction tokens are trimmed of RFC 8259
+// whitespace, ASCII-case-folded (lower for FUNCTION and USER_TYPE, upper for
+// GEOGRAPHY; a non-ASCII byte is never folded) and alias-resolved to their
+// registered form — the aliases are authored beside the tokens, on the
+// RestrictionKind values — after which a bare (non-namespaced) Pricing.unit or
+// Quota.metric that is not a registered token is rejected, while an
+// unregistered restriction token and an OBLIGATION_KIND_OTHER obligation
+// without detail are accepted and reported in PushResourcesResponse.warnings.
+// The SDK ships both tiers as a publisher-side pre-check; the Exchange's own
+// run of them is the deciding one.
 service CatalogService {
   // Push or update resource entries in the Exchange catalog.
   rpc PushResources(PushResourcesRequest) returns (PushResourcesResponse);
@@ -2148,8 +2176,9 @@ message PushResourcesRequest {
   string ver = 1;
   // Tenant identifier
   string tenant_id = 2;
-  // Content entries to push
-  repeated ResourceEntry entries = 3;
+  // Content entries to push. At least one: an empty push asks for nothing and
+  // is refused rather than answered with zero counts.
+  repeated ResourceEntry entries = 3 [(buf.validate.field).repeated.min_items = 1];
 
   // Identity of the caller (who is pushing this data).
   // The Exchange verifies this matches a registered CatalogService client.
@@ -2176,29 +2205,54 @@ message PushResourcesRequest {
   repeated string ext_critical = 90;
 }
 
+// ResourceEntry — one catalog row as a publisher (or an authorised contributor)
+// pushes it. The envelope fields carry their own wire rules, so an entry that
+// cannot become a catalog URI, or that would let one entry cost unbounded work,
+// is refused at the boundary rather than after ingestion; the licensing terms
+// inside carry the LicenseTerm rules. See CatalogService for the second,
+// ingest-time tier (token canonicalisation and registry membership).
 message ResourceEntry {
-  // Provider domain
-  string domain = 1;
-  // Content path
-  string path = 2;
+  // Provider domain — the bare host the resource lives on, in the shape
+  // "Request recipient" defines in the file header: a port is allowed, a
+  // scheme, path, query or userinfo is not. With path it forms the catalog URI
+  // by concatenation, so a value carrying anything but a host would choose the
+  // URI rather than merely name the host.
+  string domain = 1 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
+  // Content path — an absolute URL path such as "/premium/article-42.html":
+  // starts with "/", carries no query or fragment delimiter, no whitespace and
+  // no control character, and is at most 2048 bytes.
+  string path = 2 [
+    (buf.validate.field).string = {
+      min_len: 1,
+      max_len: 2048,
+      pattern: "^/[^?#\\x00-\\x20\\x7f]*$"
+    }
+  ];
   // Content identifier
-  optional string content_id = 3;
+  optional string content_id = 3 [(buf.validate.field).string.max_len = 255];
   // Content title
-  optional string title = 4;
+  optional string title = 4 [(buf.validate.field).string.max_len = 512];
   // Word count
-  optional int32 word_count = 5;
+  optional int32 word_count = 5 [(buf.validate.field).int32.gte = 0];
   // Estimated quantity in the metering unit
-  optional int32 estimated_quantity = 6;
-  // Content hash
-  optional string content_hash = 7;
+  optional int32 estimated_quantity = 6 [(buf.validate.field).int32.gte = 0];
+  // Content hash, carried as the publisher computed it — a bare hex digest or a
+  // "method:hexdigest" form; bounded in length, never format-checked, because
+  // hash_method names the algorithm.
+  optional string content_hash = 7 [(buf.validate.field).string.max_len = 255];
   // Hash algorithm
-  optional string hash_method = 8;
+  optional string hash_method = 8 [(buf.validate.field).string.max_len = 64];
   // How the entry was discovered
   optional IngestionSource source = 9;
 
   // Who provided this resource metadata. Creates audit trail for
   // "where did this catalog entry come from?"
-  optional string provenance_source = 10;  // e.g., "gumgum.com", "ssp-alpha.com", "wordpress-plugin"
+  optional string provenance_source = 10 [(buf.validate.field).string.max_len = 260];  // e.g., "gumgum.com", "ssp-alpha.com", "wordpress-plugin"
 
   // When this metadata was collected/generated.
   optional google.protobuf.Timestamp provenance_timestamp = 11;
@@ -2213,14 +2267,16 @@ message ResourceEntry {
   // directory (the JWK Set at /.well-known/http-message-signatures-directory;
   // the keyid is the key's RFC 7638 thumbprint). The verifier's ramp.json
   // carries only its role, determined by the verifier's operator.
-  repeated ResourceAttestation attestations = 12;
+  repeated ResourceAttestation attestations = 12 [(buf.validate.field).repeated.max_items = 64];
 
   // Publisher-declared licensing terms for this resource.
   // See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST
   // be present. For REFERENCE_ONLY terms, License.uri is authoritative.
   // The Exchange validates ENUMERATED terms at push time and surfaces them
-  // in Offer.terms on discovery.
-  repeated LicenseTerm terms = 13;
+  // in Offer.terms on discovery. At most 32 terms per entry — the per-entry
+  // cap CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED names, stated on the
+  // wire so every implementation refuses the same size.
+  repeated LicenseTerm terms = 13 [(buf.validate.field).repeated.max_items = 32];
 
   // Optional mutability hint. When omitted, the Exchange applies the `STATIC`
   // default at Offer build; an explicit `UNSPECIFIED` is rejected. A value in
@@ -2271,8 +2327,14 @@ message RemoveResourcesRequest {
   string ver = 1;
   // Tenant identifier
   string tenant_id = 2;
-  // Paths to remove
-  repeated string paths = 3;
+  // Paths to remove — the absolute-path shape ResourceEntry.path carries, at
+  // least one.
+  repeated string paths = 3 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 2048,
+    (buf.validate.field).repeated.items.string.pattern = "^/[^?#\\x00-\\x20\\x7f]*$"
+  ];
 
   // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
   // "exchange.example" or "exchange.example:8081"). See "Request recipient" in
@@ -2973,7 +3035,15 @@ message WellKnownManifest {
   // Exchange-only. Health check endpoint URL.
   optional string health_endpoint = 13;
 
-  // Exchange-only. CatalogService endpoint URL (if exposed).
+  // Exchange-only. CatalogService endpoint URL (if exposed). It carries the
+  // same binding as endpoint: it MUST be on the same host AND PORT that serve
+  // this manifest, or on a subdomain of that host on that port, and MUST NOT
+  // carry userinfo. A consumer refuses a catalog endpoint anywhere else — a
+  // publisher's push is a signed call, and a manifest naming an unrelated host
+  // would redirect it to a party the signature never covered. The host match is
+  // on a full dot-delimited label boundary, and a port equal to the scheme's
+  // default and an omitted port are the SAME port. Absent means this Exchange
+  // does not expose CatalogService; a consumer does not fall back to endpoint.
   optional string catalog_endpoint = 14;
 
   // ext is conventional field 15 in this proto; see below.

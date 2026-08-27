@@ -53,11 +53,17 @@ const (
 	// and never this plugin.
 	vocabFieldPkgExtNumber = 50003 // (ramp.v1.vocab_package) on FieldOptions
 	vocabEnumPkgExtNumber  = 50004 // (ramp.v1.vocab_enum_package) on EnumValueOptions
+	// Alias extension — accepted spellings that canonicalise to a registered
+	// token, authored beside the tokens as "alias=canonical" entries. Enum-value
+	// axes only today; a field-axis twin takes the next slot when an axis needs
+	// one.
+	vocabEnumAliasExtNumber = 50005 // (ramp.v1.vocab_enum_alias) on EnumValueOptions
 
-	vocabFieldExtName    = "ramp.v1.vocab"
-	vocabEnumExtName     = "ramp.v1.vocab_enum"
-	vocabFieldPkgExtName = "ramp.v1.vocab_package"
-	vocabEnumPkgExtName  = "ramp.v1.vocab_enum_package"
+	vocabFieldExtName     = "ramp.v1.vocab"
+	vocabEnumExtName      = "ramp.v1.vocab_enum"
+	vocabFieldPkgExtName  = "ramp.v1.vocab_package"
+	vocabEnumPkgExtName   = "ramp.v1.vocab_enum_package"
+	vocabEnumAliasExtName = "ramp.v1.vocab_enum_alias"
 )
 
 func main() {
@@ -72,6 +78,7 @@ func main() {
 		fieldPkgExt := findExtension(resolver, vocabFieldPkgExtName, vocabFieldPkgExtNumber)
 		enumExt := findExtension(resolver, vocabEnumExtName, vocabEnumExtNumber)
 		enumPkgExt := findExtension(resolver, vocabEnumPkgExtName, vocabEnumPkgExtNumber)
+		enumAliasExt := findExtension(resolver, vocabEnumAliasExtName, vocabEnumAliasExtNumber)
 		if fieldExt == nil && enumExt == nil {
 			// This request carries neither vocab extension descriptor (e.g. a
 			// sibling module split with no vocab-bearing descriptor). Nothing
@@ -92,13 +99,13 @@ func main() {
 			}
 			if enumExt != nil {
 				for _, enum := range f.Enums {
-					if err := genEnum(gen, enumExt, enumPkgExt, enum); err != nil {
+					if err := genEnum(gen, enumExt, enumPkgExt, enumAliasExt, enum); err != nil {
 						return err
 					}
 				}
 				// Enums nested in messages.
 				for _, msg := range f.Messages {
-					if err := genNestedEnums(gen, enumExt, enumPkgExt, msg); err != nil {
+					if err := genNestedEnums(gen, enumExt, enumPkgExt, enumAliasExt, msg); err != nil {
 						return err
 					}
 				}
@@ -170,28 +177,30 @@ func genMessage(gen *protogen.Plugin, tokensExt, pkgExt protoreflect.ExtensionTy
 		if pkg == "" {
 			return fmt.Errorf("field %s carries (ramp.v1.vocab) but no (ramp.v1.vocab_package); add the package name on the field", field.Desc.FullName())
 		}
-		if err := emit(gen, pkg, string(field.Desc.FullName()), tokens); err != nil {
+		// A field axis carries no alias option today; it still emits the alias
+		// face (empty) so every axis package has the same shape.
+		if err := emit(gen, pkg, string(field.Desc.FullName()), tokens, nil); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func genNestedEnums(gen *protogen.Plugin, tokensExt, pkgExt protoreflect.ExtensionTypeDescriptor, msg *protogen.Message) error {
+func genNestedEnums(gen *protogen.Plugin, tokensExt, pkgExt, aliasExt protoreflect.ExtensionTypeDescriptor, msg *protogen.Message) error {
 	for _, enum := range msg.Enums {
-		if err := genEnum(gen, tokensExt, pkgExt, enum); err != nil {
+		if err := genEnum(gen, tokensExt, pkgExt, aliasExt, enum); err != nil {
 			return err
 		}
 	}
 	for _, nested := range msg.Messages {
-		if err := genNestedEnums(gen, tokensExt, pkgExt, nested); err != nil {
+		if err := genNestedEnums(gen, tokensExt, pkgExt, aliasExt, nested); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func genEnum(gen *protogen.Plugin, tokensExt, pkgExt protoreflect.ExtensionTypeDescriptor, enum *protogen.Enum) error {
+func genEnum(gen *protogen.Plugin, tokensExt, pkgExt, aliasExt protoreflect.ExtensionTypeDescriptor, enum *protogen.Enum) error {
 	for _, val := range enum.Values {
 		tokens, err := readVocabList(tokensExt, val.Desc.Options())
 		if err != nil {
@@ -207,11 +216,67 @@ func genEnum(gen *protogen.Plugin, tokensExt, pkgExt protoreflect.ExtensionTypeD
 		if pkg == "" {
 			return fmt.Errorf("enum value %s carries (ramp.v1.vocab_enum) but no (ramp.v1.vocab_enum_package); add the package name on the value", val.Desc.FullName())
 		}
-		if err := emit(gen, pkg, string(val.Desc.FullName()), tokens); err != nil {
+		rawAliases, err := readVocabList(aliasExt, val.Desc.Options())
+		if err != nil {
+			return fmt.Errorf("read (ramp.v1.vocab_enum_alias) on %s: %w", val.Desc.FullName(), err)
+		}
+		aliases, err := parseAliases(tokens, rawAliases)
+		if err != nil {
+			return fmt.Errorf("(ramp.v1.vocab_enum_alias) on %s: %w", val.Desc.FullName(), err)
+		}
+		if err := emit(gen, pkg, string(val.Desc.FullName()), tokens, aliases); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// aliasEntry is one accepted spelling and the registered token it canonicalises
+// to. Emitted alias-sorted so the generated files are stable.
+type aliasEntry struct {
+	alias     string
+	canonical string
+}
+
+// parseAliases reads "alias=canonical" entries against the axis's registered
+// tokens and refuses anything the generated Canonical face could not honour:
+// an alias that is itself a token (it would shadow a registration), a canonical
+// that is not a token (it would canonicalise INTO an unregistered value), a
+// duplicate alias, and an alias that is not already trimmed and lowercase (the
+// SDK folds before it looks up, so an alias the fold can never produce is dead).
+// Codegen fails loudly here rather than emitting a map that quietly misroutes.
+func parseAliases(tokens []string, raw []string) ([]aliasEntry, error) {
+	registered := make(map[string]bool, len(tokens))
+	for _, t := range tokens {
+		registered[t] = true
+	}
+	seen := make(map[string]bool, len(raw))
+	out := make([]aliasEntry, 0, len(raw))
+	for _, entry := range raw {
+		alias, canonical, ok := strings.Cut(entry, "=")
+		if !ok || alias == "" || canonical == "" {
+			return nil, fmt.Errorf("alias entry %q is not \"alias=canonical\"", entry)
+		}
+		if strings.Contains(canonical, "=") {
+			return nil, fmt.Errorf("alias entry %q carries more than one '='", entry)
+		}
+		if alias != strings.ToLower(strings.TrimSpace(alias)) {
+			return nil, fmt.Errorf("alias %q must be authored trimmed and lowercase — the SDK folds a token before it looks it up, so this spelling could never match", alias)
+		}
+		if registered[alias] {
+			return nil, fmt.Errorf("alias %q is itself a registered token; an alias cannot shadow a registration", alias)
+		}
+		if !registered[canonical] {
+			return nil, fmt.Errorf("alias %q canonicalises to %q, which is not a registered token on this axis", alias, canonical)
+		}
+		if seen[alias] {
+			return nil, fmt.Errorf("alias %q is declared twice", alias)
+		}
+		seen[alias] = true
+		out = append(out, aliasEntry{alias: alias, canonical: canonical})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].alias < out[j].alias })
+	return out, nil
 }
 
 // decodeThroughExt re-parses a descriptor's options through a resolver that knows
@@ -305,7 +370,7 @@ type langSpec struct {
 	name      string
 	filename  func(pkg string) string // path relative to the plugin out dir (../gen)
 	identName func(token string) (string, error)
-	render    func(g *protogen.GeneratedFile, pkg, source string, entries []constEntry)
+	render    func(g *protogen.GeneratedFile, pkg, source string, entries []constEntry, aliases []aliasEntry)
 }
 
 var langs = []langSpec{
@@ -317,16 +382,28 @@ var langs = []langSpec{
 // emit writes the vocab package for one axis in every target language. Paths are
 // relative to the plugin's out dir (../gen), so files land in gen/go/vocab,
 // gen/ts/vocab, and gen/python/vocab respectively.
-func emit(gen *protogen.Plugin, pkg, source string, tokens []string) error {
+func emit(gen *protogen.Plugin, pkg, source string, tokens []string, aliases []aliasEntry) error {
 	for _, l := range langs {
 		entries, err := constEntriesFor(tokens, l.identName)
 		if err != nil {
 			return fmt.Errorf("%s vocab package %s (%s): %w", l.name, pkg, source, err)
 		}
 		g := gen.NewGeneratedFile(l.filename(pkg), protogen.GoImportPath(""))
-		l.render(g, pkg, source, entries)
+		l.render(g, pkg, source, entries, aliases)
 	}
 	return nil
+}
+
+// identFor returns the generated identifier for a registered token, so an alias
+// map names its canonical target through the constant rather than restating the
+// string. parseAliases has already proven the target is registered.
+func identFor(entries []constEntry, token string) string {
+	for _, e := range entries {
+		if e.token == token {
+			return e.ident
+		}
+	}
+	return fmt.Sprintf("%q", token) // unreachable after parseAliases; keeps output valid
 }
 
 // sortedByToken returns entries token-sorted, for stable membership-set output.
@@ -336,12 +413,12 @@ func sortedByToken(entries []constEntry) []constEntry {
 	return sorted
 }
 
-func renderGo(g *protogen.GeneratedFile, pkg, source string, entries []constEntry) {
+func renderGo(g *protogen.GeneratedFile, pkg, source string, entries []constEntry, aliases []aliasEntry) {
 	g.P("// Code generated by protoc-gen-rampvocab. DO NOT EDIT.")
 	g.P("//")
 	g.P("// Source vocabulary: on ", source, ".")
 	g.P("// The token list is authored solely in that option; these")
-	g.P("// constants and IsRegistered derive from it and cannot drift.")
+	g.P("// constants, IsRegistered, Aliases and Canonical derive from it and cannot drift.")
 	g.P()
 	g.P("package ", pkg)
 	g.P()
@@ -370,14 +447,33 @@ func renderGo(g *protogen.GeneratedFile, pkg, source string, entries []constEntr
 	g.P("\t_, ok := registered[s]")
 	g.P("\treturn ok")
 	g.P("}")
+	g.P()
+	g.P("// Aliases maps an accepted alias spelling to the registered token it")
+	g.P("// canonicalises to. Authored beside the tokens; an axis without aliases")
+	g.P("// carries an empty map so every axis has the same face.")
+	g.P("var Aliases = map[string]string{")
+	for _, a := range aliases {
+		g.P("\t", fmt.Sprintf("%q", a.alias), ": ", identFor(entries, a.canonical), ",")
+	}
+	g.P("}")
+	g.P()
+	g.P("// Canonical returns the registered token s is an alias of, or s unchanged")
+	g.P("// when it is not an alias. It neither trims nor case-folds: the SDK folds a")
+	g.P("// token before it looks it up here.")
+	g.P("func Canonical(s string) string {")
+	g.P("\tif c, ok := Aliases[s]; ok {")
+	g.P("\t\treturn c")
+	g.P("\t}")
+	g.P("\treturn s")
+	g.P("}")
 }
 
-func renderTS(g *protogen.GeneratedFile, pkg, source string, entries []constEntry) {
+func renderTS(g *protogen.GeneratedFile, pkg, source string, entries []constEntry, aliases []aliasEntry) {
 	g.P("// Code generated by protoc-gen-rampvocab. DO NOT EDIT.")
 	g.P("//")
 	g.P("// Source vocabulary: on ", source, ".")
-	g.P("// The token list is authored solely in that option; these constants and")
-	g.P("// isRegistered derive from it and cannot drift.")
+	g.P("// The token list is authored solely in that option; these constants,")
+	g.P("// isRegistered, Aliases and canonical derive from it and cannot drift.")
 	g.P()
 	for _, e := range entries {
 		g.P("export const ", e.ident, " = ", fmt.Sprintf("%q", e.token), ";")
@@ -397,14 +493,33 @@ func renderTS(g *protogen.GeneratedFile, pkg, source string, entries []constEntr
 	g.P("export function isRegistered(s: string): boolean {")
 	g.P("  return registered.has(s);")
 	g.P("}")
+	g.P()
+	g.P("// Aliases maps an accepted alias spelling to the registered token it")
+	g.P("// canonicalises to. Authored beside the tokens; an axis without aliases")
+	g.P("// carries an empty map so every axis has the same face.")
+	g.P("export const Aliases: ReadonlyMap<string, string> = new Map<string, string>([")
+	for _, a := range aliases {
+		g.P("  [", fmt.Sprintf("%q", a.alias), ", ", identFor(entries, a.canonical), "],")
+	}
+	g.P("]);")
+	g.P()
+	g.P("// canonical returns the registered token s is an alias of, or s unchanged")
+	g.P("// when it is not an alias. It neither trims nor case-folds: the SDK folds a")
+	g.P("// token before it looks it up here.")
+	g.P("export function canonical(s: string): string {")
+	g.P("  return Aliases.get(s) ?? s;")
+	g.P("}")
 }
 
-func renderPy(g *protogen.GeneratedFile, pkg, source string, entries []constEntry) {
+func renderPy(g *protogen.GeneratedFile, pkg, source string, entries []constEntry, aliases []aliasEntry) {
 	g.P("# Code generated by protoc-gen-rampvocab. DO NOT EDIT.")
 	g.P("#")
 	g.P("# Source vocabulary: on ", source, ".")
-	g.P("# The token list is authored solely in that option; these constants and")
-	g.P("# is_registered derive from it and cannot drift.")
+	g.P("# The token list is authored solely in that option; these constants,")
+	g.P("# is_registered, ALIASES and canonical derive from it and cannot drift.")
+	g.P()
+	g.P("from collections.abc import Mapping")
+	g.P("from types import MappingProxyType")
 	g.P()
 	for _, e := range entries {
 		g.P(e.ident, " = ", fmt.Sprintf("%q", e.token))
@@ -423,6 +538,21 @@ func renderPy(g *protogen.GeneratedFile, pkg, source string, entries []constEntr
 	g.P("def is_registered(s: str) -> bool:")
 	g.P(`    """Return True if s is a registered bare token (namespaced vendor:token values return False)."""`)
 	g.P("    return s in _REGISTERED")
+	g.P()
+	g.P()
+	g.P("# ALIASES maps an accepted alias spelling to the registered token it")
+	g.P("# canonicalises to. Authored beside the tokens; an axis without aliases")
+	g.P("# carries an empty mapping so every axis has the same face.")
+	g.P("ALIASES: Mapping[str, str] = MappingProxyType({")
+	for _, a := range aliases {
+		g.P("    ", fmt.Sprintf("%q", a.alias), ": ", identFor(entries, a.canonical), ",")
+	}
+	g.P("})")
+	g.P()
+	g.P()
+	g.P("def canonical(s: str) -> str:")
+	g.P(`    """Return the registered token s is an alias of, or s unchanged (no trimming or case folding: the SDK folds first)."""`)
+	g.P("    return ALIASES.get(s, s)")
 }
 
 // constEntry pairs a generated identifier with its source token.
@@ -464,6 +594,8 @@ func constEntries(tokens []string) ([]constEntry, error) {
 var reservedIdents = map[string]bool{
 	"All":          true,
 	"IsRegistered": true,
+	"Aliases":      true,
+	"Canonical":    true,
 }
 
 // constNameSpecial maps tokens that do not yield a valid, non-colliding exported
@@ -542,7 +674,7 @@ var pyConstNameSpecial = map[string]string{
 	"*":   "WORLDWIDE",
 	"all": "ALL_USES", // bare "ALL" would shadow the emitted ALL tuple
 }
-var pyReservedIdents = map[string]bool{"ALL": true}
+var pyReservedIdents = map[string]bool{"ALL": true, "ALIASES": true}
 
 // pyConstName converts a vocabulary token to an UPPER_SNAKE_CASE Python constant:
 // "accesses" → "ACCESSES", "units-manufactured" → "UNITS_MANUFACTURED",

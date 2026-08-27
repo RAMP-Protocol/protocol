@@ -2,6 +2,64 @@
 
 ## Unreleased
 
+**`ResourceEntry` carries envelope rules, and the catalog request lists are bounded
+(breaking, pre-1.0).** The terms inside an entry were guarded by the `LicenseTerm` rules;
+the envelope around them was not, so an entry with an empty `domain`, a `path` without a
+leading slash, or a `domain` carrying a scheme or a path reached the Exchange and was
+refused — or quietly synthesised into a wrong catalog URI — only after ingestion had
+started. `domain` now carries the shared bare-host rule every addressed `exchange` field
+carries (a port is allowed; a scheme, path, query or userinfo is not; 260 bytes); `path`
+is an absolute URL path (`^/[^?#\x00-\x20\x7f]*$`, 1–2048 bytes); `title` (512),
+`content_id` and `content_hash` (255), `hash_method` (64) and `provenance_source` (260)
+are length-bounded; `word_count` and `estimated_quantity` are non-negative;
+`attestations` carries at most 64 entries and `terms` at most 32 — the per-entry cap
+`CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED` names, stated on the wire so every
+implementation refuses the same size. `content_hash` is deliberately not format-checked:
+a bare hex digest and a `method:hexdigest` form both travel today, and `hash_method`
+names the algorithm. `PushResourcesRequest.entries` and `RemoveResourcesRequest.paths`
+require at least one item, and each removed path carries the same absolute-path shape.
+Adding a rule changes no signed bytes — a protovalidate rule is a field option, not a
+field — and `buf breaking` cannot see it. Every committed fixture and the reference e2e
+catalog (ports on `domain`, single-label hosts, bare-hex hashes) passes the new rules;
+what changes is that a malformed push is refused at the boundary rather than after
+ingestion, and a path without a leading slash — accepted before, and synthesised into a
+URI that named the wrong resource — is now refused.
+
+`WellKnownManifest.catalog_endpoint` states the same host binding as `endpoint`: on the
+host and port that serve the manifest or a subdomain of it, no userinfo, and a consumer
+refuses anything else and does not fall back to `endpoint` when the field is absent. A
+publisher's push is a signed call to that address; without the rule a manifest could
+redirect it to a host the signature never covered. `CatalogService` and `ResourceEntry`
+also document the two validation tiers a push passes — the wire rules, then
+canonicalisation and registry membership over the terms — so a publisher can run both
+before sending.
+
+*Tooling:* the corpus grows from 549 to 602 cases; `ResourceEntry` goes from 3 to 48 and
+`RemoveResourcesRequest` from 20 to 28. The generator's sample list gains `"/x"`
+(append-only, so no existing field re-values) and the path pattern gains its own killer
+table — no leading slash, `?`, `#`, whitespace, a control byte. The guard counting the
+shared domain rule's fields moves from 17 to 18, and the manifest endpoint-comment guard
+now reads `catalog_endpoint` too.
+
+**Restriction-token aliases are authored in the proto and generated into every SDK
+(additive, no wire break).** The licensing core's vocabulary table always recorded that
+`train-ai` is AIPREF's spelling of `ai-train`, `generative-ai` the industry's spelling of
+`ai-input`, `scrape` of `crawl`, `tdm` of `text-and-data-mining`, `copy` of `reproduce`,
+and `adapt` and `derivative` of `modify`; the reference Exchange resolved them from a
+private map, and the user-type aliases (`personal` → `individual`, `business` and
+`enterprise` → `commercial_entity`) existed only in that code. They are now
+`(ramp.v1.vocab_enum_alias)` entries beside the tokens they resolve to, in the form
+`alias=canonical`, and `protoc-gen-rampvocab` emits an `Aliases` map and a `Canonical`
+lookup (`canonical` in TypeScript and Python) per axis in all three languages — an axis
+without aliases carries an empty map so every axis has the same face. Codegen refuses an
+alias that is itself a token, a canonical that is not one, a duplicate, and a spelling
+that is not already trimmed and lowercase: the SDK folds a token before it looks it up,
+so any other spelling could never match. The generated lookup does no folding of its
+own. The docs' vocabulary tables render the aliases from the same descriptor option.
+
+*Tooling:* the three generated alias maps are held to one answer per axis, and to the
+registry, the way the token sets already are.
+
 **The TypeScript and Python SDKs gained a client, and it changed what they accept
 from a peer (no wire change; conformance-affecting).** Neither could SEND a RAMP
 request before; both now speak the Connect-unary JSON form the protocol's unary RPCs

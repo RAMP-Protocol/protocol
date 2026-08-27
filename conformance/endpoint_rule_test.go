@@ -176,3 +176,45 @@ func TestEndpointCorpusIsNotVacuous(t *testing.T) {
 			refused, accepted)
 	}
 }
+
+// catalogEndpointDecl is the second field whose comment carries the same rule.
+// A publisher's push is a signed call to the address this field names, so it
+// binds exactly as `endpoint` does; stating the rule on one field and not the
+// other would leave the catalog leg redirectable by a manifest.
+const catalogEndpointDecl = "optional string catalog_endpoint = 14"
+
+// TestCatalogEndpointCommentStatesTheSameClauses holds the catalog endpoint's
+// comment to the identical clause set. The two fields share one predicate in
+// every SDK, so a clause present on one comment and absent from the other is a
+// contract that says two different things about one rule.
+func TestCatalogEndpointCommentStatesTheSameClauses(t *testing.T) {
+	comment := fieldComment(t, catalogEndpointDecl)
+
+	// Guard the guard, as above: pin the extraction to this field's own block.
+	const opening = "Exchange-only. CatalogService endpoint URL"
+	if !strings.HasPrefix(comment, opening) {
+		t.Fatalf("the extracted comment does not begin with catalog_endpoint's own first line "+
+			"(%q) — this guard is reading the wrong block and would assert nothing.\n  read: %.120s…",
+			opening, comment)
+	}
+
+	for _, clause := range []struct {
+		name   string
+		phrase string
+	}{
+		{"same host", "MUST be on the same host"},
+		{"same port", "PORT that serve this manifest"},
+		{"subdomain admitted", "or on a subdomain of that host on that port"},
+		{"no userinfo", "MUST NOT carry userinfo"},
+		{"label boundary", "full dot-delimited label boundary"},
+		{"default port folds", "and an omitted port are the SAME port"},
+		{"no fallback", "does not fall back to endpoint"},
+	} {
+		if !strings.Contains(comment, clause.phrase) {
+			t.Errorf("the catalog_endpoint comment no longer states %q — the catalog leg is vetted "+
+				"by the same predicate as the exchange endpoint, so the two comments must state "+
+				"the same rule; restore the clause on both or change the predicate everywhere.",
+				clause.name)
+		}
+	}
+}

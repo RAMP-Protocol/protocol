@@ -20,9 +20,9 @@ func TestConstName(t *testing.T) {
 		{token: "*", want: "Worldwide"},
 		{token: "all", want: "AllUses"},
 		// invalid / reserved → error
-		{token: "", wantErr: true},               // empty
-		{token: "3d-model", wantErr: true},       // leading digit
-		{token: "is-registered", wantErr: true},  // collides with IsRegistered
+		{token: "", wantErr: true},              // empty
+		{token: "3d-model", wantErr: true},      // leading digit
+		{token: "is-registered", wantErr: true}, // collides with IsRegistered
 	}
 	for _, c := range cases {
 		got, err := constName(c.token)
@@ -46,9 +46,9 @@ func TestConstNameSpecialValidation(t *testing.T) {
 	// A constNameSpecial mapping must itself resolve to a valid, non-reserved
 	// exported identifier; a bad entry must error rather than emit broken Go.
 	cases := map[string]string{
-		"bad-empty":    "",             // not exported
-		"bad-lower":    "worldwide",    // not exported (lowercase)
-		"bad-reserved": "All",          // collides with the emitted All slice
+		"bad-empty":    "",          // not exported
+		"bad-lower":    "worldwide", // not exported (lowercase)
+		"bad-reserved": "All",       // collides with the emitted All slice
 	}
 	for token, badValue := range cases {
 		constNameSpecial[token] = badValue
@@ -130,5 +130,65 @@ func TestConstEntriesOK(t *testing.T) {
 func TestConstEntriesPropagatesError(t *testing.T) {
 	if _, err := constEntries([]string{"accesses", "2fast"}); err == nil {
 		t.Fatal("expected error for invalid token 2fast")
+	}
+}
+
+func TestParseAliasesOK(t *testing.T) {
+	tokens := []string{"ai-train", "ai-input", "modify"}
+	got, err := parseAliases(tokens, []string{"train-ai=ai-train", "generative-ai=ai-input", "adapt=modify", "derivative=modify"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Alias-sorted so the generated files are stable regardless of authoring order.
+	want := []aliasEntry{
+		{alias: "adapt", canonical: "modify"},
+		{alias: "derivative", canonical: "modify"},
+		{alias: "generative-ai", canonical: "ai-input"},
+		{alias: "train-ai", canonical: "ai-train"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d entries, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("entry %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	// No aliases at all is a valid axis: an empty (not nil-panicking) result.
+	if none, err := parseAliases(tokens, nil); err != nil || len(none) != 0 {
+		t.Fatalf("parseAliases(nil) = %v, %v; want empty, nil", none, err)
+	}
+}
+
+func TestParseAliasesRefusesWhatCanonicalCannotHonour(t *testing.T) {
+	tokens := []string{"ai-train", "ai-input"}
+	for name, raw := range map[string][]string{
+		"malformed_no_equals":       {"train-ai"},
+		"malformed_empty_alias":     {"=ai-train"},
+		"malformed_empty_canonical": {"train-ai="},
+		"malformed_two_equals":      {"train-ai=ai-train=x"},
+		"canonical_not_registered":  {"train-ai=ai-training"},
+		"alias_is_a_token":          {"ai-input=ai-train"},
+		"duplicate_alias":           {"train-ai=ai-train", "train-ai=ai-input"},
+		"alias_not_lowercase":       {"Train-AI=ai-train"},
+		"alias_not_trimmed":         {" train-ai=ai-train"},
+	} {
+		if _, err := parseAliases(tokens, raw); err == nil {
+			t.Errorf("%s: parseAliases(%q) accepted, want error", name, raw)
+		}
+	}
+}
+
+func TestAliasFaceNamesAreReserved(t *testing.T) {
+	// A token spelled like the emitted alias face must fail loudly in every
+	// language rather than shadow it.
+	if _, err := constName("aliases"); err == nil {
+		t.Error("constName(\"aliases\") = ok, want reserved-identifier error (Aliases)")
+	}
+	if _, err := constName("canonical"); err == nil {
+		t.Error("constName(\"canonical\") = ok, want reserved-identifier error (Canonical)")
+	}
+	if _, err := pyConstName("aliases"); err == nil {
+		t.Error("pyConstName(\"aliases\") = ok, want reserved-identifier error (ALIASES)")
 	}
 }

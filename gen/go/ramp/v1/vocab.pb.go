@@ -67,6 +67,14 @@ var file_ramp_v1_vocab_proto_extTypes = []protoimpl.ExtensionInfo{
 		Tag:           "bytes,50004,opt,name=vocab_enum_package",
 		Filename:      "ramp/v1/vocab.proto",
 	},
+	{
+		ExtendedType:  (*descriptorpb.EnumValueOptions)(nil),
+		ExtensionType: ([]string)(nil),
+		Field:         50005,
+		Name:          "ramp.v1.vocab_enum_alias",
+		Tag:           "bytes,50005,rep,name=vocab_enum_alias",
+		Filename:      "ramp/v1/vocab.proto",
+	},
 }
 
 // Extension fields to descriptorpb.FieldOptions.
@@ -111,6 +119,19 @@ var (
 	//
 	// optional string vocab_enum_package = 50004;
 	E_VocabEnumPackage = &file_ramp_v1_vocab_proto_extTypes[3]
+	// vocab_enum_alias carries the accepted alias spellings of an axis, one
+	// "alias=canonical" entry each, authored beside the tokens they resolve to.
+	// An alias is a spelling another vocabulary uses for a registered token
+	// (AIPREF's "train-ai" for "ai-train", the industry's "generative-ai" for
+	// "ai-input"); a consumer canonicalises it to the registered token at ingest
+	// and never stores or emits it. The plugin refuses an alias that is itself
+	// a token, a canonical that is not one, a duplicate, and a spelling that is
+	// not already trimmed and lowercase — the SDK folds a token before it looks
+	// it up, so any other spelling could never match. Enum-value axes only; the
+	// field-axis twin takes 50006 when an axis needs one.
+	//
+	// repeated string vocab_enum_alias = 50005;
+	E_VocabEnumAlias = &file_ramp_v1_vocab_proto_extTypes[4]
 )
 
 var File_ramp_v1_vocab_proto protoreflect.FileDescriptor
@@ -122,7 +143,8 @@ const file_ramp_v1_vocab_proto_rawDesc = "" +
 	"\rvocab_package\x12\x1d.google.protobuf.FieldOptions\x18ӆ\x03 \x01(\tR\fvocabPackage\x88\x01\x01:B\n" +
 	"\n" +
 	"vocab_enum\x12!.google.protobuf.EnumValueOptions\x18҆\x03 \x03(\tR\tvocabEnum:T\n" +
-	"\x12vocab_enum_package\x12!.google.protobuf.EnumValueOptions\x18Ԇ\x03 \x01(\tR\x10vocabEnumPackage\x88\x01\x01B\x8f\x01\n" +
+	"\x12vocab_enum_package\x12!.google.protobuf.EnumValueOptions\x18Ԇ\x03 \x01(\tR\x10vocabEnumPackage\x88\x01\x01:M\n" +
+	"\x10vocab_enum_alias\x12!.google.protobuf.EnumValueOptions\x18Ն\x03 \x03(\tR\x0evocabEnumAliasB\x8f\x01\n" +
 	"\vcom.ramp.v1B\n" +
 	"VocabProtoP\x01Z7github.com/RAMP-Protocol/protocol/gen/go/ramp/v1;rampv1\xa2\x02\x03RXX\xaa\x02\aRamp.V1\xca\x02\aRamp\\V1\xe2\x02\x13Ramp\\V1\\GPBMetadata\xea\x02\bRamp::V1b\x06proto3"
 
@@ -135,10 +157,11 @@ var file_ramp_v1_vocab_proto_depIdxs = []int32{
 	0, // 1: ramp.v1.vocab_package:extendee -> google.protobuf.FieldOptions
 	1, // 2: ramp.v1.vocab_enum:extendee -> google.protobuf.EnumValueOptions
 	1, // 3: ramp.v1.vocab_enum_package:extendee -> google.protobuf.EnumValueOptions
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	0, // [0:4] is the sub-list for extension extendee
+	1, // 4: ramp.v1.vocab_enum_alias:extendee -> google.protobuf.EnumValueOptions
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	0, // [0:5] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
 }
 
@@ -154,7 +177,7 @@ func file_ramp_v1_vocab_proto_init() {
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ramp_v1_vocab_proto_rawDesc), len(file_ramp_v1_vocab_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   0,
-			NumExtensions: 4,
+			NumExtensions: 5,
 			NumServices:   0,
 		},
 		GoTypes:           file_ramp_v1_vocab_proto_goTypes,

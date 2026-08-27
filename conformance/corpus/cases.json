@@ -3033,6 +3033,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "https://exchange.example"
     }
   },
@@ -3044,6 +3073,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "exchange.example/register"
     }
   },
@@ -3055,6 +3113,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "exchange.example:0"
     }
   },
@@ -3066,6 +3153,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "exchange.example:99999"
     }
   },
@@ -3077,6 +3193,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "exchange.example?x=1"
     }
   },
@@ -3088,6 +3233,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "user@exchange.example"
     }
   },
@@ -3099,6 +3273,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "exchange.example:123456"
     }
   },
@@ -3110,6 +3313,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "exchange.example:"
     }
   },
@@ -3121,6 +3353,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "exchange.example."
     }
   },
@@ -3132,6 +3393,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "exchange..example"
     }
   },
@@ -3143,6 +3433,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "-exchange.example"
     }
   },
@@ -3154,6 +3473,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "[::1]:443"
     }
   },
@@ -3164,7 +3512,37 @@
     "rules": [
       "string.pattern"
     ],
-    "json": {}
+    "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ]
+    }
   },
   {
     "id": "PushResourcesRequest/exchange/pattern#0",
@@ -3174,6 +3552,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "two words"
     }
   },
@@ -3185,6 +3592,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "!!bad!!"
     }
   },
@@ -3196,6 +3632,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "\u0000ctl\u0000"
     }
   },
@@ -3207,6 +3672,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": " "
     }
   },
@@ -3218,6 +3712,35 @@
       "string.pattern"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "-5"
     }
   },
@@ -3229,6 +3752,35 @@
       "string.max_len"
     ],
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   },
@@ -3237,6 +3789,35 @@
     "message": "PushResourcesRequest",
     "valid": true,
     "json": {
+      "entries": [
+        {
+          "attestations": [
+            {
+              "attested_at": "2026-01-02T03:04:05Z"
+            }
+          ],
+          "content_hash": "x",
+          "content_id": "x",
+          "domain": "x",
+          "estimated_quantity": 0,
+          "hash_method": "x",
+          "path": "/x",
+          "provenance_source": "x",
+          "provenance_timestamp": "2026-01-02T03:04:05Z",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+          "terms": [
+            {
+              "pricing": {
+                "model": "PRICING_MODEL_FREE",
+                "rate": "0"
+              },
+              "semantics": "TERM_SEMANTICS_ENUMERATED"
+            }
+          ],
+          "title": "x",
+          "word_count": 0
+        }
+      ],
       "exchange": "x"
     }
   },
@@ -4341,7 +4922,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "https://exchange.example"
+      "exchange": "https://exchange.example",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4352,7 +4936,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "exchange.example/register"
+      "exchange": "exchange.example/register",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4363,7 +4950,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "exchange.example:0"
+      "exchange": "exchange.example:0",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4374,7 +4964,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "exchange.example:99999"
+      "exchange": "exchange.example:99999",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4385,7 +4978,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "exchange.example?x=1"
+      "exchange": "exchange.example?x=1",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4396,7 +4992,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "user@exchange.example"
+      "exchange": "user@exchange.example",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4407,7 +5006,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "exchange.example:123456"
+      "exchange": "exchange.example:123456",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4418,7 +5020,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "exchange.example:"
+      "exchange": "exchange.example:",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4429,7 +5034,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "exchange.example."
+      "exchange": "exchange.example.",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4440,7 +5048,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "exchange..example"
+      "exchange": "exchange..example",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4451,7 +5062,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "-exchange.example"
+      "exchange": "-exchange.example",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4462,7 +5076,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "[::1]:443"
+      "exchange": "[::1]:443",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4472,7 +5089,11 @@
     "rules": [
       "string.pattern"
     ],
-    "json": {}
+    "json": {
+      "paths": [
+        "/x"
+      ]
+    }
   },
   {
     "id": "RemoveResourcesRequest/exchange/pattern#0",
@@ -4482,7 +5103,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "two words"
+      "exchange": "two words",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4493,7 +5117,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "!!bad!!"
+      "exchange": "!!bad!!",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4504,7 +5131,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "\u0000ctl\u0000"
+      "exchange": "\u0000ctl\u0000",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4515,7 +5145,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": " "
+      "exchange": " ",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4526,7 +5159,10 @@
       "string.pattern"
     ],
     "json": {
-      "exchange": "-5"
+      "exchange": "-5",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -4537,7 +5173,132 @@
       "string.max_len"
     ],
     "json": {
-      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "paths": [
+        "/x"
+      ]
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/paths/item_killer#0",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "paths": [
+        "/x",
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/paths/item_killer#1",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "paths": [
+        "/x",
+        "/a?b"
+      ]
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/paths/item_killer#2",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "paths": [
+        "/x",
+        "/a#b"
+      ]
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/paths/item_killer#3",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "paths": [
+        "/x",
+        "/a b"
+      ]
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/paths/item_killer#4",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "paths": [
+        "/x",
+        "/a"
+      ]
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/paths/item_pattern",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "paths": [
+        "/x",
+        "two words"
+      ]
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/paths/item_too_long",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.max_len",
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "paths": [
+        "/x",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ]
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/paths/item_too_short",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.min_len",
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "paths": [
+        "/x",
+        ""
+      ]
     }
   },
   {
@@ -4545,7 +5306,10 @@
     "message": "RemoveResourcesRequest",
     "valid": true,
     "json": {
-      "exchange": "x"
+      "exchange": "x",
+      "paths": [
+        "/x"
+      ]
     }
   },
   {
@@ -5927,6 +6691,1668 @@
     }
   },
   {
+    "id": "ResourceEntry/attestations/too_many",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "repeated.max_items"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        },
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/content_hash/too_long",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/content_id/too_long",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/killer#0",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "https://exchange.example",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/killer#1",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "exchange.example/register",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/killer#10",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "exchange.example:0",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/killer#11",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "exchange.example:99999",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/killer#2",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "exchange.example?x=1",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/killer#3",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "user@exchange.example",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/killer#4",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "exchange.example:123456",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/killer#5",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "exchange.example:",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/killer#6",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "exchange.example.",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/killer#7",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "exchange..example",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/killer#8",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "-exchange.example",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/killer#9",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "[::1]:443",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/missing_empty",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/pattern#0",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "two words",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/pattern#2",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "!!bad!!",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/pattern#3",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "\u0000ctl\u0000",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/pattern#4",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": " ",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/pattern#5",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "-5",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/domain/too_long",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/estimated_quantity/below_min",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "int32.gte"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": -1,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/hash_method/too_long",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/killer#0",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/killer#1",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/a?b",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/killer#2",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/a#b",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/killer#3",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/a b",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/killer#4",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/a",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/missing_empty",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.min_len",
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/pattern#0",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "two words",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/pattern#1",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "1.2.3",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/pattern#2",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "!!bad!!",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/pattern#3",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "\u0000ctl\u0000",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/pattern#4",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": " ",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/pattern#5",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "-5",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/pattern#6",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "NaN",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/pattern#7",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "Infinity",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/pattern#8",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "1E3",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/too_long",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.max_len",
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/path/too_short",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.min_len",
+      "string.pattern"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/provenance_source/too_long",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
     "id": "ResourceEntry/resource_mutability/not_in",
     "message": "ResourceEntry",
     "valid": false,
@@ -5934,8 +8360,31 @@
       "enum.not_in"
     ],
     "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
       "provenance_timestamp": "2026-01-02T03:04:05Z",
-      "resource_mutability": "RESOURCE_MUTABILITY_UNSPECIFIED"
+      "resource_mutability": "RESOURCE_MUTABILITY_UNSPECIFIED",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
     }
   },
   {
@@ -5943,7 +8392,324 @@
     "message": "ResourceEntry",
     "valid": true,
     "json": {
-      "provenance_timestamp": "2026-01-02T03:04:05Z"
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/terms/too_many",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "repeated.max_items"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        },
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/title/too_long",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "word_count": 0
     }
   },
   {
@@ -5951,8 +8717,66 @@
     "message": "ResourceEntry",
     "valid": true,
     "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
       "provenance_timestamp": "2026-01-02T03:04:05Z",
-      "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": 0
+    }
+  },
+  {
+    "id": "ResourceEntry/word_count/below_min",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "int32.gte"
+    ],
+    "json": {
+      "attestations": [
+        {
+          "attested_at": "2026-01-02T03:04:05Z"
+        }
+      ],
+      "content_hash": "x",
+      "content_id": "x",
+      "domain": "x",
+      "estimated_quantity": 0,
+      "hash_method": "x",
+      "path": "/x",
+      "provenance_source": "x",
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+      "terms": [
+        {
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": "0"
+          },
+          "semantics": "TERM_SEMANTICS_ENUMERATED"
+        }
+      ],
+      "title": "x",
+      "word_count": -1
     }
   },
   {

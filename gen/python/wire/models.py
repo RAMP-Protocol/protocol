@@ -730,7 +730,14 @@ class RemoveResourcesRequest(WireModel):
         ...,
         description='REQUIRED. Bare host of the recipient this request is addressed to (e.g.\n "exchange.example" or "exchange.example:8081"). See "Request recipient" in\n the file header. Distinct from `tenant_id` above, which names a publisher\n tenant WITHIN an Exchange, not the Exchange itself.',
     )
-    paths: list[str] | None = Field(None, description='Paths to remove')
+    paths: (
+        list[constr(pattern=r'^/[^?#\x00-\x20\x7f]*$', min_length=1, max_length=2048)]
+        | None
+    ) = Field(
+        None,
+        description='Paths to remove — the absolute-path shape ResourceEntry.path carries, at\n least one.',
+        min_length=1,
+    )
     tenant_id: str | None = Field('', description='Tenant identifier')
     ver: str | None = Field(
         '',
@@ -1604,7 +1611,8 @@ class WellKnownManifest(WireModel):
         description='Publisher-only. Authorized third-party catalog contributors.\n MUST be empty for non-publisher roles.',
     )
     catalog_endpoint: str | None = Field(
-        None, description='Exchange-only. CatalogService endpoint URL (if exposed).'
+        None,
+        description="Exchange-only. CatalogService endpoint URL (if exposed). It carries the\n same binding as endpoint: it MUST be on the same host AND PORT that serve\n this manifest, or on a subdomain of that host on that port, and MUST NOT\n carry userinfo. A consumer refuses a catalog endpoint anywhere else — a\n publisher's push is a signed call, and a manifest naming an unrelated host\n would redirect it to a party the signature never covered. The host match is\n on a full dot-delimited label boundary, and a port equal to the scheme's\n default and an omitted port are the SAME port. Absent means this Exchange\n does not expose CatalogService; a consumer does not fall back to endpoint.",
     )
     contact: str | None = Field(
         None, description='Contact email (licensing, integration, security).'
@@ -1907,11 +1915,23 @@ class ResourceEntry(WireModel):
     attestations: list[ResourceAttestation] | None = Field(
         None,
         description="Signed attestations about this resource entry.\n Same semantics as Offer.attestations — see ResourceAttestation message\n for verification levels and claim vocabulary. Attestations pushed via\n CatalogService are verified at push time: the Exchange checks that\n the attestation verifier is authorized to push for this provider\n (via catalog_contributors in the provider's WellKnownManifest) and validates the\n attestation signature against the verifier's public key from its WBA\n directory (the JWK Set at /.well-known/http-message-signatures-directory;\n the keyid is the key's RFC 7638 thumbprint). The verifier's ramp.json\n carries only its role, determined by the verifier's operator.",
+        max_length=64,
     )
-    content_hash: str | None = Field(None, description='Content hash')
-    content_id: str | None = Field(None, description='Content identifier')
-    domain: str | None = Field('', description='Provider domain')
-    estimated_quantity: conint(ge=-2147483648, le=2147483647) | None = Field(
+    content_hash: constr(max_length=255) | None = Field(
+        None,
+        description='Content hash, carried as the publisher computed it — a bare hex digest or a\n "method:hexdigest" form; bounded in length, never format-checked, because\n hash_method names the algorithm.',
+    )
+    content_id: constr(max_length=255) | None = Field(
+        None, description='Content identifier'
+    )
+    domain: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='Provider domain — the bare host the resource lives on, in the shape\n "Request recipient" defines in the file header: a port is allowed, a\n scheme, path, query or userinfo is not. With path it forms the catalog URI\n by concatenation, so a value carrying anything but a host would choose the\n URI rather than merely name the host.',
+    )
+    estimated_quantity: conint(ge=0, lt=2147483648) | None = Field(
         None, description='Estimated quantity in the metering unit'
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
@@ -1919,9 +1939,16 @@ class ResourceEntry(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    hash_method: str | None = Field(None, description='Hash algorithm')
-    path: str | None = Field('', description='Content path')
-    provenance_source: str | None = Field(
+    hash_method: constr(max_length=64) | None = Field(
+        None, description='Hash algorithm'
+    )
+    path: constr(pattern=r'^/[^?#\x00-\x20\x7f]*$', min_length=1, max_length=2048) = (
+        Field(
+            ...,
+            description='Content path — an absolute URL path such as "/premium/article-42.html":\n starts with "/", carries no query or fragment delimiter, no whitespace and\n no control character, and is at most 2048 bytes.',
+        )
+    )
+    provenance_source: constr(max_length=260) | None = Field(
         None,
         description='Who provided this resource metadata. Creates audit trail for\n "where did this catalog entry come from?"',
     )
@@ -1937,10 +1964,11 @@ class ResourceEntry(WireModel):
     )
     terms: list[LicenseTerm] | None = Field(
         None,
-        description='Publisher-declared licensing terms for this resource.\n See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST\n be present. For REFERENCE_ONLY terms, License.uri is authoritative.\n The Exchange validates ENUMERATED terms at push time and surfaces them\n in Offer.terms on discovery.',
+        description='Publisher-declared licensing terms for this resource.\n See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST\n be present. For REFERENCE_ONLY terms, License.uri is authoritative.\n The Exchange validates ENUMERATED terms at push time and surfaces them\n in Offer.terms on discovery. At most 32 terms per entry — the per-entry\n cap CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED names, stated on the\n wire so every implementation refuses the same size.',
+        max_length=32,
     )
-    title: str | None = Field(None, description='Content title')
-    word_count: conint(ge=-2147483648, le=2147483647) | None = Field(
+    title: constr(max_length=512) | None = Field(None, description='Content title')
+    word_count: conint(ge=0, lt=2147483648) | None = Field(
         None, description='Word count'
     )
 
@@ -2036,7 +2064,9 @@ class PushResourcesRequest(WireModel):
         description='Identity of the caller (who is pushing this data).\n The Exchange verifies this matches a registered CatalogService client.',
     )
     entries: list[ResourceEntry] | None = Field(
-        None, description='Content entries to push'
+        None,
+        description='Content entries to push. At least one: an empty push asks for nothing and\n is refused rather than answered with zero counts.',
+        min_length=1,
     )
     exchange: constr(
         pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
