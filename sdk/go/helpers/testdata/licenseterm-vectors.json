@@ -17,6 +17,7 @@
       },
       "ok": true,
       "structural": false,
+      "cross_field_rules": [],
       "term_rules": [],
       "warnings": []
     },
@@ -37,6 +38,7 @@
       },
       "ok": true,
       "structural": false,
+      "cross_field_rules": [],
       "term_rules": [],
       "warnings": []
     },
@@ -65,6 +67,7 @@
       },
       "ok": true,
       "structural": false,
+      "cross_field_rules": [],
       "term_rules": [],
       "warnings": []
     },
@@ -101,6 +104,7 @@
       },
       "ok": true,
       "structural": false,
+      "cross_field_rules": [],
       "term_rules": [],
       "warnings": [
         {
@@ -128,6 +132,7 @@
       },
       "ok": false,
       "structural": true,
+      "cross_field_rules": [],
       "term_rules": [],
       "warnings": []
     },
@@ -147,6 +152,7 @@
       },
       "ok": false,
       "structural": true,
+      "cross_field_rules": [],
       "term_rules": [],
       "warnings": []
     },
@@ -167,6 +173,7 @@
       },
       "ok": false,
       "structural": true,
+      "cross_field_rules": [],
       "term_rules": [],
       "warnings": []
     },
@@ -195,6 +202,7 @@
       },
       "ok": false,
       "structural": true,
+      "cross_field_rules": [],
       "term_rules": [],
       "warnings": []
     },
@@ -211,6 +219,7 @@
       },
       "ok": false,
       "structural": true,
+      "cross_field_rules": [],
       "term_rules": [],
       "warnings": []
     },
@@ -238,7 +247,217 @@
         ]
       },
       "ok": false,
-      "structural": true,
+      "structural": false,
+      "cross_field_rules": [
+        "pricing.per_unit.requires_unit"
+      ],
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "cross_field_restriction_permitted_prohibited_overlap",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "restrictions": [
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train"
+                ],
+                "prohibited": [
+                  "ai-train"
+                ]
+              }
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": false,
+      "cross_field_rules": [
+        "restriction.permitted_prohibited_disjoint"
+      ],
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "cross_field_license_term_one_restriction_per_kind",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "restrictions": [
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train"
+                ]
+              },
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "crawl"
+                ]
+              }
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": false,
+      "cross_field_rules": [
+        "license_term.one_restriction_per_kind"
+      ],
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "cross_field_license_term_reference_only_requires_uri",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_REFERENCE_ONLY"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": false,
+      "cross_field_rules": [
+        "license_term.reference_only.requires_uri"
+      ],
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "cross_field_obligation_share_alike_requires_scope_license",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "obligations": [
+              {
+                "kind": "OBLIGATION_KIND_SHARE_ALIKE",
+                "trigger": "OBLIGATION_TRIGGER_ON_USE"
+              }
+            ],
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": false,
+      "cross_field_rules": [
+        "obligation.share_alike.requires_scope_license"
+      ],
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "cross_field_pricing_free_zero_rate",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "currency": "USD",
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0.05"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": false,
+      "cross_field_rules": [
+        "pricing.free.zero_rate"
+      ],
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "cross_field_license_digest_required_with_uri",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "license": {
+              "id": "CC-BY-4.0",
+              "uri": "https://publisher.example/licence"
+            },
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": false,
+      "cross_field_rules": [
+        "license.digest_required_with_uri"
+      ],
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "cross_field_license_digest_required_via_scope_license",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "obligations": [
+              {
+                "kind": "OBLIGATION_KIND_SHARE_ALIKE",
+                "scope_license": {
+                  "id": "CC-BY-SA-4.0",
+                  "uri": "https://publisher.example/sa"
+                },
+                "trigger": "OBLIGATION_TRIGGER_ON_USE"
+              }
+            ],
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": false,
+      "cross_field_rules": [
+        "license.digest_required_with_uri"
+      ],
       "term_rules": [],
       "warnings": []
     },
@@ -483,6 +702,7 @@
       },
       "ok": false,
       "structural": true,
+      "cross_field_rules": [],
       "term_rules": [],
       "warnings": []
     },
@@ -505,8 +725,14 @@
       },
       "ok": false,
       "structural": false,
+      "cross_field_rules": [],
       "term_rules": [
-        "pricing.unit.registered"
+        {
+          "rule": "pricing.unit.registered",
+          "path": "terms[0].pricing.unit",
+          "token": "frobnications",
+          "message": "pricing unit \"frobnications\" is not a registered metering token"
+        }
       ],
       "warnings": []
     },
@@ -541,8 +767,14 @@
       },
       "ok": false,
       "structural": false,
+      "cross_field_rules": [],
       "term_rules": [
-        "quota.metric.registered"
+        {
+          "rule": "quota.metric.registered",
+          "path": "terms[1].quotas[0].metric",
+          "token": "gizmos",
+          "message": "quota metric \"gizmos\" is not a registered quota token"
+        }
       ],
       "warnings": []
     },
@@ -586,8 +818,14 @@
       },
       "ok": false,
       "structural": false,
+      "cross_field_rules": [],
       "term_rules": [
-        "pricing.unit.registered"
+        {
+          "rule": "pricing.unit.registered",
+          "path": "terms[0].pricing.unit",
+          "token": "frobnications",
+          "message": "pricing unit \"frobnications\" is not a registered metering token"
+        }
       ],
       "warnings": [
         {
@@ -617,8 +855,14 @@
       },
       "ok": false,
       "structural": true,
+      "cross_field_rules": [],
       "term_rules": [
-        "pricing.unit.registered"
+        {
+          "rule": "pricing.unit.registered",
+          "path": "terms[0].pricing.unit",
+          "token": "frobnications",
+          "message": "pricing unit \"frobnications\" is not a registered metering token"
+        }
       ],
       "warnings": []
     },
@@ -630,6 +874,7 @@
       },
       "ok": true,
       "structural": false,
+      "cross_field_rules": [],
       "term_rules": [],
       "warnings": []
     }

@@ -24,7 +24,9 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
+	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const licenseTermVectorsPath = "testdata/licenseterm-vectors.json"
@@ -74,17 +76,63 @@ type ltValidateVector struct {
 	Warnings  []ltFinding     `json:"warnings"`
 }
 
-// ltEntryVector is one ValidateResourceEntry case. structural reports whether the
-// wire tier refused the entry (the exact wire-tier ids are language-local);
-// term_rules are the ingest-tier rule ids in report order; warnings are the
-// accepted terms' warnings with entry-relative paths.
+// ltEntryVector is one ValidateResourceEntry case. Its three violation columns are
+// compared at three different strengths, because the three languages agree at three
+// different strengths — recording more than they can agree on would pin an accident,
+// and recording less hides a real divergence:
+//
+//   - structural is a BOOLEAN, and only for FIELD-LEVEL wire violations. Their ids
+//     are language-local by construction (Go reports protovalidate's, TypeScript
+//     Zod's issue codes, Python Pydantic's error types) so no id can be compared.
+//     This is the same bargain conformance/corpus/cases.json strikes, and it is
+//     paid for the same way: coverage comes from ONE CASE PER RULE, not from a
+//     richer assertion, which is why every wire case below isolates one violation.
+//   - cross_field_rules are compared as IDS. Message-level CEL ids are authored in
+//     the proto and all three ports emit those exact strings, so a port that fires
+//     the wrong refinement — or, more importantly, fails to walk to a message at all
+//     — is caught here rather than passing on a boolean that stays true anyway.
+//   - term_rules are compared as WHOLE FINDINGS. The ingest tier is SDK-owned code
+//     in all three languages, so its id, path, token and message are all pinned; the
+//     wire strings it produces are what an Exchange puts in warnings[].
+//
+// warnings are the accepted terms' warnings with entry-relative paths, whole.
 type ltEntryVector struct {
-	Name       string          `json:"name"`
-	Entry      json.RawMessage `json:"entry"`
-	OK         bool            `json:"ok"`
-	Structural bool            `json:"structural"`
-	TermRules  []string        `json:"term_rules"`
-	Warnings   []ltFinding     `json:"warnings"`
+	Name            string          `json:"name"`
+	Entry           json.RawMessage `json:"entry"`
+	OK              bool            `json:"ok"`
+	Structural      bool            `json:"structural"`
+	CrossFieldRules []string        `json:"cross_field_rules"`
+	TermRules       []ltFinding     `json:"term_rules"`
+	Warnings        []ltFinding     `json:"warnings"`
+}
+
+// ltCrossFieldRuleIDs is every message-level CEL id the contract declares, read
+// from the generated descriptor rather than listed here. Listing them would be a
+// fourth copy of a set the proto already owns, and the copy that drifts is the one
+// that decides whether a violation is classified as cross-field or field-level.
+func ltCrossFieldRuleIDs(t *testing.T) map[string]bool {
+	t.Helper()
+	ids := map[string]bool{}
+	var walk func(protoreflect.MessageDescriptors)
+	walk = func(mds protoreflect.MessageDescriptors) {
+		for i := 0; i < mds.Len(); i++ {
+			md := mds.Get(i)
+			opts, ok := md.Options().(proto.Message)
+			if ok && proto.HasExtension(opts, validate.E_Message) {
+				rules, _ := proto.GetExtension(opts, validate.E_Message).(*validate.MessageRules)
+				for _, c := range rules.GetCel() {
+					ids[c.GetId()] = true
+				}
+			}
+			walk(md.Messages())
+		}
+	}
+	walk(rampv1.File_ramp_v1_ramp_proto.Messages())
+	if len(ids) == 0 {
+		t.Fatal("no message-level CEL ids found in the descriptor — the classification below " +
+			"would silently call every cross-field violation field-level")
+	}
+	return ids
 }
 
 var ltVectorJSON = protojson.MarshalOptions{UseProtoNames: true}
@@ -438,6 +486,53 @@ func buildLTEntryVectors(t *testing.T) []ltEntryVector {
 		{"structural_nested_cel_only", entry(func(e *rampv1.ResourceEntry) {
 			e.Terms = append(e.Terms, ltEnumerated(&rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Rate: "0.05", Currency: "USD"}, nil))
 		})},
+		// One case per cross-field rule reachable from an entry. Before these, the
+		// only nested-CEL case was a Pricing one, so the three sites a port walks to
+		// reach Restriction, Obligation and a nested License were never isolated —
+		// deleting those walk sites from a port left every test green. Each case
+		// carries exactly ONE cross-field violation: Go reports them in descriptor
+		// order and the ports in walk order, so a case with two would be order-flaky
+		// across languages. Each also stays far under the list bounds, or the
+		// cardinality rule would fire too and be classified as field-level, masking
+		// the rule the case exists to isolate.
+		{"cross_field_restriction_permitted_prohibited_overlap", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Restrictions = []*rampv1.Restriction{
+				ltRestriction(ltKindFunction, []string{"ai-train"}, []string{"ai-train"}),
+			}
+		})},
+		{"cross_field_license_term_one_restriction_per_kind", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Restrictions = []*rampv1.Restriction{
+				ltRestriction(ltKindFunction, []string{"ai-train"}, nil),
+				ltRestriction(ltKindFunction, []string{"crawl"}, nil),
+			}
+		})},
+		{"cross_field_license_term_reference_only_requires_uri", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Semantics = rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY
+		})},
+		{"cross_field_obligation_share_alike_requires_scope_license", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Obligations = []*rampv1.Obligation{{
+				Kind:    rampv1.ObligationKind_OBLIGATION_KIND_SHARE_ALIKE,
+				Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE,
+			}}
+		})},
+		{"cross_field_pricing_free_zero_rate", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Pricing = &rampv1.Pricing{
+				Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0.05", Currency: "USD",
+			}
+		})},
+		{"cross_field_license_digest_required_with_uri", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].License = &rampv1.License{Id: proto.String("CC-BY-4.0"), Uri: proto.String("https://publisher.example/licence")}
+		})},
+		// The same License rule reached through the OTHER path a port must walk —
+		// an obligation's scope_license. A walk that reaches terms[].license but not
+		// terms[].obligations[].scope_license passes the case above and fails here.
+		{"cross_field_license_digest_required_via_scope_license", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Obligations = []*rampv1.Obligation{{
+				Kind:         rampv1.ObligationKind_OBLIGATION_KIND_SHARE_ALIKE,
+				Trigger:      rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE,
+				ScopeLicense: &rampv1.License{Id: proto.String("CC-BY-SA-4.0"), Uri: proto.String("https://publisher.example/sa")},
+			}}
+		})},
 		{"structural_too_many_terms", entry(func(e *rampv1.ResourceEntry) {
 			for len(e.Terms) < 33 {
 				e.Terms = append(e.Terms, ltEnumerated(ltFreePricing(), nil))
@@ -465,6 +560,7 @@ func buildLTEntryVectors(t *testing.T) []ltEntryVector {
 		})},
 		{"no_terms_accepted", entry(func(e *rampv1.ResourceEntry) { e.Terms = nil })},
 	}
+	celIDs := ltCrossFieldRuleIDs(t)
 	out := make([]ltEntryVector, 0, len(cases))
 	for _, c := range cases {
 		before := ltProtoJSON(t, c.entry)
@@ -472,11 +568,14 @@ func buildLTEntryVectors(t *testing.T) []ltEntryVector {
 		if after := ltProtoJSON(t, c.entry); string(after) != string(before) {
 			t.Fatalf("%s: ValidateResourceEntry modified its input", c.name)
 		}
-		v := ltEntryVector{Name: c.name, Entry: before, OK: verdict.OK(), TermRules: []string{}, Warnings: ltWarningsOf(verdict.Warnings)}
+		v := ltEntryVector{Name: c.name, Entry: before, OK: verdict.OK(),
+			CrossFieldRules: []string{}, TermRules: []ltFinding{}, Warnings: ltWarningsOf(verdict.Warnings)}
 		for _, viol := range verdict.Violations {
-			switch viol.Rule {
-			case RulePricingUnitRegistered, RuleQuotaMetricRegistered:
-				v.TermRules = append(v.TermRules, viol.Rule)
+			switch {
+			case viol.Rule == RulePricingUnitRegistered || viol.Rule == RuleQuotaMetricRegistered:
+				v.TermRules = append(v.TermRules, ltFindingOf(viol.Rule, viol.Path, viol.Token, viol.Message))
+			case celIDs[viol.Rule]:
+				v.CrossFieldRules = append(v.CrossFieldRules, viol.Rule)
 			default:
 				v.Structural = true
 			}

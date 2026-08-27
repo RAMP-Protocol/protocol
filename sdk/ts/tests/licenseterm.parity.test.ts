@@ -12,6 +12,7 @@
 // Every finding is {rule, path, token, message}; the message is the exact wire
 // string, so the comparison is byte-for-byte, not shape-for-shape.
 import { describe, expect, it } from "vitest";
+import crossfieldCorpus from "../../../conformance/corpus/crossfield.json";
 import vectorsFile from "../../go/helpers/testdata/licenseterm-vectors.json";
 import {
 	RULE_PRICING_UNIT_REGISTERED,
@@ -30,11 +31,29 @@ type Vectors = {
 	normalize: { name: string; term: Obj; normalized: Obj }[];
 	known: { name: string; kind: string; token: string; known: boolean }[];
 	validate: { name: string; term: Obj; violation: Finding | null; warnings: Finding[] }[];
-	entry: { name: string; entry: Obj; ok: boolean; structural: boolean; term_rules: string[]; warnings: Finding[] }[];
+	entry: {
+		name: string;
+		entry: Obj;
+		ok: boolean;
+		structural: boolean;
+		cross_field_rules: string[];
+		term_rules: Finding[];
+		warnings: Finding[];
+	}[];
 };
 
 const vectors = vectorsFile as Vectors;
 const TERM_RULES = new Set([RULE_PRICING_UNIT_REGISTERED, RULE_QUOTA_METRIC_REGISTERED]);
+
+// The registered cross-field rule ids, read from the generated cross-field corpus —
+// corpusgen emits one mutant per message-level CEL rule, so its `rules` are the
+// descriptor's own set. Reading them beats listing them here: the corpus records ids
+// the descriptor owns, and this side must classify by the same set or a violation
+// lands in the wrong column. A superset is harmless — an id no entry can reach never
+// appears in a verdict.
+const CROSS_FIELD_RULES = new Set(
+	(crossfieldCorpus as { rules?: string[] }[]).flatMap((c) => c.rules ?? []),
+);
 
 describe("sdk/ts license-term faces match the sdk/go oracle vectors", () => {
 	it("every list is non-empty", () => {
@@ -78,9 +97,19 @@ describe("sdk/ts license-term faces match the sdk/go oracle vectors", () => {
 			const verdict = validateResourceEntry(v.entry);
 			expect(v.entry).toEqual(input);
 			expect(verdict.ok).toBe(v.ok);
-			const termRules = verdict.violations.filter((x) => TERM_RULES.has(x.rule)).map((x) => x.rule);
-			const structural = verdict.violations.some((x) => !TERM_RULES.has(x.rule));
+			// Three columns, three strengths — the same split the emitter records:
+			// whole findings for the SDK-owned ingest tier, ids for the cross-field
+			// rules the proto owns, and a bare boolean for the field-level ids that
+			// are Zod's here and protovalidate's in the oracle.
+			const termRules = verdict.violations.filter((x) => TERM_RULES.has(x.rule));
+			const crossField = verdict.violations
+				.filter((x) => CROSS_FIELD_RULES.has(x.rule))
+				.map((x) => x.rule);
+			const structural = verdict.violations.some(
+				(x) => !TERM_RULES.has(x.rule) && !CROSS_FIELD_RULES.has(x.rule),
+			);
 			expect(structural).toBe(v.structural);
+			expect(crossField).toEqual(v.cross_field_rules);
 			expect(termRules).toEqual(v.term_rules);
 			expect(verdict.warnings).toEqual(v.warnings);
 		});

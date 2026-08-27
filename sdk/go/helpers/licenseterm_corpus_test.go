@@ -16,8 +16,11 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type corpusFinding struct {
@@ -52,12 +55,13 @@ type licenseTermCorpus struct {
 		Warnings  []corpusFinding `json:"warnings"`
 	} `json:"validate"`
 	Entry []struct {
-		Name       string          `json:"name"`
-		Entry      json.RawMessage `json:"entry"`
-		OK         bool            `json:"ok"`
-		Structural bool            `json:"structural"`
-		TermRules  []string        `json:"term_rules"`
-		Warnings   []corpusFinding `json:"warnings"`
+		Name            string          `json:"name"`
+		Entry           json.RawMessage `json:"entry"`
+		OK              bool            `json:"ok"`
+		Structural      bool            `json:"structural"`
+		CrossFieldRules []string        `json:"cross_field_rules"`
+		TermRules       []corpusFinding `json:"term_rules"`
+		Warnings        []corpusFinding `json:"warnings"`
 	} `json:"entry"`
 }
 
@@ -104,6 +108,45 @@ func sameFindings(a, b []corpusFinding) bool {
 		}
 	}
 	return true
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// corpusCrossFieldRuleIDs mirrors the emitter: the message-CEL id set comes from
+// the generated descriptor, never a list here, so the replay classifies a violation
+// exactly as the oracle that recorded it did.
+func corpusCrossFieldRuleIDs(t *testing.T) map[string]bool {
+	t.Helper()
+	ids := map[string]bool{}
+	var walk func(protoreflect.MessageDescriptors)
+	walk = func(mds protoreflect.MessageDescriptors) {
+		for i := 0; i < mds.Len(); i++ {
+			md := mds.Get(i)
+			if opts, ok := md.Options().(proto.Message); ok && proto.HasExtension(opts, validate.E_Message) {
+				rules, _ := proto.GetExtension(opts, validate.E_Message).(*validate.MessageRules)
+				for _, c := range rules.GetCel() {
+					ids[c.GetId()] = true
+				}
+			}
+			walk(md.Messages())
+		}
+	}
+	walk(rampv1.File_ramp_v1_ramp_proto.Messages())
+	if len(ids) == 0 {
+		t.Fatal("no message-level CEL ids in the descriptor — every cross-field violation " +
+			"would be misclassified as field-level and the comparison would be vacuous")
+	}
+	return ids
 }
 
 func TestLicenseTermCorpus_Fold(t *testing.T) {
@@ -169,6 +212,7 @@ func TestLicenseTermCorpus_Validate(t *testing.T) {
 }
 
 func TestLicenseTermCorpus_Entry(t *testing.T) {
+	celIDs := corpusCrossFieldRuleIDs(t)
 	for _, v := range loadLicenseTermCorpus(t).Entry {
 		var entry rampv1.ResourceEntry
 		if err := protojson.Unmarshal(v.Entry, &entry); err != nil {
@@ -178,12 +222,18 @@ func TestLicenseTermCorpus_Entry(t *testing.T) {
 		if verdict.OK() != v.OK {
 			t.Errorf("%s: ok = %v, want %v (violations %+v)", v.Name, verdict.OK(), v.OK, verdict.Violations)
 		}
+		// Classify the way the emitter does, at the three strengths the corpus
+		// records: cross-field ids come from the descriptor, term rules are whole
+		// findings, and what is left is field-level and only counted.
 		var structural bool
-		termRules := []string{}
+		crossField := []string{}
+		termRules := []corpusFinding{}
 		for _, viol := range verdict.Violations {
-			switch viol.Rule {
-			case helpers.RulePricingUnitRegistered, helpers.RuleQuotaMetricRegistered:
-				termRules = append(termRules, viol.Rule)
+			switch {
+			case viol.Rule == helpers.RulePricingUnitRegistered || viol.Rule == helpers.RuleQuotaMetricRegistered:
+				termRules = append(termRules, corpusFinding{Rule: viol.Rule, Path: viol.Path, Token: viol.Token, Message: viol.Message})
+			case celIDs[viol.Rule]:
+				crossField = append(crossField, viol.Rule)
 			default:
 				structural = true
 			}
@@ -191,14 +241,11 @@ func TestLicenseTermCorpus_Entry(t *testing.T) {
 		if structural != v.Structural {
 			t.Errorf("%s: structural = %v, want %v", v.Name, structural, v.Structural)
 		}
-		if len(termRules) != len(v.TermRules) {
-			t.Errorf("%s: term_rules = %v, want %v", v.Name, termRules, v.TermRules)
-		} else {
-			for i := range termRules {
-				if termRules[i] != v.TermRules[i] {
-					t.Errorf("%s: term_rules[%d] = %q, want %q", v.Name, i, termRules[i], v.TermRules[i])
-				}
-			}
+		if !sameStrings(crossField, v.CrossFieldRules) {
+			t.Errorf("%s: cross_field_rules = %v, want %v", v.Name, crossField, v.CrossFieldRules)
+		}
+		if !sameFindings(termRules, v.TermRules) {
+			t.Errorf("%s: term_rules = %+v, want %+v", v.Name, termRules, v.TermRules)
 		}
 		if got := findingsOf(verdict.Warnings); !sameFindings(got, v.Warnings) {
 			t.Errorf("%s: warnings = %+v, want %+v", v.Name, got, v.Warnings)

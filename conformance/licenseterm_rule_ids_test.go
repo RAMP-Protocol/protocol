@@ -51,8 +51,18 @@ func sdkLicenseTermRuleIDs(t *testing.T) map[string]bool {
 			Warnings  []finding `json:"warnings"`
 		} `json:"validate"`
 		Entry []struct {
-			TermRules []string  `json:"term_rules"`
+			TermRules []finding `json:"term_rules"`
 			Warnings  []finding `json:"warnings"`
+			// cross_field_rules is DELIBERATELY not collected. Those ids ARE the
+			// descriptor's own message-CEL ids — the corpus records them precisely
+			// because all three languages emit the proto's exact strings — so feeding
+			// them to the check below would trip its "an id must not also be a CEL id"
+			// rule on every one. That rule exists to stop SDK-OWNED ids colliding with
+			// the descriptor's namespace; an id that IS the descriptor's is not a
+			// collision, it is a quotation. The field-level wire ids are absent from
+			// the corpus for the opposite reason: they are language-local (Go reports
+			// protovalidate's, TypeScript Zod's, Python Pydantic's), so there is no one
+			// id to hold to any namespace, and the corpus records only that one fired.
 		} `json:"entry"`
 	}
 	if err := json.Unmarshal(b, &doc); err != nil {
@@ -69,7 +79,7 @@ func sdkLicenseTermRuleIDs(t *testing.T) map[string]bool {
 	}
 	for _, e := range doc.Entry {
 		for _, r := range e.TermRules {
-			ids[r] = true
+			ids[r.Rule] = true
 		}
 		for _, w := range e.Warnings {
 			ids[w.Rule] = true
@@ -77,6 +87,17 @@ func sdkLicenseTermRuleIDs(t *testing.T) map[string]bool {
 	}
 	if len(ids) == 0 {
 		t.Fatal(errNoLicenseTermRules)
+	}
+	// Guard the guard against a narrower kind of vacuity than "empty": a change to
+	// the collection above that quietly stopped reading the entry list would leave
+	// the validate list's ids here and still look populated. Both ingest-tier ids
+	// are reachable from BOTH lists, so requiring them pins that the entry list is
+	// still being read at all.
+	for _, want := range []string{"pricing.unit.registered", "quota.metric.registered"} {
+		if !ids[want] {
+			t.Fatalf("the collected id set is missing %q — the corpus columns this guard "+
+				"reads have moved, and it is now asserting less than it appears to", want)
+		}
 	}
 	return ids
 }

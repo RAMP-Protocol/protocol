@@ -19,7 +19,7 @@ import copy
 from dataclasses import asdict
 
 import pytest
-from conftest import GO_TESTDATA, load_json
+from conftest import CONFORMANCE_CORPUS, GO_TESTDATA, load_json
 
 from ramp_sdk.licenseterm import (
     RULE_PRICING_UNIT_REGISTERED,
@@ -38,6 +38,16 @@ _KNOWN = _VECTORS["known"]
 _VALIDATE = _VECTORS["validate"]
 _ENTRY = _VECTORS["entry"]
 _TERM_RULES = {RULE_PRICING_UNIT_REGISTERED, RULE_QUOTA_METRIC_REGISTERED}
+
+# The registered cross-field rule ids, read from the generated cross-field corpus —
+# corpusgen emits one mutant per message-level CEL rule, so its ``rules`` are the
+# descriptor's own set. Reading them beats listing them here: the vectors record ids
+# the descriptor owns, and this side must classify by the same set or a violation
+# lands in the wrong column. A superset is harmless — an id no entry can reach never
+# appears in a verdict.
+_CROSS_FIELD_RULES = {
+    rule for case in load_json(CONFORMANCE_CORPUS / "crossfield.json") for rule in case.get("rules", [])
+}
 
 
 def test_vector_lists_nonempty() -> None:
@@ -78,8 +88,16 @@ def test_entry_matches_go_oracle(vector: dict) -> None:
     verdict = validate_resource_entry(vector["entry"])
     assert vector["entry"] == before
     assert verdict.ok is vector["ok"]
-    term_rules = [v.rule for v in verdict.violations if v.rule in _TERM_RULES]
-    structural = any(v.rule not in _TERM_RULES for v in verdict.violations)
+    # Three columns, three strengths — the same split the emitter records: whole
+    # findings for the SDK-owned ingest tier, ids for the cross-field rules the proto
+    # owns, and a bare boolean for the field-level ids that are Pydantic's here and
+    # protovalidate's in the oracle.
+    term_rules = [asdict(v) for v in verdict.violations if v.rule in _TERM_RULES]
+    cross_field = [v.rule for v in verdict.violations if v.rule in _CROSS_FIELD_RULES]
+    structural = any(
+        v.rule not in _TERM_RULES and v.rule not in _CROSS_FIELD_RULES for v in verdict.violations
+    )
     assert structural is vector["structural"]
+    assert cross_field == vector["cross_field_rules"]
     assert term_rules == vector["term_rules"]
     assert [asdict(w) for w in verdict.warnings] == vector["warnings"]
