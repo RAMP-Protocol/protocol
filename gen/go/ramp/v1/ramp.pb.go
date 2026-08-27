@@ -5130,9 +5130,9 @@ type PushResourcesRequest struct {
 	// is refused rather than answered with zero counts. At most 256, the bound a
 	// caller-chosen batch carries elsewhere in this contract (see ResourceQuery.uris)
 	// — it bounds one submission, so a larger feed is pushed in several. The cap is
-	// over entries because every accepted entry is stored and every rejected one is
-	// named in the answer; it does not bound the work of checking a submission,
-	// which the recipient bounds at the transport.
+	// over entries because a submission is stored or refused whole, and a refusal
+	// names each entry that failed; it does not bound the work of checking a
+	// submission, which the recipient bounds at the transport.
 	Entries []*ResourceEntry `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
 	// Identity of the caller (who is pushing this data).
 	// The Exchange verifies this matches a registered CatalogService client.
@@ -5296,10 +5296,11 @@ type ResourceEntry struct {
 	// be present. For REFERENCE_ONLY terms, License.uri is authoritative.
 	// The Exchange validates ENUMERATED terms at push time and surfaces them
 	// in Offer.terms on discovery. At most 32 terms per entry, stated on the wire
-	// so every implementation refuses the same size. Being a wire rule makes it
-	// batch-fatal on PushResources: an over-cap entry refuses the whole submission
-	// rather than dropping that one entry, the same as every other rule applied at
-	// the boundary.
+	// so every implementation refuses the same size. An over-cap entry refuses the
+	// whole submission, as every catalog rejection does; what being a wire rule
+	// changes is WHEN — the refusal now happens at the boundary, before any
+	// per-entry classification runs, which is why the rejection reason that named
+	// this cap can no longer be produced for a push.
 	Terms []*LicenseTerm `protobuf:"bytes,13,rep,name=terms,proto3" json:"terms,omitempty"`
 	// Optional mutability hint. When omitted, the Exchange applies the `STATIC`
 	// default at Offer build; an explicit `UNSPECIFIED` is rejected. A value in
@@ -9165,7 +9166,9 @@ type CatalogRejection struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The rejection reason (defined-only, non-zero)
 	Reason CatalogRejectionReason `protobuf:"varint,1,opt,name=reason,proto3,enum=ramp.v1.CatalogRejectionReason" json:"reason,omitempty"`
-	// For partial-batch failures: the entry paths that were rejected.
+	// The entry paths the refusal is about. A catalog push is all-or-nothing, so
+	// these name which entries failed inside a submission that persisted nothing —
+	// they are not a list of what was dropped from an otherwise applied batch.
 	RejectedPaths []string `protobuf:"bytes,2,rep,name=rejected_paths,json=rejectedPaths,proto3" json:"rejected_paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

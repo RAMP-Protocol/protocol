@@ -1195,7 +1195,7 @@ class CatalogRejection(WireModel):
     )
     rejected_paths: list[str] | None = Field(
         None,
-        description='For partial-batch failures: the entry paths that were rejected.',
+        description='The entry paths the refusal is about. A catalog push is all-or-nothing, so\n these name which entries failed inside a submission that persisted nothing —\n they are not a list of what was dropped from an otherwise applied batch.',
     )
 
 
@@ -1970,7 +1970,7 @@ class ResourceEntry(WireModel):
     )
     terms: list[LicenseTerm] | None = Field(
         None,
-        description='Publisher-declared licensing terms for this resource.\n See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST\n be present. For REFERENCE_ONLY terms, License.uri is authoritative.\n The Exchange validates ENUMERATED terms at push time and surfaces them\n in Offer.terms on discovery. At most 32 terms per entry, stated on the wire\n so every implementation refuses the same size. Being a wire rule makes it\n batch-fatal on PushResources: an over-cap entry refuses the whole submission\n rather than dropping that one entry, the same as every other rule applied at\n the boundary.',
+        description='Publisher-declared licensing terms for this resource.\n See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST\n be present. For REFERENCE_ONLY terms, License.uri is authoritative.\n The Exchange validates ENUMERATED terms at push time and surfaces them\n in Offer.terms on discovery. At most 32 terms per entry, stated on the wire\n so every implementation refuses the same size. An over-cap entry refuses the\n whole submission, as every catalog rejection does; what being a wire rule\n changes is WHEN — the refusal now happens at the boundary, before any\n per-entry classification runs, which is why the rejection reason that named\n this cap can no longer be produced for a push.',
         max_length=32,
     )
     title: constr(max_length=512) | None = Field(None, description='Content title')
@@ -2071,7 +2071,7 @@ class PushResourcesRequest(WireModel):
     )
     entries: list[ResourceEntry] | None = Field(
         None,
-        description='Content entries to push. At least one: an empty push asks for nothing and\n is refused rather than answered with zero counts. At most 256, the bound a\n caller-chosen batch carries elsewhere in this contract (see ResourceQuery.uris)\n — it bounds one submission, so a larger feed is pushed in several. The cap is\n over entries because every accepted entry is stored and every rejected one is\n named in the answer; it does not bound the work of checking a submission,\n which the recipient bounds at the transport.',
+        description='Content entries to push. At least one: an empty push asks for nothing and\n is refused rather than answered with zero counts. At most 256, the bound a\n caller-chosen batch carries elsewhere in this contract (see ResourceQuery.uris)\n — it bounds one submission, so a larger feed is pushed in several. The cap is\n over entries because a submission is stored or refused whole, and a refusal\n names each entry that failed; it does not bound the work of checking a\n submission, which the recipient bounds at the transport.',
         max_length=256,
         min_length=1,
     )

@@ -1169,9 +1169,10 @@ for the same reason. `content_hash` is bounded but not format-checked, because a
 digest and a `method:hexdigest` form both travel today and `hash_method` names the
 algorithm. `terms` caps at 32, the limit the reference Exchange already enforced privately —
 moved into the contract so every implementation refuses the same size. Moving it also
-changed WHEN it is refused: as a wire rule it is batch-fatal like every other boundary
-rule, so an over-cap entry refuses the whole submission rather than dropping itself out
-of it, and the rejection reason that named the per-entry verdict is retired on that path.
+changed WHEN it is refused, and only that: an over-cap entry always refused the whole
+submission, because a catalog push is all-or-nothing, so what a wire rule changes is that
+the refusal happens at the boundary before any per-entry classification runs — which is
+exactly why the rejection reason that named this cap is retired on that path.
 
 One accounting decision belongs here because it is not visible from the code. The
 parity allowlist is a shrink-only ratchet over documented divergences, and its only prior
@@ -1248,6 +1249,31 @@ proto-JSON that Go never emits — a numeric enum, `null` for a repeated field �
 what this corpus can prove about the ports, and the ports do diverge there. That gap is
 real, it is not closed here, and closing it needs a different instrument than a
 Go-generated corpus.
+
+## A contract that describes its checks and not its verdict gets read wrong
+
+`CatalogService`'s comment set out both validation tiers in detail — which rules run at the
+boundary, how tokens are folded and aliases resolved, which checks reject and which only
+warn — and never said what a rejection costs. Entry, or submission? The contract did not
+answer, so readers answered it from the reference implementation, and the reference
+implementation's own comments disagreed with each other: one described an over-cap entry as
+dropped from a batch whose other entries still upsert, while its caller two files away
+refuses everything and says so. Two consecutive readings of that code reached the wrong
+answer, and one of them shipped into this repo's prose before it was caught.
+
+The rule is now in the contract, where the question is settled once instead of re-derived:
+a push is all-or-nothing at both tiers, and the per-entry detail a refusal carries is
+reporting, not partial acceptance. The proto already did this for the other batch path —
+`TransactionResponse` states that its per-item denials are partial results of a successful
+request — so the pattern is established; catalog was the batch RPC that never used it.
+
+Two things generalise. A message that carries per-item detail says nothing about whether
+items are accepted per-item: naming what failed and applying what did not are different
+questions, and `PushResourcesResponse.accepted` / `.rejected` and
+`CatalogRejection.rejected_paths` are shaped for both answers while the contract permits
+only one. And a behaviour stated nowhere in the contract will be inferred from whatever
+implementation the reader has at hand — which makes an unstated verdict a defect in the
+contract, not a gap in the docs.
 
 ## SSRF-guarded fetch: two flags, a corpus-locked transport
 

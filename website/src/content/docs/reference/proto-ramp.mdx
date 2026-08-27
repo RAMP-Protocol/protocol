@@ -30,7 +30,7 @@ The core protocol. Both AI agents and Brokers are valid clients.
 
 ### CatalogService
 
-Optional RPC for providers/CMS/third-party intelligence providers to push content metadata.
+Optional RPC for providers/CMS/third-party intelligence providers to push content metadata. A push is **all-or-nothing at both validation tiers**: a hard rejection anywhere in the submission refuses the entire submission and persists nothing, and the refusal names the entries that failed so the publisher can fix and resubmit the whole set. That per-entry detail is reporting, not partial acceptance.
 
 ::proto-service{name=CatalogService}
 
@@ -369,20 +369,20 @@ Push or update content entries in the Exchange catalog. `entries` carries at lea
 
 ### ResourceEntry
 
-A single resource catalog entry. The envelope carries its own wire rules — an entry that cannot become a catalog URI, or that would let one entry cost unbounded work, is refused at the boundary:
+A single resource catalog entry. The envelope carries its own wire rules, so an entry that cannot become a catalog URI is refused at the boundary rather than after ingestion. The list caps below bound the **document** — how large one entry may be and what a submission can store — not the work of checking one: a validator walks every element it is handed before any cardinality rule is reported, so that cost is bounded at the transport instead.
 
 - `domain` is a bare host in the recipient-addressing shape (a port is allowed; a scheme, path, query or userinfo is not; at most 260 bytes). With `path` it forms the catalog URI by concatenation, so anything but a host would choose the URI rather than name the host.
 - `path` is an absolute URL path: it starts with `/`, carries no `?` or `#`, no whitespace and no control byte, and is 1–2048 bytes.
 - `title` (512), `content_id` and `content_hash` (255), `hash_method` (64) and `provenance_source` (260) are length-bounded. `content_hash` is deliberately not format-checked — a bare hex digest and a `method:hexdigest` form both travel — because `hash_method` names the algorithm.
 - `word_count` and `estimated_quantity` are non-negative.
-- `attestations` carries at most 64 entries and `terms` at most 32 — the per-entry cap `CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED` names, stated on the wire so every implementation refuses the same size.
+- `attestations` carries at most 64 entries and `terms` at most 32, stated on the wire so every implementation refuses the same size. Because the terms cap is a wire rule, an over-cap entry is refused at the boundary before any per-entry classification runs — which is why `CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED` can no longer be produced for a push.
 - `resource_mutability`, when present, must not be `RESOURCE_MUTABILITY_UNSPECIFIED`; omitted, the Exchange applies `RESOURCE_MUTABILITY_STATIC` at Offer build.
 
 ::proto-message{name=ResourceEntry}
 
 ### PushResourcesResponse
 
-The `accepted` / `rejected` counts are entry-level tallies of a successful push — not the removed failure bools. A push that could not be applied at all travels as a non-OK transport error carrying [`ErrorDetail.catalog_rejection`](#unified-error-model).
+`accepted` tallies the entries a successful push stored — and because a push is all-or-nothing, a success stores every entry it carried. A push that could not be applied travels as a non-OK transport error carrying [`ErrorDetail.catalog_rejection`](#unified-error-model).
 
 ::proto-message{name=PushResourcesResponse}
 

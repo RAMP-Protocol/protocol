@@ -2145,6 +2145,14 @@ enum IngestionSource {
 // without detail are accepted and reported in PushResourcesResponse.warnings.
 // The SDK ships both tiers as a publisher-side pre-check; the Exchange's own
 // run of them is the deciding one.
+//
+// A push is ALL-OR-NOTHING, at both tiers. A hard rejection anywhere in the
+// submission — an envelope or term rule at the wire tier, an unregistered bare
+// unit or metric at the ingest tier — refuses the entire submission and persists
+// nothing; the publisher fixes and resubmits the whole set. The refusal names
+// the entries that failed and why, and that per-entry detail is REPORTING, never
+// partial acceptance: no entry of a refused submission is stored. Warnings do
+// not refuse anything.
 service CatalogService {
   // Push or update resource entries in the Exchange catalog.
   rpc PushResources(PushResourcesRequest) returns (PushResourcesResponse);
@@ -2187,9 +2195,9 @@ message PushResourcesRequest {
   // is refused rather than answered with zero counts. At most 256, the bound a
   // caller-chosen batch carries elsewhere in this contract (see ResourceQuery.uris)
   // — it bounds one submission, so a larger feed is pushed in several. The cap is
-  // over entries because every accepted entry is stored and every rejected one is
-  // named in the answer; it does not bound the work of checking a submission,
-  // which the recipient bounds at the transport.
+  // over entries because a submission is stored or refused whole, and a refusal
+  // names each entry that failed; it does not bound the work of checking a
+  // submission, which the recipient bounds at the transport.
   repeated ResourceEntry entries = 3 [
     (buf.validate.field).repeated.min_items = 1,
     (buf.validate.field).repeated.max_items = 256
@@ -2298,10 +2306,11 @@ message ResourceEntry {
   // be present. For REFERENCE_ONLY terms, License.uri is authoritative.
   // The Exchange validates ENUMERATED terms at push time and surfaces them
   // in Offer.terms on discovery. At most 32 terms per entry, stated on the wire
-  // so every implementation refuses the same size. Being a wire rule makes it
-  // batch-fatal on PushResources: an over-cap entry refuses the whole submission
-  // rather than dropping that one entry, the same as every other rule applied at
-  // the boundary.
+  // so every implementation refuses the same size. An over-cap entry refuses the
+  // whole submission, as every catalog rejection does; what being a wire rule
+  // changes is WHEN — the refusal now happens at the boundary, before any
+  // per-entry classification runs, which is why the rejection reason that named
+  // this cap can no longer be produced for a push.
   repeated LicenseTerm terms = 13 [(buf.validate.field).repeated.max_items = 32];
 
   // Optional mutability hint. When omitted, the Exchange applies the `STATIC`
@@ -3985,7 +3994,9 @@ message CatalogRejection {
     (buf.validate.field).enum = {defined_only: true, not_in: [0]}
   ];
 
-  // For partial-batch failures: the entry paths that were rejected.
+  // The entry paths the refusal is about. A catalog push is all-or-nothing, so
+  // these name which entries failed inside a submission that persisted nothing —
+  // they are not a list of what was dropped from an otherwise applied batch.
   repeated string rejected_paths = 2;
 }
 

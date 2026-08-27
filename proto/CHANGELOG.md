@@ -20,11 +20,11 @@ models, so the work is bounded one layer down, by the maximum request size the r
 will read.
 
 `CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED` is recorded as retired on the
-`PushResources` path. Moving the terms cap onto the wire made it batch-fatal like every
-other boundary rule: an over-cap entry now refuses the whole submission before any
-per-entry classification runs, so no rejection naming that reason can be produced for a
-push. The value stays for a deployment that applies the cap somewhere the wire rules do
-not reach.
+`PushResources` path. An over-cap entry always refused the whole submission — a catalog
+push is all-or-nothing — so moving the cap onto the wire changed WHEN it is refused, not
+what survives: the refusal now happens at the boundary, before any per-entry classification
+runs, and no rejection naming that reason can be produced for a push. The value stays for a
+deployment that applies the cap somewhere the wire rules do not reach.
 
 *Tooling:* the corpus grows from 602 to 607 cases — one `too_many` mutant per newly bounded
 field; `LicenseTerm` goes from 4 to 7, `PushResourcesRequest` from 20 to 21 and
@@ -50,12 +50,15 @@ carrying the full 32 terms — is 0.31 MiB and validates in ~150ms, while the wo
 adversarial shape that still fits under the cap costs ~1.6s. That is what the default buys:
 not a small worst case, but a bounded one.
 
-**The publisher-facing prose says what the two tiers actually do (docs).** The JSONL
-ingestion page had come to describe an unregistered `pricing.unit` or `quotas[].metric` as
-refusing the whole submission; it is an ingest-tier check and rejects only the entry that
-carries it, which is why `PushResourcesResponse` answers with `accepted` and `rejected`
-counts. The all-or-nothing rule is the wire tier's, and the page now says so and states the
-ingest tier's per-entry granularity beside it. The publisher-onboarding and
+**The contract states that a push is all-or-nothing, and the prose follows it (docs).**
+`CatalogService` described both validation tiers in full — folding, alias resolution, which
+checks reject and which warn — and never said whether a rejection costs the entry or the
+submission. Readers therefore inferred it from an implementation, and inferred wrong. The
+rule is now in the contract: a hard rejection at either tier refuses the entire submission
+and persists nothing, and the per-entry detail a refusal carries is reporting, never partial
+acceptance. `CatalogRejection.rejected_paths` says which entries a refusal is about rather
+than calling itself a partial-batch failure, and the JSONL ingestion page states the rule
+once, for both tiers. The publisher-onboarding and
 verification-vendor pages had told a reader to build the catalog client against the
 Exchange's advertised `catalog_endpoint`; the address is configuration, and a deployment
 that does read it from a manifest MUST itself check the host binding that field states —
@@ -72,8 +75,8 @@ carries (a port is allowed; a scheme, path, query or userinfo is not; 260 bytes)
 is an absolute URL path (`^/[^?#\x00-\x20\x7f]*$`, 1–2048 bytes); `title` (512),
 `content_id` and `content_hash` (255), `hash_method` (64) and `provenance_source` (260)
 are length-bounded; `word_count` and `estimated_quantity` are non-negative;
-`attestations` carries at most 64 entries and `terms` at most 32 — the per-entry cap
-`CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED` names, stated on the wire so every
+`attestations` carries at most 64 entries and `terms` at most 32 — the cap
+`CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED` named, stated on the wire so every
 implementation refuses the same size. `content_hash` is deliberately not format-checked:
 a bare hex digest and a `method:hexdigest` form both travel today, and `hash_method`
 names the algorithm. `PushResourcesRequest.entries` and `RemoveResourcesRequest.paths`

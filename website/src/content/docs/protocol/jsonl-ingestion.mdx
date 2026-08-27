@@ -84,7 +84,7 @@ The check is advice about what the Exchange will say, not a substitute for it: t
 
 ## All-or-nothing
 
-`PushResources` is atomic at the wire tier: if any entry fails one of the rules above — the envelope rules or a term's shape and cross-field rules, all of them protovalidate rules applied at the RPC boundary — the **whole submission is rejected** (`InvalidArgument`, naming the offending entry) and **nothing is persisted**. The publisher fixes and resubmits the full set. The ingest tier that runs afterwards is per **entry**, not per submission: a bare unregistered `pricing.unit` or `quotas[].metric` rejects the entry that carries it and leaves the rest of the batch to upsert, which is why `PushResourcesResponse` answers with `accepted` and `rejected` counts rather than a single verdict. Membership / lint issues are returned in `PushResourcesResponse.warnings[]` and do not block.
+`PushResources` is atomic, at **both** tiers: if any entry fails a hard rule — the envelope rules above, a term's shape or cross-field rule, or a bare unregistered `pricing.unit` or `quotas[].metric` — the **whole submission is rejected** (`InvalidArgument`, naming the offending entries) and **nothing is persisted**. The publisher fixes and resubmits the full set. What the two tiers change is *when* the refusal happens, not what survives it: the wire tier refuses at the RPC boundary, before any entry is classified, while the ingest tier refuses after canonicalising the terms. Either way no entry of a refused submission is stored — naming the entries that failed is how the refusal tells you what to fix, not a sign that the rest went through. Membership / lint issues are returned in `PushResourcesResponse.warnings[]` and do not block.
 
 ## Extension profiles in the feed
 
