@@ -332,13 +332,45 @@ def test_the_depth_verdict_does_not_depend_on_the_runtime() -> None:
     assert check_registration_data(nest(MAX_REGISTRATION_DATA_DEPTH)) == "accepted"
     assert check_registration_data(nest(MAX_REGISTRATION_DATA_DEPTH + 1)) == "too_deep"
     # Far past every runtime limit measured, and still a verdict rather than a crash.
-    #
-    # This line also pins the ORDER: depth is checked before the payload is
-    # canonicalized. Canonicalize first and rfc8785 raises RecursionError on this input,
-    # which the caller reads as "uncanonicalizable", so the assertion below fails. That
-    # is why the Go and TypeScript ports carry an explicit precedence test and this one
-    # does not — do not delete this line as merely a runtime check.
     assert check_registration_data(nest(5000)) == "too_deep"
+
+
+def test_the_depth_bound_is_checked_before_the_payload_is_canonicalized() -> None:
+    """The order the proto states, on the one adjacent pair this port can get wrong.
+
+    A payload that breaks BOTH the depth bound and canonicalizability is refused for its
+    depth: the canonicalizability answer is only trustworthy once the payload is known to
+    be walkable at all.
+
+    Deliberately SHALLOW — one container past the cap, not thousands. The line above,
+    nest(5000), also answers too_deep under a swapped implementation, but only because
+    rfc8785 raises RecursionError on an input that deep and the caller reads that as
+    "uncanonicalizable"... which is the wrong verdict for the right reason, and it stops
+    being wrong-but-caught the moment rfc8785 canonicalizes iteratively or the recursion
+    limit is raised. This payload does not depend on any of that: nothing here is deep
+    enough for a runtime to complain, so the verdict can only come from the bound in the
+    contract.
+
+    Only the non-finite member of the uncanonicalizable class is testable here. The other
+    member — a protobuf Value with no kind set — has no Python spelling, because this port
+    is handed a decoded object rather than protobuf nodes. Go covers that one.
+
+    Mirrors the TypeScript test in sdk/ts/tests/registration-schema.parity.test.ts.
+    """
+
+    def nest(n: int) -> dict[str, Any]:
+        inner: dict[str, Any] = {"leaf": "x"}
+        for _ in range(n):
+            inner = {"n": inner}
+        return inner
+
+    deep = nest(MAX_REGISTRATION_DATA_DEPTH + 1)
+    payload = {"bad": float("nan"), "deep": deep}
+
+    # Both faults are really present, or the test proves nothing.
+    assert check_registration_data({"bad": float("nan")}) == "uncanonicalizable"
+    assert check_registration_data({"deep": deep}) == "too_deep"
+    assert check_registration_data(payload) == "too_deep"
 
 
 def test_a_long_flat_reference_chain_is_refused_without_exhausting_the_stack() -> None:

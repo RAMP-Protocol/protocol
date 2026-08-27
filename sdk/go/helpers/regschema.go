@@ -1635,11 +1635,17 @@ const (
 	//	a Value with NO MEMBER OF ITS KIND ONEOF SET, which protojson refuses with
 	//	"none of the oneof fields is set".
 	//
-	// Only CheckRegistrationDataStruct reaches this verdict, and neither member can be
-	// moved to the map-based face, because AsMap is not invertible for either one: a
-	// non-finite number arrives as the string "NaN", "Infinity" or "-Infinity", which a
-	// payload may also carry legitimately, and an unset kind arrives as nil, which is
-	// also what a real JSON null gives. Both lose the evidence before the check runs.
+	// BOTH entry points return this verdict. What differs is which payloads can still
+	// reach it. CheckRegistrationDataStruct sees the class in full, on the raw Struct.
+	// CheckRegistrationData sees only what survived into a Go map: a real float64 NaN or
+	// infinity still fails json.Marshal there, so a map a caller assembled by hand is
+	// answered correctly — but a map produced by AsMap has already lost the evidence,
+	// because AsMap is not invertible for either member. A non-finite number arrives as
+	// the string "NaN", "Infinity" or "-Infinity", which a payload may also carry
+	// legitimately, and an unset kind arrives as nil, which is also what a real JSON null
+	// gives. So neither member can be MOVED to the map-based face: not because that face
+	// cannot answer the verdict, but because after the conversion there is nothing left
+	// to answer it about.
 	//
 	// It is a verdict rather than an error because this face, like the rest of the
 	// registration surface, does not throw.
@@ -1669,14 +1675,19 @@ func (v RegistrationDataVerdict) String() string {
 // CheckRegistrationData bounds a submitted registration_data payload that has ALREADY
 // been converted to a Go map.
 //
-// PREFER CheckRegistrationDataStruct. An Exchange holds *structpb.Struct, and this
-// function cannot see a non-finite number once that Struct has been converted:
-// structpb renders a NaN or an infinity as the STRING "NaN", "Infinity" or
-// "-Infinity", and a string is a well-formed payload with nothing left to refuse. The
-// two cases are indistinguishable after the conversion, because an operator legally
-// named NaN is a valid string value that has to be accepted, so the check cannot be
-// recovered here at any cost — it has to run before the conversion. This function
-// remains for a caller whose payload never was a Struct.
+// PREFER CheckRegistrationDataStruct. An Exchange holds *structpb.Struct, and neither
+// member of the uncanonicalizable class survives the conversion to a map. structpb
+// renders a NaN or an infinity as the STRING "NaN", "Infinity" or "-Infinity", and a
+// string is a well-formed payload with nothing left to refuse; a Value with no kind set
+// renders as nil, which is what a real JSON null gives. Both are indistinguishable from
+// a legitimate payload afterwards — an operator legally named NaN is a valid string
+// value that has to be accepted — so neither check can be recovered here at any cost.
+// They have to run before the conversion.
+//
+// This function still ANSWERS that verdict, for a caller whose payload never was a
+// Struct: a map holding a real float64 NaN fails json.Marshal below and is refused. See
+// RegistrationDataUncanonicalizable. What it cannot do is see the cases a conversion
+// has already erased.
 //
 // data is the decoded object. A nil or empty payload is accepted: sending no business
 // data is a matter for the published schema's `required` list, not for a size bound.

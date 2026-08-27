@@ -487,19 +487,39 @@ func TestALiteralNonFiniteStringIsAccepted(t *testing.T) {
 // conversion never runs on a payload whose depth is still unknown, and the guard for it
 // is structural: registrationStructWalk is iterative.
 func TestTheRawEntryPointPinsTheOrderOfItsChecks(t *testing.T) {
-	t.Run("non-finite beats the byte cap", func(t *testing.T) {
+	t.Run("an uncanonicalizable value beats the byte cap", func(t *testing.T) {
 		// Both refusals apply. The proto pins this one, because a payload with no
 		// canonical form has no length, so "too large" would assert a measurement that
 		// was never taken.
-		payload, err := structpb.NewStruct(map[string]any{
-			"pad": strings.Repeat("x", helpers.MaxRegistrationDataBytes+1),
-			"n":   math.NaN(),
-		})
-		if err != nil {
-			t.Fatalf("structpb.NewStruct: %v", err)
-		}
-		if got := helpers.CheckRegistrationDataStruct(payload); got != helpers.RegistrationDataUncanonicalizable {
-			t.Fatalf("verdict = %s, want uncanonicalizable", got)
+		//
+		// Ranged over the WHOLE class, for the same reason the depth pair below is: the
+		// class has two members, and an order that held for one and not the other would
+		// be two different orders wearing one name. The unset-kind member is the one a
+		// test written before ramp-4c7 could not have covered, and it is also the one
+		// structpb.NewStruct cannot build — a Value with no kind set has to be written
+		// into the Struct directly.
+		for name, bad := range map[string]*structpb.Value{
+			"NaN":        structpb.NewNumberValue(math.NaN()),
+			"+Inf":       structpb.NewNumberValue(math.Inf(1)),
+			"-Inf":       structpb.NewNumberValue(math.Inf(-1)),
+			"unset kind": {},
+		} {
+			t.Run(name, func(t *testing.T) {
+				payload := &structpb.Struct{Fields: map[string]*structpb.Value{
+					"pad": structpb.NewStringValue(strings.Repeat("x", helpers.MaxRegistrationDataBytes+1)),
+					"bad": bad,
+				}}
+				// Both faults are really present, or the test proves nothing: the padding
+				// alone must already break the byte cap.
+				if got := helpers.CheckRegistrationData(map[string]any{
+					"pad": strings.Repeat("x", helpers.MaxRegistrationDataBytes+1),
+				}); got != helpers.RegistrationDataTooLarge {
+					t.Fatalf("the padding alone answers %s, so this payload does not break the byte cap", got)
+				}
+				if got := helpers.CheckRegistrationDataStruct(payload); got != helpers.RegistrationDataUncanonicalizable {
+					t.Errorf("verdict = %s, want uncanonicalizable", got)
+				}
+			})
 		}
 	})
 

@@ -1,6 +1,6 @@
 """Cross-field (message-CEL) validation — the one genuinely net-new L1 surface.
 
-Mirrors the sdk/ts sibling (sdk/ts/src/crossfield.ts). The 9 cross-field rules
+Mirrors the sdk/ts sibling (sdk/ts/src/crossfield.ts). The cross-field rules
 live ONLY in proto/ramp/v1/ramp.proto as protovalidate message-CEL options; the
 Go oracle executes them via protovalidate. Field-level Pydantic (gen/python) and
 Zod cannot express them. This layer closes that gap on the Python side: it

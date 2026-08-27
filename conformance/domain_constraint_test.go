@@ -45,10 +45,11 @@ var malformedDomains = []struct{ name, value string }{
 // to be on. It is a ratchet, not a description: see the exact-count check below.
 const wantDomainFields = 17
 
-// digestPattern is the "method:hexdigest" shape, carried by License.uri_digest,
-// WellKnownManifest.terms_digest and RegisterRequest.terms_digest. Three copies
-// of one rule is exactly the shape that drifts, so it gets the same
-// descriptor-derived membership check as the domain family.
+// digestPattern is the "method:hexdigest" shape. Several fields carry it, and which
+// ones is read from the descriptor by the membership check below rather than listed
+// here — a list in a comment is exactly the copy that drifts, and this one already had:
+// it named three fields on the day a fourth was added. Copies of one rule are the shape
+// that drifts, so the family gets the same descriptor-derived check as the domain one.
 const digestPattern = `^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$`
 
 const wantDigestFields = 4

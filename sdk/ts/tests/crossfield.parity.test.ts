@@ -4,9 +4,10 @@
 //
 // Mirrors the sdk/go oracle test TestValidate_enforcesCrossFieldCEL
 // (sdk/go/helpers/validate_corpus_test.go) against the SHARED corpus
-// conformance/corpus/crossfield.json (9 cases / 7 messages: License,
-// LicenseTerm, Obligation, Pricing, RegistrationFailure, Restriction,
-// WellKnownManifest).
+// conformance/corpus/crossfield.json. Which messages and how many cases is read
+// from the corpus itself rather than written down here: the counts in this comment
+// went stale one commit after the last expansion, and a number nothing checks is a
+// number that drifts.
 //
 // The Go oracle asserts TWO things per mutant, not pass/fail only:
 //   (1) the invalid instance is REJECTED, and
@@ -30,6 +31,7 @@ import { describe, it, expect } from "vitest";
 import { crossFieldRuleIds } from "../src/crossfield.ts";
 import * as crossfieldModule from "../src/crossfield.ts";
 import * as baseSchemas from "../../../gen/ts/wire/schemas.ts";
+import { parseWire, underWirePolicy, WireNamingError } from "../../../gen/ts/wire/base.ts";
 import crossfield from "../../../conformance/corpus/crossfield.json";
 // Reference generated vocabulary tokens rather than string literals for the
 // axis-value fields (restriction terms use the FUNCTION token vocabulary).
@@ -290,6 +292,90 @@ describe("sdk/ts composed schemas actually run the cross-field layer", () => {
     expect(
       checked,
       "every crossfield mutant was already refused at field level, so this test exercised no composed schema at all",
+    ).toBeGreaterThan(0);
+  });
+});
+
+// Pins the composed schemas to the WIRE POLICY. A composed export is what a consumer is
+// told to parse with, and it is a refinement wrapped around the generated object rather
+// than the object itself. gen/ts/wire/base.ts drives its policy by INSPECTING the schema —
+// unknown keys, a lowerCamelCase alias, a null that means unset — so a wrapper it cannot
+// see through turns the whole policy off for that message while every direct safeParse
+// test stays green. That is what happened: a camelCase answer parsed successfully into a
+// message with every multiword field missing, and the cross-field rule that needed one of
+// those fields could not fire.
+//
+// Driven through parseWire and underWirePolicy on purpose. A direct composed.safeParse —
+// which the block above does, for the rule ids — never reaches the policy at all.
+describe("sdk/ts composed schemas parse under the same wire policy as their base", () => {
+  const camel = (k: string): string => k.replace(/_([a-z])/g, (_m, c: string) => c.toUpperCase());
+
+  it("a lowerCamelCase alias is refused on the composed schema", () => {
+    const composed = crossfieldModule.GetAccountStatusResponseCrossFieldSchema;
+    expect(() =>
+      parseWire(composed, {
+        ver: "1.0",
+        billingRef: "acct-1",
+        termsDigest: "sha256:abababababababababababababababababababababababababababababababab",
+      }),
+    ).toThrow(WireNamingError);
+  });
+
+  it("a null still means unset, so a valid message is accepted", () => {
+    const composed = crossfieldModule.GetAccountStatusResponseCrossFieldSchema;
+    const got = parseWire(composed, {
+      ver: "1.0",
+      billing_ref: "acct-1",
+      active: true,
+      terms_digest: null,
+    });
+    expect(got.success, "a null on an unset field must not be a refusal").toBe(true);
+  });
+
+  it("a field-valid snake_case mutant is refused", () => {
+    // The rule id is NOT asserted here: parseWire answers { success: false } and discards
+    // the issues. The block above owns rule-id coverage, through a direct safeParse.
+    const composed = crossfieldModule.GetAccountStatusResponseCrossFieldSchema;
+    const got = parseWire(composed, {
+      ver: "1.0",
+      terms_digest: "sha256:abababababababababababababababababababababababababababababababab",
+    });
+    expect(got.success, "the composed schema accepted a payload its own rule forbids").toBe(false);
+  });
+
+  // Every composed export, not only the one the branch added: the defect was in the seam,
+  // so it applied to all of them at once and a fix that closes one closes all.
+  it("every composed export applies the policy its base applies", () => {
+    let aliased = 0;
+    for (const c of crossfield as CorpusCase[]) {
+      const composed = (crossfieldModule as Record<string, unknown>)[
+        `${c.message}CrossFieldSchema`
+      ];
+      const base = (baseSchemas as Record<string, unknown>)[`${c.message}Schema`];
+      expect(composed, `no composed schema for ${c.message}`).toBeDefined();
+
+      expect(
+        underWirePolicy(composed, c.json, ""),
+        `${c.id}: composed schema saw a different policy than its base`,
+      ).toEqual(underWirePolicy(base, c.json, ""));
+
+      // The alias probe is derived from the SCHEMA, not from the corpus payload: only three
+      // of the ten corpus cases happen to carry a multiword key, and a probe built from
+      // them would leave five of the eight messages untested for the half of the policy
+      // that refuses. Every message with a multiword field on it is probed here.
+      const shape = (base as { shape: Record<string, unknown> }).shape;
+      const multiword = Object.keys(shape).find((k) => k.includes("_"));
+      if (multiword === undefined) continue;
+      aliased += 1;
+      const alias = { ...(c.json as Record<string, unknown>), [camel(multiword)]: "x" };
+      expect(
+        () => underWirePolicy(composed, alias, ""),
+        `${c.id}: composed schema accepted a lowerCamelCase alias its base refuses`,
+      ).toThrow(WireNamingError);
+    }
+    expect(
+      aliased,
+      "no message carried a multiword field, so the alias half of the policy was never probed",
     ).toBeGreaterThan(0);
   });
 });

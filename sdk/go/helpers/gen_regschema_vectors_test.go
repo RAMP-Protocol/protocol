@@ -246,6 +246,22 @@ func buildRegDataVectors(t *testing.T) []regDataVector {
 		// The member cap, on the nose and one over.
 		{"members_at_the_cap", wide(MaxRegistrationDataMembers), RegistrationDataAccepted},
 		{"members_over_the_cap", wide(MaxRegistrationDataMembers + 1), RegistrationDataTooManyMembers},
+		// BOTH bounds broken at once, and the answer names the FIRST check in the proto's
+		// order. Every other case here breaks exactly one bound, so the order between the
+		// two counts is a thing all three ports could disagree about while every vector
+		// passed: swapping them still refuses this payload, just under the other name, and
+		// an agent that switches on the verdict is told the wrong thing about its payload.
+		// The pair is a vector rather than three separate language tests because the order
+		// is the contract's, not one implementation's.
+		{
+			"members_over_the_cap_and_nesting_over_the_depth_cap",
+			func() map[string]any {
+				out := wide(MaxRegistrationDataMembers + 1)
+				out["deep"] = nestedPayload(MaxRegistrationDataDepth + 1)
+				return out
+			}(),
+			RegistrationDataTooManyMembers,
+		},
 		// The byte cap, on the nose and one over.
 		{"bytes_at_the_cap", atCap(MaxRegistrationDataBytes), RegistrationDataAccepted},
 		{"bytes_over_the_cap", atCap(MaxRegistrationDataBytes + 1), RegistrationDataTooLarge},

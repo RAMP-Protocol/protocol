@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+**A cross-field refinement turned off the wire policy for the whole message (TypeScript
+SDK fix; no wire change).** The composed cross-field schemas are the surface a TypeScript
+consumer is told to parse with, and each one is a Zod refinement wrapped AROUND the
+generated object rather than the object itself. `parseWire` drives its policy by
+INSPECTING the schema it is handed — strip unknown keys, refuse a lowerCamelCase
+`json_name` alias, read a `null` as no value — and a wrapper it could not see through was
+returned untouched.
+
+So no TypeScript code path applied the wire policy and the cross-field rules to the same
+payload. A camelCase answer parsed SUCCESSFULLY into a message with every multiword field
+missing, which is exactly what the alias refusal exists to prevent, and
+`get_account_status_response.terms_digest_requires_billing_ref` could not fire on the
+payload it was written for: `terms_digest` had already been dropped as an unknown key, and
+the call reported success. All eight composed schemas behaved this way, and the rule added
+earlier in this release was the eighth. Python was never affected — its composed model
+subclasses the generated model and inherits the wire validator.
+
+The policy seam now peels a refinement when it INSPECTS a schema, and still hands the
+ORIGINAL schema to `safeParse`, so the refinement itself runs unchanged. The wrapper is
+read as a method rather than by naming `z.ZodEffects`, which keeps the file working under
+both Zod majors: Zod 4 has no such class, and a refinement there keeps the schema's own
+type, so there is nothing to peel.
+
 **`REGISTRATION_FAILURE_REASON_ALREADY_REGISTERED` is deprecated and never emitted, and
 the schema gate now states its account-creation-only scope (comment and enum
 deprecation; no wire change).** The repeat-registration rule added earlier in this
