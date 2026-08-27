@@ -185,7 +185,11 @@ var patternKillers = map[string][]string{
 
 // resourcePathPattern is the absolute-path shape ResourceEntry.path and
 // RemoveResourcesRequest.paths carry, quoted from the proto for the same
-// reason bareDomainPattern is.
+// reason bareDomainPattern is — and, like it, a drift between this copy and the
+// fields is caught by conformance's own descriptor guard, not here. That matters
+// more for this one than for a plain constant: the killer table above is keyed by
+// the pattern STRING, so a stale key would emit nothing at all rather than
+// something wrong.
 const resourcePathPattern = `^/[^?#\x00-\x20\x7f]*$`
 
 // bareDomainPattern is the recipient-host shape, quoted from the proto so the

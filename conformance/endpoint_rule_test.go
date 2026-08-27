@@ -184,9 +184,18 @@ func TestEndpointCorpusIsNotVacuous(t *testing.T) {
 const catalogEndpointDecl = "optional string catalog_endpoint = 14"
 
 // TestCatalogEndpointCommentStatesTheSameClauses holds the catalog endpoint's
-// comment to the identical clause set. The two fields share one predicate in
-// every SDK, so a clause present on one comment and absent from the other is a
-// contract that says two different things about one rule.
+// comment to the identical clause set, so a clause present on one comment and
+// absent from the other cannot make the contract say two different things about
+// one rule.
+//
+// Note precisely what this guards, and what it does not. It compares two COMMENTS.
+// No SDK reads catalog_endpoint at all today — the catalog client takes its address
+// as configuration and the endpoint predicate is reachable only from the agent
+// endpoint's resolver — so nothing here proves any code obeys the rule the comment
+// states. The rule is a consumer obligation a deployment that reads the field from
+// a manifest must honour itself; a resolver that would make it callable is the
+// recorded follow-up, and this guard is what keeps the two statements of it aligned
+// until then.
 func TestCatalogEndpointCommentStatesTheSameClauses(t *testing.T) {
 	comment := fieldComment(t, catalogEndpointDecl)
 
