@@ -56,6 +56,7 @@ from ._call import (
     rpc_url,
     validate_request,
 )
+from .._hostref import _redact_userinfo as redact_userinfo
 from ..hosts import is_bare_host
 from .errors import CallError, CallErrorKind, malformed, not_sent
 from .route import EndpointResolver, vet_exchange_endpoint
@@ -540,6 +541,13 @@ def _stamp_ver(op: str, message: dict[str, Any]) -> dict[str, Any]:
 
 
 def _require_recipient(op: str, exchange: str) -> None:
+    """Refuse a catalog request whose recipient is missing or not a bare host.
+
+    The refused value is redacted before it is named. ``is_bare_host`` returns False
+    for a reference carrying userinfo, so a mistyped credential would otherwise reach
+    the message below verbatim; the routing check next door redacts for the same
+    reason, and a tier that echoes is the drift ``_redact_userinfo`` exists to prevent.
+    """
     if exchange == "":
         raise not_sent(op, "request names no recipient; set exchange to the Exchange's bare domain")
     try:
@@ -547,7 +555,7 @@ def _require_recipient(op: str, exchange: str) -> None:
     except ValueError as exc:
         raise not_sent(op, exc) from exc
     if not bare:
-        raise not_sent(op, f"exchange {exchange!r} is not a bare host")
+        raise not_sent(op, f"exchange {redact_userinfo(exchange)!r} is not a bare host")
 
 
 # ---------------------------------------------------------------------------

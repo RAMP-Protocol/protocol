@@ -10,6 +10,7 @@ import (
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/hostredact"
 )
 
 // CatalogClient is the Connect client for CatalogService — the publisher role's
@@ -159,16 +160,21 @@ func stampVer(ver *string) {
 // names the remedy instead of relaying a validation failure from a round trip
 // away. It is a refusal to send, not a malformed message: the same verdict a
 // report or a dispute with no routable recipient gets.
+//
+// The refused value is redacted before it is named. IsBareHost returns (false, nil)
+// for a reference carrying userinfo, so a mistyped credential reaches the message
+// below verbatim; the routing check next door redacts for the same reason, and a
+// tier that echoes is the drift hostredact exists to prevent.
 func requireRecipient(op, exchange string) error {
 	if exchange == "" {
 		return notSent(op, errors.New("request names no recipient; set exchange to the Exchange's bare domain"))
 	}
 	bare, err := helpers.IsBareHost(exchange)
 	if err != nil {
-		return notSent(op, fmt.Errorf("exchange %q: %w", exchange, err))
+		return notSent(op, fmt.Errorf("exchange %q: %w", hostredact.Userinfo(exchange), err))
 	}
 	if !bare {
-		return notSent(op, fmt.Errorf("%w: exchange %q is not a bare host", helpers.ErrInvalidHost, exchange))
+		return notSent(op, fmt.Errorf("%w: exchange %q is not a bare host", helpers.ErrInvalidHost, hostredact.Userinfo(exchange)))
 	}
 	return nil
 }

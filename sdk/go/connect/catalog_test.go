@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -245,5 +246,28 @@ func TestCatalog_TypedRejectionIsReadable(t *testing.T) {
 	}
 	if got := detail.GetCatalogRejection().GetReason(); got != rampv1.CatalogRejectionReason_CATALOG_REJECTION_REASON_NOT_CATALOG_CONTRIBUTOR {
 		t.Errorf("reason = %v, want NOT_CATALOG_CONTRIBUTOR", got)
+	}
+}
+
+// A recipient carrying userinfo is refused, and the refusal must not repeat the
+// credential. IsBareHost answers (false, nil) for such a value — it is a verdict,
+// not a parse error — so the value reaches the message and would be echoed whole
+// unless the refusal redacts it. The routing check next door already redacts; this
+// pins the catalog leg to the same rule.
+func TestCatalog_RefusalRedactsACredentialInTheRecipient(t *testing.T) {
+	t.Parallel()
+	client := rampconnect.NewCatalogClient("https://exchange.test")
+
+	_, err := client.PushResources(context.Background(), &rampv1.PushResourcesRequest{
+		Exchange: "publisher:s3cr3t@exchange.test", TenantId: "t", CallerId: "c",
+		Entries: []*rampv1.ResourceEntry{{Domain: "publisher.test", Path: "/x"}},
+	})
+	if err == nil {
+		t.Fatal("a recipient carrying userinfo was accepted")
+	}
+	if got := err.Error(); strings.Contains(got, "s3cr3t") {
+		t.Errorf("the refusal repeats the credential: %s", got)
+	} else if !strings.Contains(got, "[redacted]") {
+		t.Errorf("the refusal does not name the redaction: %s", got)
 	}
 }

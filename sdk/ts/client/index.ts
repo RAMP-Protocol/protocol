@@ -22,6 +22,7 @@ import type { z } from "zod";
 import { clockWindow, type Window } from "../core/window.ts";
 import { fromWireOffer } from "../core/wire-canon.ts";
 import { signOfferAcceptance, ACCEPTANCE_SIGNATURE_ALGORITHM } from "../src/acceptance.ts";
+import { redactUserinfo } from "../src/host-ref.ts";
 import { isBareHost } from "../src/hosts.ts";
 import { generateIdempotencyKey } from "../src/idempotency.ts";
 import { ProtocolVersion } from "../src/wire.ts";
@@ -838,6 +839,10 @@ function stampVer(op: string, message: Record<string, unknown>): Record<string, 
 	return sent;
 }
 
+// The refused value is redacted before it is named. isBareHost returns false for a
+// reference carrying userinfo, so a mistyped credential reaches the message below
+// verbatim; the routing check next door redacts for the same reason, and a tier
+// that echoes is the drift redactUserinfo exists to prevent.
 function requireRecipient(op: string, exchange: string): void {
 	if (exchange === "") {
 		throw notSent(op, new Error("request names no recipient; set exchange to the Exchange's bare domain"));
@@ -849,7 +854,7 @@ function requireRecipient(op: string, exchange: string): void {
 		throw notSent(op, cause);
 	}
 	if (!bare) {
-		throw notSent(op, new Error(`exchange ${JSON.stringify(exchange)} is not a bare host`));
+		throw notSent(op, new Error(`exchange ${JSON.stringify(redactUserinfo(exchange))} is not a bare host`));
 	}
 }
 
