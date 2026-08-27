@@ -63,6 +63,44 @@ own. The docs' vocabulary tables render the aliases from the same descriptor opt
 *Tooling:* the three generated alias maps are held to one answer per axis, and to the
 registry, the way the token sets already are.
 
+**The SDK serves the publisher role, in all three languages (no wire change;
+conformance-affecting).** Three additions, one per gap. A catalog client —
+`connect.NewCatalogClient` in Go, `createCatalogClient` in TypeScript, `CatalogClient`
+(async, with a blocking twin under `ramp_sdk.sync`) in Python — issues `PushResources`,
+`RemoveResources` and `RefreshCatalog` under the same names in each language, over the
+same signing transport, redirect refusal, request-id and validate interceptors and read
+cap as the agent verbs. It is a separate constructor because CatalogService is a separate
+address (`WellKnownManifest.catalog_endpoint`) and its caller holds a contributor key
+named by `caller_id`; the publisher chose the Exchange, so the leg runs on the plain
+transport. The messages carry no idempotency key and the client mints none; `ver` is
+stamped when empty; a request that names no bare-host recipient is refused before it is
+signed. The client-request corpus gains the three verbs, replayed in all three languages.
+
+The ingest-tier license-term checks moved out of the reference Exchange into the L1
+helpers — `NormalizeLicenseTerm`, `NormalizeResourceEntry`, `ValidateLicenseTerm`,
+`ValidateResourceEntry`, `CanonicalRestrictionToken`, `KnownRestrictionToken` in Go, the
+same faces in snake and camel case in Python and TypeScript — so a publisher runs the
+checks the Exchange will run before sending: RFC 8259 trim, ASCII-only case fold, alias
+resolution through the generated vocabulary, a hard reject for a bare unregistered
+`Pricing.unit` or `Quota.metric`, a warning for an unregistered restriction token or an
+`OBLIGATION_KIND_OTHER` obligation without detail, and a per-entry verdict composing the
+wire tier and the ingest tier in the Exchange's order. Warning messages are the exact
+wire strings. A new Go-emitted corpus (`licenseterm-vectors.json`: fold, normalize, known,
+validate, entry) is replayed by both ports, and a conformance guard holds the SDK rule
+ids to the descriptor's CEL-id namespace without collisions.
+
+`connectserver.NewCatalogServiceHandler` composes the same request-id · verify · validate
+· error-detail stack over the generated CatalogService handler, so an Exchange
+implementer has a server-side starting point for the publisher-facing RPCs; contributor
+authorisation, tenant binding and per-entry verdicts stay the handler's job.
+
+*Parity record:* thirteen L1 exports and the catalog client are mapped at
+three-language parity (130 symbols, 34 corpora). Two documented divergences join the
+record — the catalog client's Go factory folds into the Python constructor as every other
+`NewX` does, and the Catalog handler binding is a third symbol under the recorded
+full-Connect-handler decision — so the shrink-only allowlist baseline moves 14 → 16 as a
+reviewed bump, and the gate now names that one sanctioned growth shape.
+
 **The TypeScript and Python SDKs gained a client, and it changed what they accept
 from a peer (no wire change; conformance-affecting).** Neither could SEND a RAMP
 request before; both now speak the Connect-unary JSON form the protocol's unary RPCs

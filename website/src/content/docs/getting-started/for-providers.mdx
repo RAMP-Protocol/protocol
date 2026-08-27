@@ -159,7 +159,7 @@ As a provider, you can sign claims about your own resources — Level 1 self-att
 
 1. You compute a SHA-256 hash of the resource content at publish time (or catalog push time)
 2. You sign a `ResourceAttestation` with your Ed25519 key, covering the content hash, quantity estimates, and other claims
-3. The attestation is pushed to the Exchange via `CatalogService.PushResources`
+3. The attestation is pushed to the Exchange via `CatalogService.PushResources` — the SDK's catalog client in Go, TypeScript or Python signs and sends it, and pre-checks the entry first (see [Publisher Onboarding](/getting-started/publisher-onboarding/#push-your-catalog-with-the-sdk))
 4. When an agent fetches your resource, it can recompute the hash and verify the match
 
 <Aside type="note">

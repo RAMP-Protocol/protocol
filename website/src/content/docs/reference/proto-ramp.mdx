@@ -288,6 +288,8 @@ The account's current state. `billing_ref` is empty when the calling agent has n
 
 Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchange, broker, publisher). Single canonical document, role-tagged via `role`. Signing keys are **not** carried here — each participant publishes them in its WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`, modeled by [`WBAFile`](#wbafile)). Per-role fields are populated only when that role applies; consumers MUST ignore non-applicable fields based on `role`.
 
+Two advertised addresses carry the same host binding: `endpoint` (ExchangeService) and `catalog_endpoint` (CatalogService) MUST each be on the host and port that serve the manifest, or a subdomain of that host on that port, and MUST NOT carry userinfo — a consumer refuses either anywhere else, because a signed call goes to that address and a manifest naming an unrelated host would redirect it to a party the signature never covered. An absent `catalog_endpoint` means the Exchange does not expose CatalogService; a consumer does not fall back to `endpoint`. See [Endpoint host binding](/protocol/exchange-manifest/#endpoint-host-binding).
+
 ::proto-message{name=WellKnownManifest}
 
 ### AccountRegistration
@@ -355,17 +357,26 @@ Broker returns to Agent (Step 6). Discovery-only: `offer_groups` (field 4, one `
 
 ## Messages -- CatalogService
 
-Messages for the optional CatalogService RPC.
+Messages for the optional CatalogService RPC — the publisher role's surface: push, remove and refresh the catalog entries a publisher, or a contributor it authorised, supplies to an Exchange.
+
+Every pushed entry is checked in two tiers, and both are stated so a publisher can run them before sending. The **wire tier** is protovalidate: the `ResourceEntry` envelope rules below and the `LicenseTerm` rules, applied to the request exactly as received. The **ingest tier** runs over the canonicalised terms: restriction tokens are trimmed of RFC 8259 whitespace, ASCII-case-folded (lower for `RESTRICTION_KIND_FUNCTION` and `RESTRICTION_KIND_USER_TYPE`, upper for `RESTRICTION_KIND_GEOGRAPHY`; a non-ASCII byte is never folded) and alias-resolved to their registered token; then a bare (non-namespaced) `Pricing.unit` or `Quota.metric` that is not a registered token is rejected, while an unregistered restriction token and an `OBLIGATION_KIND_OTHER` obligation without detail are accepted and reported in `PushResourcesResponse.warnings`. The SDK ships both tiers (`ValidateResourceEntry` and its Python/TypeScript twins) and a catalog client (`NewCatalogClient` / `createCatalogClient` / `CatalogClient`) in all three languages; the Exchange's own run of the checks is the deciding one.
 
 ### PushResourcesRequest
 
-Push or update content entries in the Exchange catalog.
+Push or update content entries in the Exchange catalog. `entries` carries at least one entry; an empty push is refused rather than answered with zero counts. `exchange` is the bare domain of the Exchange the push is meant for (the recipient-addressing rule), and `caller_id` names the contributor whose key signed the request.
 
 ::proto-message{name=PushResourcesRequest}
 
 ### ResourceEntry
 
-A single resource catalog entry.
+A single resource catalog entry. The envelope carries its own wire rules — an entry that cannot become a catalog URI, or that would let one entry cost unbounded work, is refused at the boundary:
+
+- `domain` is a bare host in the recipient-addressing shape (a port is allowed; a scheme, path, query or userinfo is not; at most 260 bytes). With `path` it forms the catalog URI by concatenation, so anything but a host would choose the URI rather than name the host.
+- `path` is an absolute URL path: it starts with `/`, carries no `?` or `#`, no whitespace and no control byte, and is 1–2048 bytes.
+- `title` (512), `content_id` and `content_hash` (255), `hash_method` (64) and `provenance_source` (260) are length-bounded. `content_hash` is deliberately not format-checked — a bare hex digest and a `method:hexdigest` form both travel — because `hash_method` names the algorithm.
+- `word_count` and `estimated_quantity` are non-negative.
+- `attestations` carries at most 64 entries and `terms` at most 32 — the per-entry cap `CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED` names, stated on the wire so every implementation refuses the same size.
+- `resource_mutability`, when present, must not be `RESOURCE_MUTABILITY_UNSPECIFIED`; omitted, the Exchange applies `RESOURCE_MUTABILITY_STATIC` at Offer build.
 
 ::proto-message{name=ResourceEntry}
 
@@ -376,6 +387,8 @@ The `accepted` / `rejected` counts are entry-level tallies of a successful push 
 ::proto-message{name=PushResourcesResponse}
 
 ### RemoveResourcesRequest
+
+`paths` carries at least one path, each in the same absolute-path shape `ResourceEntry.path` carries.
 
 ::proto-message{name=RemoveResourcesRequest}
 
@@ -407,7 +420,9 @@ code is the cross-field CEL rule `id:` that enforces the rule (e.g. `license_ter
 - `semantics` MUST be set — `TERM_SEMANTICS_UNSPECIFIED` is rejected (the field's `enum.not_in:[0]` rule).
 - `REFERENCE_ONLY` requires `license.uri` to be non-empty (`license_term.reference_only.requires_uri`); a `License` with a `uri` requires a `uri_digest` (`license.digest_required_with_uri`).
 - At most one `Restriction` per `kind` (`license_term.one_restriction_per_kind`); a token cannot be both permitted and prohibited (`restriction.permitted_prohibited_disjoint`).
-- Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause hard rejection (ingest-time, not CEL).
+- Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause hard rejection (ingest-time, not CEL). Tokens are canonicalised first — RFC 8259 whitespace trimmed, ASCII case folded, and the aliases authored beside the tokens resolved (`train-ai` → `ai-train`, `tdm` → `text-and-data-mining`, `personal` → `individual`, …) — so `Generative-AI` is the registered `ai-input`, not an unknown token.
+- A bare (non-namespaced) `pricing.unit` or `quotas[].metric` that is not a registered token IS a hard rejection at ingest (registry membership, not CEL: a rule that re-listed the vocabulary would drift from it). A `vendor:token` value bypasses membership on every axis.
+- The same checks ship in the SDK as a publisher pre-check (`ValidateLicenseTerm` / `ValidateResourceEntry` and their Python and TypeScript twins); the Exchange's own run is the deciding one.
 
 ::proto-message{name=LicenseTerm}
 

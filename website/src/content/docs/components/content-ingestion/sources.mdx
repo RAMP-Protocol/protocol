@@ -256,6 +256,50 @@ CatalogService is NOT how Exchange operators push their own inventory. Exchange 
 
 The Exchange verifies the RFC 9421 signature against the caller's published Ed25519 key in its WBA directory (the JWK Set at `{caller domain}/.well-known/http-message-signatures-directory`), identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`), and confirms that `caller_id` is authorized to push content for the specified `tenant_id`.
 
+### Pushing with the Publisher SDK
+
+The SDK carries the publisher role in all three languages: a catalog client that signs and sends the three CatalogService verbs, and the Exchange's own two validation tiers as a pre-check. The client is a separate constructor from the agent client because CatalogService is a separate address (the manifest's `catalog_endpoint`) and its caller holds a contributor key named by `caller_id`; the publisher chose the Exchange, so the origin is configuration.
+
+```go
+client := connect.NewCatalogClient(catalogEndpoint, connect.WithSigner(contributorSigner))
+if v := helpers.ValidateResourceEntry(entry); !v.OK() {   // what the Exchange will say, before signing
+    return fmt.Errorf("entry refused: %+v", v.Violations)
+}
+resp, err := client.PushResources(ctx, &rampv1.PushResourcesRequest{
+    Exchange: "exchange.example", TenantId: tenantID, CallerId: "publisher.example",
+    Entries:  []*rampv1.ResourceEntry{entry},
+})
+```
+
+```typescript
+import { createCatalogClient } from "@ramp-protocol/sdk/client";
+import { validateResourceEntry } from "@ramp-protocol/sdk/licenseterm";
+
+const client = createCatalogClient(catalogEndpoint, { signer: contributorSigner });
+const verdict = validateResourceEntry(entry);
+if (!verdict.ok) throw new Error(JSON.stringify(verdict.violations));
+const resp = await client.pushResources({
+  exchange: "exchange.example", tenant_id: tenantId, caller_id: "publisher.example",
+  entries: [entry],
+});
+```
+
+```python
+from ramp_sdk import validate_resource_entry
+from ramp_sdk.client import CatalogClient, ClientConfig
+
+verdict = validate_resource_entry(entry)
+if not verdict.ok:
+    raise ValueError(verdict.violations)
+async with CatalogClient(ClientConfig(base_url=catalog_endpoint, signer=contributor_signer)) as client:
+    resp = await client.push_resources({
+        "exchange": "exchange.example", "tenant_id": tenant_id, "caller_id": "publisher.example",
+        "entries": [entry],
+    })
+```
+
+`ver` is stamped when the caller leaves it empty; no idempotency key is minted, because the catalog messages carry none — a push is an upsert. A request whose `exchange` is empty or not a bare host is refused before it is signed. The pre-check is advice about what the Exchange will say; the Exchange re-runs both tiers on every push and its verdict decides. The JSONL feed, a sitemap, an RSL file, a crawl or a CMS plugin are inputs that converge on the same `ResourceEntry`; the SDK owns the shape, its validation and the push, never the source.
+
 ### Third-Party Content Intelligence and Verification Vendors (v1.0)
 
 Companies like GumGum, Peer39, and DoubleVerify already index the web for contextual ad targeting. They can implement `CatalogService.PushResources` to feed enriched content metadata (topic, token estimates, content categorization) and signed `ResourceAttestation` entries to Exchanges.

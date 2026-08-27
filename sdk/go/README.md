@@ -9,7 +9,7 @@ directly with no `replace` directive.
 | **L0** | `gen/go/ramp/v1`, `gen/go/vocab/*` | generated wire types (consumed, never rebuilt) |
 | **L1** | **`sdk/go/helpers`** | stateless, **IO-free** protocol helpers — RFC 9421/7638 crypto, offer/acceptance verify, static key resolution, validation |
 | L2 · I/O | **`sdk/go/resolvers`** | the network-fetching tier: well-known JWKS / WBA directory / `ramp.json` endpoint / offer-key resolvers + the SSRF-guarded HTTP client. Runs on a maintained `net/http` client behind the SSRF guard; composes L1, never the reverse |
-| L2 · transport | `sdk/go/core` (transport-neutral: Verifier, {verified,rejected}, `DiscoveryResult` per-URI groups, VerifiedOffer guard, signing RoundTripper, ReplayStore — zero Connect) · `sdk/go/connect` (Connect **client** binding: `NewClient` + `NewBrokerClient` + the agent verbs **`Discover` · `Resolve` · `Execute` · `ReportUsage` · `Dispute` · `Fetch`** + client options + the `CallError` taxonomy + `ErrorDetailFrom`) · `sdk/go/connectserver` (Connect **server** binding: `NewExchangeServiceHandler` + server options + `AsConnectError` + `AttachErrorDetail`/`AttachDetail` + reject→code) | transport-neutral core + Connect client/server bindings (state injected) |
+| L2 · transport | `sdk/go/core` (transport-neutral: Verifier, {verified,rejected}, `DiscoveryResult` per-URI groups, VerifiedOffer guard, signing RoundTripper, ReplayStore — zero Connect) · `sdk/go/connect` (Connect **client** binding: `NewClient` + `NewBrokerClient` + `NewCatalogClient`; the agent verbs **`Discover` · `Resolve` · `Execute` · `ReportUsage` · `Dispute` · `Fetch`** and the publisher verbs **`PushResources` · `RemoveResources` · `RefreshCatalog`** + client options + the `CallError` taxonomy + `ErrorDetailFrom`) · `sdk/go/connectserver` (Connect **server** binding: `NewExchangeServiceHandler` + `NewBrokerServiceHandler` + `NewCatalogServiceHandler` + server options + `AsConnectError` + `AttachErrorDetail`/`AttachDetail` + reject→code) | transport-neutral core + Connect client/server bindings (state injected) |
 | L3 | separate packages | framework adapters (convert, never replace) — later |
 
 The `L2` tier is split by kind: the **I/O** package (`resolvers`) is the only tier
@@ -43,6 +43,18 @@ _ = helpers.SignRequest(ctx, req, body, signer,
 vr, err := helpers.VerifyRequest(req, body, pub, helpers.VerifyOptions{})
 // ... or resolve the key via a KeyResolver (static in L1; well-known/WBA in L2 resolvers):
 vr, err = helpers.VerifyRequestResolved(ctx, req, body, resolver, helpers.VerifyOptions{})
+```
+
+**License-term pre-check** — the two tiers an Exchange applies to a pushed entry,
+runnable by a publisher before signing: the wire rules over the entry as given, then
+canonicalisation (RFC 8259 trim, ASCII-only fold, alias resolution through the generated
+vocabulary) and registry membership over a copy of its terms. Warning messages are the
+exact `PushResourcesResponse.warnings` strings; rule ids share the CEL-id namespace:
+
+```go
+verdict := helpers.ValidateResourceEntry(entry)   // never modifies entry
+for _, v := range verdict.Violations { log.Println(v.Rule, v.Path, v.Message) }
+helpers.NormalizeResourceEntry(entry)             // the form the Exchange stores
 ```
 
 **Offer authenticity** — verify a received offer before selecting on it (the gap

@@ -145,6 +145,8 @@ POST /ramp.v1.CatalogService/PushResources
 
 The request itself is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) in the HTTP headers (not an in-message field); `caller_id` identifies the pusher.
 
+You do not hand-roll that call. The SDK's catalog client — `connect.NewCatalogClient` (Go), `createCatalogClient` (TypeScript), `ramp_sdk.client.CatalogClient` (Python) — builds, signs and sends it against the Exchange's `catalog_endpoint`, and `validateResourceEntry` and its twins run the Exchange's own envelope and term checks on each entry before anything is signed. See [Source 7: CatalogService API Push](/components/content-ingestion/sources/#source-7-catalogservice-api-push) for the three-language example.
+
 The same `PushResources` API works regardless of domain. A de-identification auditor pushing HIPAA compliance attestations for medical imaging uses the same endpoint — only the `claims` content differs.
 
 The Exchange verifies your signature using your public key from your WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`), identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`), confirms you are listed in the provider's `catalog_contributors`, and attaches your attestation to the catalog entry.

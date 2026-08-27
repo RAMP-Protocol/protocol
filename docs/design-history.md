@@ -1062,6 +1062,127 @@ dial) and the **I/O resolvers tier** (vetted maintained client, SSRF-guarded) ar
 distinct tiers with opposite dependency policies, and "no httpx" is a property of the
 core alone, never of the whole SDK above L1.
 
+## The publisher's pre-check is the Exchange's check, lifted one tier down
+
+A pushed entry passes two tiers at the Exchange. The wire tier is protovalidate: the
+`ResourceEntry` envelope rules and the `LicenseTerm` structural and cross-field rules,
+applied to the request exactly as received. The ingest tier runs afterwards, over the
+canonicalised terms: restriction tokens are folded and alias-resolved to their
+registered form, then a bare `Pricing.unit` or `Quota.metric` that is not a registered
+token is rejected, while an unregistered restriction token and an `OBLIGATION_KIND_OTHER`
+obligation without detail are accepted and reported in `PushResourcesResponse.warnings`.
+The first tier was always in the contract. The second lived only inside the reference
+Exchange, so a publisher learned what it would say by pushing and reading the refusal.
+
+It moved into the L1 helpers, in all three languages, because it passes the inclusion
+test on every count: the rules are protocol-defined (the token registry and, now, its
+aliases are authored in the proto and generated into every SDK), each face is a pure
+function over one message, and the code has more than one consumer — the Exchange at
+ingest, a publisher pre-checking a feed, the reference catalog CLI. What did NOT move is
+the Exchange's discovery-side term eligibility (which terms a requester's scopes cover):
+that is a question the Exchange answers about a requester, not a check a publisher can
+run before sending, and it stays where its state is.
+
+The line between the tiers is where it is for a reason a CEL expression makes plain: a
+rule that re-lists a vocabulary drifts from it, so membership cannot be a descriptor
+rule. It is still reported to a publisher as a rule id, and those ids take the shape the
+descriptor's CEL ids already have — the owning message in snake_case, then the rule
+(`pricing.unit.registered`, `restriction.token.registered`). One namespace, and a
+conformance guard reads the ids out of the committed corpus and holds them to it: every
+id names a contract message, and none equals a CEL id.
+
+The reject-versus-warn split is on the wire — `warnings[]` is a list of strings a
+publisher reads — so the messages are pinned byte-for-byte across the three SDKs rather
+than merely their shape. That is what lets an Exchange that imports the SDK emit the
+same text a publisher's pre-check showed.
+
+Folding is ASCII-only, and only RFC 8259's four whitespace bytes are trimmed. The reason
+is the one the recipient-addressing rule records: several non-ASCII code points
+lowercase or NFKC-fold INTO ASCII letters — U+212A KELVIN SIGN becomes "k" — so a port
+that reached for its platform's Unicode lowercase would turn a homograph into a
+registered token. A non-ASCII byte passes through a fold unchanged, a token padded with
+a non-breaking space is not trimmed, and the corpus carries those inputs so the three
+answers cannot drift on them.
+
+The aliases had been a private Go map inside the Exchange, although the licensing core's
+own vocabulary table had always listed them beside the tokens (`train-ai` is AIPREF's
+spelling of `ai-train`, `generative-ai` the industry's spelling of `ai-input`), and the
+user-type aliases had no record outside the code at all. They are now
+`(ramp.v1.vocab_enum_alias)` entries on the enum values that carry the tokens, and the
+vocabulary plugin emits an alias map and a canonical lookup per axis into every SDK — an
+axis without aliases carries an empty map, so every axis has the same face. Codegen
+refuses what the lookup could not honour: an alias that is itself a token, a canonical
+that is not one, a duplicate, and a spelling that is not already trimmed and lowercase,
+since the SDK folds before it looks up and any other spelling could never match. The
+generated lookup does no folding of its own; which case an axis folds to is the SDK's
+rule, implied by the case its registered tokens are authored in.
+
+The composition order is the Exchange's, and it is not the friendly one. The wire tier
+runs over the entry exactly as given; only then is a copy canonicalised for the ingest
+tier. So a geography token spelled `" de "` is refused by the wire pattern — whitespace —
+before any fold would have rescued it, and the SDK says so rather than quietly folding
+first and reporting an entry the Exchange would refuse. Where the Exchange stops at the
+first tier that fails, the SDK reports both, so a publisher fixes everything in one
+round; that is the one deliberate difference, and the corpus's per-entry list pins the
+composition in all three languages. The two JSON ports walk every message reachable from
+an entry explicitly for the cross-field rules, because their composed schemas attach per
+message and a top-level parse would never reach `terms[1].pricing`.
+
+## A catalog client is its own constructor
+
+The usage-report decision recorded above settled a rule that generalises: a client's
+constructor takes its shape from where the address comes from. A report goes where a
+signed offer says, so the report verb resolves its destination from the message and
+takes no configured origin. A publisher pushing a catalog is the other case — it chose
+the Exchange — so the origin is configuration and the leg runs on the plain signing
+transport, the posture of the agent client's home Exchange rather than of its
+offer-derived leg.
+
+What it does not share with the home Exchange is the address itself, or the caller. An
+Exchange advertises CatalogService at `WellKnownManifest.catalog_endpoint`, distinct
+from the ExchangeService endpoint the agent dials, and the party pushing holds a
+contributor key named by `caller_id`, never an agent key. Hanging the three catalog
+verbs on the agent client would have carried every agent-only holder — the offer
+Verifier, the requester, the delivery fetcher — into a client that uses none of them,
+and pointed one of two roles at the wrong address. So the publisher role got a third
+constructor, on the Broker's precedent, sharing the plumbing and nothing else. The
+catalog messages carry no idempotency key, by the decision recorded under idempotency —
+an upsert and a delete are naturally idempotent — and the client mints none; it stamps
+`ver` when empty and refuses, before signing, a request that names no bare-host
+recipient, the same verdict a dispute with no `exchange` gets.
+
+`catalog_endpoint` had carried no host binding while `endpoint` did. The predicate is the
+same one, applied for the same reason: a publisher's push is a signed call to that
+address, and a manifest naming an unrelated host would redirect it to a party the
+signature never covered. The comment now states the MUST, the conformance guard that
+holds `endpoint`'s comment to its clauses reads `catalog_endpoint`'s too, and absence
+means the Exchange does not expose the service — a consumer does not fall back to
+`endpoint`.
+
+The envelope rules on `ResourceEntry` were checked against production data before their
+strictness was chosen. `domain` reuses the shared bare-host rule, which admits a port and
+a single-label host, because both are live in the reference deployment's catalog and
+because the catalog URI is synthesised by concatenating `domain` and `path`: a value
+carrying a scheme or a path would choose the URI rather than name the host. `path` is an
+absolute URL path with no query or fragment delimiter and no whitespace or control byte,
+for the same reason. `content_hash` is bounded but not format-checked, because a bare hex
+digest and a `method:hexdigest` form both travel today and `hash_method` names the
+algorithm. `terms` caps at 32, the per-entry limit the rejection reason already named and
+the reference Exchange already enforced privately — moved into the contract so every
+implementation refuses the same size.
+
+One accounting decision belongs here because it is not visible from the code. The
+parity allowlist is a shrink-only ratchet over documented divergences, and its only prior
+growth was netted by a resolution in the same change. This work adds two rows of classes
+the record already carries — a Go factory that folds into a Python constructor, and a
+third Go-only Connect handler binding under the existing decision — with nothing left to
+net against. The alternatives were to reclassify the ten existing factory-fold rows as
+mappings, which re-opens a classification a review had verified, or to add unrelated
+Python surface for the arithmetic, which is gaming. The baseline moved 14 to 16 as a
+reviewed bump, and the gate now states the one growth it sanctions: a new Go symbol of an
+already-recorded divergence class, arriving with that class's reason or anchor. Whether
+the factory folds should be mappings at all is a separate question, left open on purpose.
+
 ## SSRF-guarded fetch: two flags, a corpus-locked transport
 
 Every third-party-influenceable fetch across all three SDKs runs through a guarded
