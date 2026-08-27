@@ -42,6 +42,7 @@ from ramp_sdk import cross_field_rule_ids  # type: ignore[import-not-found]
 _CASES = load_json(CONFORMANCE_CORPUS / "crossfield.json")
 
 _EXPECTED_MESSAGES = {
+    "GetAccountStatusResponse",
     "License",
     "LicenseTerm",
     "Obligation",
@@ -53,7 +54,7 @@ _EXPECTED_MESSAGES = {
 
 
 def test_crossfield_corpus_shape() -> None:
-    # >=8 mutants across exactly the 6 cross-field messages.
+    # >=8 mutants across exactly the cross-field messages named above.
     assert len(_CASES) >= 8
     assert {c["message"] for c in _CASES} == _EXPECTED_MESSAGES
 
@@ -147,6 +148,32 @@ _VALID_INSTANCES: list[dict[str, object]] = [
         "name": "RegistrationFailure TERMS_DIGEST_STALE without field_errors",
         "message": "RegistrationFailure",
         "json": {"reason": "REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE"},
+    },
+    {
+        # terms_digest_requires_billing_ref: a digest WITH the account it hangs on.
+        "name": "GetAccountStatusResponse with billing_ref+terms_digest",
+        "message": "GetAccountStatusResponse",
+        "json": {
+            "ver": "1.0",
+            "billing_ref": "acct-1",
+            "active": True,
+            "terms_digest": "sha256:" + "ab" * 32,
+        },
+    },
+    {
+        # An account whose Exchange publishes no terms digest, so none was recorded.
+        # This is the instance that catches a predicate inverted to fire on a MISSING
+        # terms_digest rather than on an accountless one.
+        "name": "GetAccountStatusResponse with an account and no digest",
+        "message": "GetAccountStatusResponse",
+        "json": {"ver": "1.0", "billing_ref": "acct-1", "active": True},
+    },
+    {
+        # The answer to an agent that has not registered: no account, so no digest
+        # either. Catches a predicate that fires on a missing billing_ref alone.
+        "name": "GetAccountStatusResponse with no account at all",
+        "message": "GetAccountStatusResponse",
+        "json": {"ver": "1.0", "billing_ref": "", "active": False},
     },
     {
         # terms_digest_requires_terms_uri: a digest WITH the address it pins.

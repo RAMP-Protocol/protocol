@@ -53,6 +53,7 @@ const check = crossFieldRuleIds as CrossFieldRuleIds;
 // the valid-instance coverage pin both read it, so a message can never be added to
 // one and forgotten in the other.
 const expectedMessages = new Set([
+  "GetAccountStatusResponse",
   "License",
   "LicenseTerm",
   "Obligation",
@@ -65,7 +66,7 @@ const expectedMessages = new Set([
 describe("sdk/ts cross-field refinements reject the Go crossfield mutants with matching rule-ids", () => {
   const cases = crossfield as CorpusCase[];
 
-  it("crossfield corpus has the expected shape (>=8 mutants / 6 messages)", () => {
+  it("crossfield corpus has the expected shape (>=8 mutants / every cross-field message)", () => {
     expect(cases.length).toBeGreaterThanOrEqual(8);
     const messages = new Set(cases.map((c) => c.message));
     expect(messages).toEqual(expectedMessages);
@@ -161,6 +162,32 @@ const validInstances: { name: string; message: string; json: unknown }[] = [
     name: "RegistrationFailure TERMS_DIGEST_STALE without field_errors",
     message: "RegistrationFailure",
     json: { reason: "REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE" },
+  },
+  {
+    // terms_digest_requires_billing_ref: a digest WITH the account it hangs on.
+    name: "GetAccountStatusResponse with billing_ref+terms_digest",
+    message: "GetAccountStatusResponse",
+    json: {
+      ver: "1.0",
+      billing_ref: "acct-1",
+      active: true,
+      terms_digest: "sha256:" + "ab".repeat(32),
+    },
+  },
+  {
+    // An account whose Exchange publishes no terms digest, so none was recorded.
+    // This is the instance that catches a predicate inverted to fire on a MISSING
+    // terms_digest rather than on an accountless one.
+    name: "GetAccountStatusResponse with an account and no digest",
+    message: "GetAccountStatusResponse",
+    json: { ver: "1.0", billing_ref: "acct-1", active: true },
+  },
+  {
+    // The answer to an agent that has not registered: no account, so no digest
+    // either. Catches a predicate that fires on a missing billing_ref alone.
+    name: "GetAccountStatusResponse with no account at all",
+    message: "GetAccountStatusResponse",
+    json: { ver: "1.0", billing_ref: "", active: false },
   },
   {
     // terms_digest_requires_terms_uri: a digest WITH the address it pins.

@@ -7070,7 +7070,9 @@ type WellKnownManifest struct {
 	// what was agreed. RegisterRequest.terms_digest echoes this value, the request
 	// signature covers that echo, and the Exchange records the accepted digest
 	// with the account — which is what makes "which terms did this operator
-	// accept" answerable later. Because a digest identifies a document only while
+	// accept" answerable later, through GetAccountStatusResponse.terms_digest, which
+	// is where the accepted value is read back. Because a digest identifies a
+	// document only while
 	// a copy of it still exists, keeping the historical terms documents
 	// retrievable is the Exchange's obligation. It sits at the top level rather
 	// than inside account_registration on purpose: an Exchange with pass-through
@@ -8429,12 +8431,44 @@ type RegisterRequest struct {
 	//	not a detail: a payload carrying 1e300 is seven bytes under one renderer and
 	//	three hundred under another.
 	//
-	// Both bounds are checked BEFORE the schema runs, for the reason the schema's own
-	// size cap is checked before the document is parsed — a bound that exists to stop
-	// work has to precede the work. A payload breaking either is a malformed request,
-	// NOT REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA: that reason names
-	// non-conformance to a published schema and applies only where one is published,
-	// while these bounds hold either way.
+	// A payload with NO canonical form at all is refused in the same class as the
+	// three bounds. The reachable case is a non-finite number: JSON can represent
+	// neither NaN nor an infinity, while this member is a Struct, whose
+	// number_value is an IEEE-754 double that carries one perfectly well. Such a
+	// payload has no canonical encoding, so the byte cap above has nothing to
+	// measure.
+	//
+	// That check MUST read the decoded protobuf value, never a native map
+	// converted from it. This is stated because two conformant implementations
+	// already answered the same signed request differently: some runtimes render a
+	// non-finite double as the STRING "NaN", "Infinity" or "-Infinity" while
+	// converting, and once that has happened the payload cannot be told apart from
+	// one that legitimately carries that text — an operator legally named NaN is a
+	// valid string value that has to be accepted. The conversion destroys the
+	// information, so the check has to precede it.
+	//
+	// ORDER. The four checks on this member run in this sequence, and the sequence
+	// is not free choice:
+	//
+	//  1. top-level member count
+	//  2. nesting depth
+	//  3. canonicalizability, which is where the non-finite check lives
+	//  4. canonical byte size
+	//
+	// The first two are counts, and they bound the document the third then has to
+	// walk. The third precedes the fourth because the byte cap is DEFINED as the
+	// length of the canonical encoding: until that encoding exists there is no
+	// number to compare against, and answering "too large" for a payload that has
+	// no encoding at all would state something untrue about it.
+	//
+	// All four are checked BEFORE the schema runs, for the reason the schema's own
+	// size cap is checked before the document is parsed — a check that exists to
+	// stop work has to precede the work. A payload breaking any of them is a
+	// malformed request, NOT REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA:
+	// that reason names non-conformance to a published schema and applies only
+	// where one is published, while these four hold either way. The terms_digest
+	// gate sits between these four and the schema — see
+	// RegisterRequest.terms_digest for why that order is also fixed.
 	RegistrationData *structpb.Struct `protobuf:"bytes,2,opt,name=registration_data,json=registrationData,proto3" json:"registration_data,omitempty"`
 	// REQUIRED. Bare host of the recipient this request is addressed to (e.g.
 	// "exchange.example" or "exchange.example:8081"). See "Request recipient" in
@@ -8461,6 +8495,22 @@ type RegisterRequest struct {
 	// detect staleness locally and a warm cache would otherwise make it retry a
 	// refused value until the cache expired. Registration happens once per
 	// Exchange, so the extra fetch is cheap.
+	//
+	// GATE ORDER. This gate runs AFTER the four registration_data checks (see
+	// RegisterRequest.registration_data) and BEFORE the published data_schema.
+	// Terms before schema is not arbitrary: the schema may itself have changed in
+	// the revision the caller has not read yet. Validating a stale-terms caller
+	// against the CURRENT schema hands back field errors describing a document it
+	// has never seen, so it fixes those members, re-fetches, and finds the
+	// requirements have moved. Terms first means a caller is always told to go read
+	// the current manifest before it is told anything about that manifest's
+	// contents. It also keeps one refusal to one remedy: TERMS_DIGEST_STALE says
+	// re-fetch and echo, INVALID_REGISTRATION_DATA says fix the payload, and a
+	// request that would earn both is given the one that has to be done first.
+	// The whole order applies only when an account is being CREATED: a repeat
+	// registration is answered from the stored record and runs no gate at all, so
+	// the four cases above are the four cases of a FIRST registration. See
+	// "Repeat registration" in the Agent Account Registration section header.
 	TermsDigest *string `protobuf:"bytes,4,opt,name=terms_digest,json=termsDigest,proto3,oneof" json:"terms_digest,omitempty"`
 	// Extension point
 	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
@@ -8725,6 +8775,30 @@ type GetAccountStatusResponse struct {
 	BillingRef string `protobuf:"bytes,2,opt,name=billing_ref,json=billingRef,proto3" json:"billing_ref,omitempty"`
 	// Whether the account is currently active.
 	Active bool `protobuf:"varint,3,opt,name=active,proto3" json:"active,omitempty"`
+	// The terms document this account ACCEPTED: the "method:hexdigest" value the
+	// agent echoed in RegisterRequest.terms_digest, which the Exchange recorded
+	// with the account. This is the read side of that record. Without it the
+	// protocol required an Exchange to store the acceptance and named the question
+	// the record exists to answer — "which terms did this operator accept" — while
+	// giving no way to ask it, so the only party who could check what it had agreed
+	// to was the party holding the database.
+	//
+	// An Exchange that holds a recorded digest for this account MUST return it
+	// here. Absence has exactly ONE meaning: no acceptance is recorded. Two
+	// situations produce it — the Exchange publishes no terms_digest, so nothing
+	// was ever accepted (and per RegisterRequest.terms_digest it MUST NOT record a
+	// presented value in that case), or the account was created before the operator
+	// began publishing one. It does NOT mean "this account has no terms", and an
+	// Exchange MUST NOT withhold a digest it holds: absence is already spoken for,
+	// so withholding would make the field state something untrue.
+	//
+	// The value is what was ACCEPTED, not what is published now. The two differ as
+	// soon as the operator revises its terms, and that difference is the point:
+	// comparing this against a freshly fetched WellKnownManifest.terms_digest is how
+	// an agent discovers that the terms moved under an account it already holds. A
+	// repeat Register will not tell it — a repeat is answered from the stored record
+	// and runs no gate at all.
+	TermsDigest *string `protobuf:"bytes,4,opt,name=terms_digest,json=termsDigest,proto3,oneof" json:"terms_digest,omitempty"`
 	// Extension point
 	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
@@ -8785,6 +8859,13 @@ func (x *GetAccountStatusResponse) GetActive() bool {
 		return x.Active
 	}
 	return false
+}
+
+func (x *GetAccountStatusResponse) GetTermsDigest() string {
+	if x != nil && x.TermsDigest != nil {
+		return *x.TermsDigest
+	}
+	return ""
 }
 
 func (x *GetAccountStatusResponse) GetExt() *structpb.Struct {
@@ -10092,14 +10173,17 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\xd7\x01\n" +
 	"\bexchange\x18\x02 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xb3\x01\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xe8\x03\n" +
 	"\x18GetAccountStatusResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1f\n" +
 	"\vbilling_ref\x18\x02 \x01(\tR\n" +
 	"billingRef\x12\x16\n" +
-	"\x06active\x18\x03 \x01(\bR\x06active\x12)\n" +
+	"\x06active\x18\x03 \x01(\bR\x06active\x12p\n" +
+	"\fterms_digest\x18\x04 \x01(\tBH\xbaHErC2A^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$H\x00R\vtermsDigest\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\x88\x06\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical:\xaf\x01\xbaH\xab\x01\x1a\xa8\x01\n" +
+	"=get_account_status_response.terms_digest_requires_billing_ref\x124terms_digest is only allowed when billing_ref is set\x1a1this.terms_digest == '' || this.billing_ref != ''B\x0f\n" +
+	"\r_terms_digest\"\x88\x06\n" +
 	"\vErrorDetail\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x12>\n" +
@@ -10714,6 +10798,7 @@ func file_ramp_v1_ramp_proto_init() {
 	file_ramp_v1_ramp_proto_msgTypes[52].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[53].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[54].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[57].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[58].OneofWrappers = []any{
 		(*ErrorDetail_TransactionDenial)(nil),
 		(*ErrorDetail_CatalogRejection)(nil),

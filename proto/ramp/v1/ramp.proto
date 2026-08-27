@@ -236,8 +236,10 @@ service ExchangeService {
   // derives who is registering from the verified signature, never from the
   // request body. Registering again for the same agent returns the same
   // billing_ref (idempotent by design), which is why this RPC carries no
-  // idempotency_key. A refused registration travels as a non-OK transport
-  // error carrying ErrorDetail.registration_failure.
+  // idempotency_key; the repeat is answered from the stored account record and
+  // runs none of the account-creation gates — see "Repeat registration" in the
+  // Agent Account Registration section header. A refused registration travels as
+  // a non-OK transport error carrying ErrorDetail.registration_failure.
   rpc Register(RegisterRequest) returns (RegisterResponse);
 
   // Read-only check of whether the calling agent's account is active.
@@ -3038,7 +3040,9 @@ message WellKnownManifest {
   // what was agreed. RegisterRequest.terms_digest echoes this value, the request
   // signature covers that echo, and the Exchange records the accepted digest
   // with the account — which is what makes "which terms did this operator
-  // accept" answerable later. Because a digest identifies a document only while
+  // accept" answerable later, through GetAccountStatusResponse.terms_digest, which
+  // is where the accepted value is read back. Because a digest identifies a
+  // document only while
   // a copy of it still exists, keeping the historical terms documents
   // retrievable is the Exchange's obligation. It sits at the top level rather
   // than inside account_registration on purpose: an Exchange with pass-through
@@ -3555,6 +3559,29 @@ message DomainVerificationResult {
 // request echoes WellKnownManifest.terms_digest, the request signature covers
 // that echo, and the Exchange records the accepted digest with the account. See
 // RegisterRequest.terms_digest for the four cases and the freshness rule.
+//
+// REPEAT REGISTRATION. Registering again for an agent that already holds an
+// account is answered from the stored record: the Exchange returns the existing
+// billing_ref and changes nothing. The ACCOUNT-CREATION gates — every check on
+// registration_data, the terms_digest gate, and the published data_schema —
+// apply only when an account is being CREATED, and a repeat runs none of them.
+//
+// That is a decision rather than a consequence of the idempotency promise, and
+// it is written here because reading either rule on its own gives the opposite
+// answer. Two reasons for it. A repeat discards registration_data entirely, so
+// checking a member that is about to be thrown away reports an error about a
+// value that has no effect on anything. And the terms and schema gates are
+// operator-controlled and change over time, so applying them to a returning
+// caller breaks every one of them on the day the operator revises its terms: the
+// caller presents the digest it accepted months ago, that digest no longer
+// matches what is published, and the account it already holds becomes
+// unreachable through the RPC that exists to return it.
+//
+// What a repeat still runs is everything outside those gates. The request
+// signature is verified and the caller identified from it, RegisterRequest.exchange
+// is checked against the recipient, and the field-level constraints on the message
+// still apply. A repeat from an unverified caller, or one addressed to a different
+// Exchange, is refused exactly as a first call is.
 // ============================================================================
 
 // RegisterRequest — Agent asks the Exchange to create its account.
@@ -3605,12 +3632,44 @@ message RegisterRequest {
   //   not a detail: a payload carrying 1e300 is seven bytes under one renderer and
   //   three hundred under another.
   //
-  // Both bounds are checked BEFORE the schema runs, for the reason the schema's own
-  // size cap is checked before the document is parsed — a bound that exists to stop
-  // work has to precede the work. A payload breaking either is a malformed request,
-  // NOT REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA: that reason names
-  // non-conformance to a published schema and applies only where one is published,
-  // while these bounds hold either way.
+  // A payload with NO canonical form at all is refused in the same class as the
+  // three bounds. The reachable case is a non-finite number: JSON can represent
+  // neither NaN nor an infinity, while this member is a Struct, whose
+  // number_value is an IEEE-754 double that carries one perfectly well. Such a
+  // payload has no canonical encoding, so the byte cap above has nothing to
+  // measure.
+  //
+  // That check MUST read the decoded protobuf value, never a native map
+  // converted from it. This is stated because two conformant implementations
+  // already answered the same signed request differently: some runtimes render a
+  // non-finite double as the STRING "NaN", "Infinity" or "-Infinity" while
+  // converting, and once that has happened the payload cannot be told apart from
+  // one that legitimately carries that text — an operator legally named NaN is a
+  // valid string value that has to be accepted. The conversion destroys the
+  // information, so the check has to precede it.
+  //
+  // ORDER. The four checks on this member run in this sequence, and the sequence
+  // is not free choice:
+  //
+  //   1. top-level member count
+  //   2. nesting depth
+  //   3. canonicalizability, which is where the non-finite check lives
+  //   4. canonical byte size
+  //
+  // The first two are counts, and they bound the document the third then has to
+  // walk. The third precedes the fourth because the byte cap is DEFINED as the
+  // length of the canonical encoding: until that encoding exists there is no
+  // number to compare against, and answering "too large" for a payload that has
+  // no encoding at all would state something untrue about it.
+  //
+  // All four are checked BEFORE the schema runs, for the reason the schema's own
+  // size cap is checked before the document is parsed — a check that exists to
+  // stop work has to precede the work. A payload breaking any of them is a
+  // malformed request, NOT REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA:
+  // that reason names non-conformance to a published schema and applies only
+  // where one is published, while these four hold either way. The terms_digest
+  // gate sits between these four and the schema — see
+  // RegisterRequest.terms_digest for why that order is also fixed.
   google.protobuf.Struct registration_data = 2;
 
   // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
@@ -3644,6 +3703,22 @@ message RegisterRequest {
   // detect staleness locally and a warm cache would otherwise make it retry a
   // refused value until the cache expired. Registration happens once per
   // Exchange, so the extra fetch is cheap.
+  //
+  // GATE ORDER. This gate runs AFTER the four registration_data checks (see
+  // RegisterRequest.registration_data) and BEFORE the published data_schema.
+  // Terms before schema is not arbitrary: the schema may itself have changed in
+  // the revision the caller has not read yet. Validating a stale-terms caller
+  // against the CURRENT schema hands back field errors describing a document it
+  // has never seen, so it fixes those members, re-fetches, and finds the
+  // requirements have moved. Terms first means a caller is always told to go read
+  // the current manifest before it is told anything about that manifest's
+  // contents. It also keeps one refusal to one remedy: TERMS_DIGEST_STALE says
+  // re-fetch and echo, INVALID_REGISTRATION_DATA says fix the payload, and a
+  // request that would earn both is given the one that has to be done first.
+  // The whole order applies only when an account is being CREATED: a repeat
+  // registration is answered from the stored record and runs no gate at all, so
+  // the four cases above are the four cases of a FIRST registration. See
+  // "Repeat registration" in the Agent Account Registration section header.
   optional string terms_digest = 4 [
     (buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$"
   ];
@@ -3719,6 +3794,15 @@ message GetAccountStatusRequest {
 
 // GetAccountStatusResponse — Exchange reports the account's current state.
 message GetAccountStatusResponse {
+  // An account is what an accepted digest hangs on, so the digest cannot be
+  // present without one. The prose on the field says it; the rule is what makes
+  // it checkable.
+  option (buf.validate.message).cel = {
+    id: "get_account_status_response.terms_digest_requires_billing_ref"
+    message: "terms_digest is only allowed when billing_ref is set"
+    expression: "this.terms_digest == '' || this.billing_ref != ''"
+  };
+
   // RAMP protocol version — "1.0". Stamped by the sender from a single
   // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
@@ -3729,6 +3813,33 @@ message GetAccountStatusResponse {
 
   // Whether the account is currently active.
   bool active = 3;
+
+  // The terms document this account ACCEPTED: the "method:hexdigest" value the
+  // agent echoed in RegisterRequest.terms_digest, which the Exchange recorded
+  // with the account. This is the read side of that record. Without it the
+  // protocol required an Exchange to store the acceptance and named the question
+  // the record exists to answer — "which terms did this operator accept" — while
+  // giving no way to ask it, so the only party who could check what it had agreed
+  // to was the party holding the database.
+  //
+  // An Exchange that holds a recorded digest for this account MUST return it
+  // here. Absence has exactly ONE meaning: no acceptance is recorded. Two
+  // situations produce it — the Exchange publishes no terms_digest, so nothing
+  // was ever accepted (and per RegisterRequest.terms_digest it MUST NOT record a
+  // presented value in that case), or the account was created before the operator
+  // began publishing one. It does NOT mean "this account has no terms", and an
+  // Exchange MUST NOT withhold a digest it holds: absence is already spoken for,
+  // so withholding would make the field state something untrue.
+  //
+  // The value is what was ACCEPTED, not what is published now. The two differ as
+  // soon as the operator revises its terms, and that difference is the point:
+  // comparing this against a freshly fetched WellKnownManifest.terms_digest is how
+  // an agent discovers that the terms moved under an account it already holds. A
+  // repeat Register will not tell it — a repeat is answered from the stored record
+  // and runs no gate at all.
+  optional string terms_digest = 4 [
+    (buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$"
+  ];
 
   // Extension point
   google.protobuf.Struct ext = 15;

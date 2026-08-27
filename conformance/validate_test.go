@@ -179,6 +179,17 @@ func licensingCases() []validationCase {
 			Role:        rampv1.Role_ROLE_EXCHANGE,
 			TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
 		}, false, "well_known_manifest.terms_digest_requires_terms_uri"},
+		// The read-side mirror. The digest states what an ACCOUNT accepted, so it
+		// cannot travel without the handle it hangs on: a reader taking it from an
+		// accountless response would hold an acceptance for an account that does
+		// not exist.
+		{"get_account_status_response terms_digest without billing_ref rejected", &rampv1.GetAccountStatusResponse{
+			TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
+		}, false, "get_account_status_response.terms_digest_requires_billing_ref"},
+		{"get_account_status_response terms_digest with billing_ref ok", &rampv1.GetAccountStatusResponse{
+			BillingRef:  "acct-1",
+			TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
+		}, true, ""},
 		{"well_known_manifest terms_digest with terms_uri ok", &rampv1.WellKnownManifest{
 			Role:        rampv1.Role_ROLE_EXCHANGE,
 			TermsUri:    proto.String("https://exchange.example/terms"),

@@ -2,6 +2,84 @@
 
 ## Unreleased
 
+**A registration payload carrying `NaN` or an infinity was accepted by a Go Exchange and
+refused by a Python one (Go SDK fix; conformance-affecting, no wire change).** `Struct`'s
+`number_value` is an IEEE-754 double, so a non-finite number crosses the wire intact —
+`structpb.NewNumberValue` does not refuse one and the binary codec carries it unchanged.
+JSON can write none of the three, so such a payload has no canonical form and no
+measurable size, which is what `uncanonicalizable` names. Go could not see it. The SDK's
+own doc comment named `RegisterRequest.GetRegistrationData().AsMap()` as the call site,
+and Go's protobuf runtime renders the three values as the STRINGS `"NaN"`, `"Infinity"`
+and `"-Infinity"` during that call, so the check received a well-formed string and
+answered `accepted`. Python and TypeScript decode into objects that keep the real float
+and refused the same payload. Two conformant Exchanges therefore answered the same
+signed request differently, and a Go Exchange stored the text `"NaN"` where the caller
+had sent a number.
+
+The fix is a new Go entry point, `helpers.CheckRegistrationDataStruct`, which reads the
+raw `*structpb.Struct`. **It cannot be a repair of the map-based check**, and that is
+worth stating because it looks like one: after `AsMap` has run, a non-finite number and
+an operator legally named `NaN` are the same three bytes, so a check that refused the
+text would refuse a valid registration. The conversion destroys the evidence, so the
+check has to precede it. `CheckRegistrationData` still exists for a caller whose payload
+never was a `Struct`, and its comment now says what it cannot see. Python and TypeScript
+get no new face: their existing checks already see the case, so a second entry point
+there would be an alias with nothing to do — it is recorded as a Go-only divergence in
+the parity matrix instead. No shared corpus can carry the case in any language, because
+JSON cannot write the value down.
+
+**The order of the registration gates is pinned, and two of the orderings were
+previously free choice (comment-only; conformance-affecting).** A payload is now checked
+in a stated sequence: top-level member count, nesting depth, canonicalizability, canonical
+byte size, then `terms_digest`, then the published `data_schema`.
+
+Two of those were unstated. **Canonicalizability precedes the byte cap** because the cap
+is DEFINED as the length of the RFC 8785 encoding — until that encoding exists there is
+no number to compare against, and answering "too large" for a payload that has no
+encoding at all asserts a measurement that was never taken. **The terms gate precedes the
+schema gate** because the schema may itself have changed in the revision the caller has
+not read. Validating a stale-terms caller against the CURRENT schema hands back field
+errors describing a document it has never seen, so it fixes those members, re-fetches,
+and finds the requirements have moved. Terms first means a caller is always told to read
+the current manifest before it is told anything about that manifest's contents. It also
+keeps one refusal to one remedy: `TERMS_DIGEST_STALE` says re-fetch and echo,
+`INVALID_REGISTRATION_DATA` says fix the payload, and a request earning both is given the
+one that has to be done first.
+
+**A repeat `Register` is answered from the stored record and runs none of the
+account-creation gates (comment-only; conformance-affecting).** Two rules were each
+stated absolutely and neither mentioned the other: `Register` returns the same
+`billing_ref` for the same agent, idempotent by design; and a `terms_digest` that differs
+from the published one is refused as stale, in a paragraph that calls its four cases "all
+defined". For a returning agent after the operator revises its terms the two give
+opposite answers, and an implementer reading the second paragraph alone will refuse the
+caller and believe they are conformant — which breaks every returning agent on the day
+the terms change, because the account it already holds becomes unreachable through the
+RPC that exists to return it. The rule is now written where the idempotency promise is
+made, together with the reason: a repeat discards `registration_data` entirely, so
+checking a member about to be thrown away reports an error about a value that has no
+effect. What a repeat still runs is stated too — signature verification and caller
+identity, the recipient check on `RegisterRequest.exchange`, and the field-level
+constraints — so "no gates" is not read as "no checks".
+
+**`GetAccountStatusResponse.terms_digest` (field 4) makes the accepted terms readable.**
+The protocol already required an Exchange to record the accepted digest with the account,
+and said plainly that this is what makes "which terms did this operator accept"
+answerable later. Nothing could ask. No RPC and no field returned the value, so the only
+party who could check what an operator had agreed to was the party holding the database —
+and the `MUST NOT` beside it, that an Exchange publishing no digest must ignore a
+presented one and must not record it as an acceptance, could not be tested through a
+public surface at all. Absence of the new field has exactly one meaning: no acceptance is
+recorded, either because the Exchange publishes no digest or because the account predates
+one. An Exchange holding a digest MUST return it — absence is already spoken for, so
+withholding would make the field state something untrue. The value is what was ACCEPTED,
+not what is published now; comparing it against a freshly fetched
+`WellKnownManifest.terms_digest` is how an agent discovers the terms moved under an
+account it already holds, which a repeat `Register` will no longer tell it. A message rule
+(`get_account_status_response.terms_digest_requires_billing_ref`) joins the digest to the
+account handle it hangs on, so a reader can never take an acceptance from a response that
+carries no account.
+
 **The TypeScript and Python SDKs gained a client, and it changed what they accept
 from a peer (no wire change; conformance-affecting).** Neither could SEND a RAMP
 request before; both now speak the Connect-unary JSON form the protocol's unary RPCs

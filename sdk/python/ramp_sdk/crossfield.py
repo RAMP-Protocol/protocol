@@ -146,6 +146,22 @@ def _well_known_manifest_rules(o: dict[str, Any]) -> list[str]:
     return []
 
 
+def _get_account_status_response_rules(o: dict[str, Any]) -> list[str]:
+    """GetAccountStatusResponse.terms_digest_requires_billing_ref.
+
+    ``this.terms_digest == '' || this.billing_ref != ''``. The digest is what this
+    ACCOUNT accepted, so it cannot travel without the account handle it hangs on.
+    A reader that took the digest from a response carrying no billing_ref would be
+    reading an acceptance for an account that does not exist. Mirror of the
+    WellKnownManifest rule above, asked of the read side.
+    """
+    terms_digest = _str(_field(o, "terms_digest"))
+    billing_ref = _str(_field(o, "billing_ref"))
+    if terms_digest != "" and billing_ref == "":
+        return ["get_account_status_response.terms_digest_requires_billing_ref"]
+    return []
+
+
 def _registration_failure_rules(o: dict[str, Any]) -> list[str]:
     """RegistrationFailure.field_errors_scoped_to_invalid_data.
 
@@ -161,6 +177,7 @@ def _registration_failure_rules(o: dict[str, Any]) -> list[str]:
 
 
 _RULES_BY_MESSAGE: dict[str, Callable[[dict[str, Any]], list[str]]] = {
+    "GetAccountStatusResponse": _get_account_status_response_rules,
     "License": _license_rules,
     "LicenseTerm": _license_term_rules,
     "Obligation": _obligation_rules,

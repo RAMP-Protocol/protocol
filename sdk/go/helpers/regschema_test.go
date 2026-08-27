@@ -19,6 +19,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
@@ -312,6 +313,141 @@ func TestANonFiniteNumberIsAVerdictNotAPanic(t *testing.T) {
 				t.Fatalf("verdict = %s, want uncanonicalizable", got)
 			}
 		})
+	}
+}
+
+// nonFiniteStruct builds a registration_data payload carrying one non-finite number at
+// the named position. It goes through structpb.NewStruct on purpose: that is the
+// constructor an Exchange uses, it does not refuse a non-finite double, and the binary
+// codec carries one unchanged — which is why the value reaches a server at all.
+func nonFiniteStruct(t *testing.T, position string, n float64) *structpb.Struct {
+	t.Helper()
+	var payload map[string]any
+	switch position {
+	case "top level":
+		payload = map[string]any{"n": n}
+	case "nested object":
+		payload = map[string]any{"address": map[string]any{"lat": n}}
+	case "list element":
+		payload = map[string]any{"scores": []any{1.0, n}}
+	default:
+		t.Fatalf("unknown position %q", position)
+	}
+	out, err := structpb.NewStruct(payload)
+	if err != nil {
+		t.Fatalf("structpb.NewStruct(%s): %v", position, err)
+	}
+	return out
+}
+
+// TestOnlyTheRawStructEntryPointSeesANonFiniteNumber is the regression this whole face
+// was reshaped around. Both halves are asserted together, because the second is what
+// makes the first necessary: the raw entry point refuses the payload, and the map-based
+// one ACCEPTS the very same payload once structpb has converted it. Drop the raw check
+// and two conformant Exchanges answer the same signed request differently.
+func TestOnlyTheRawStructEntryPointSeesANonFiniteNumber(t *testing.T) {
+	for _, position := range []string{"top level", "nested object", "list element"} {
+		for _, tc := range []struct {
+			name string
+			n    float64
+		}{
+			{"positive infinity", math.Inf(1)},
+			{"negative infinity", math.Inf(-1)},
+			{"not a number", math.NaN()},
+		} {
+			t.Run(position+"/"+tc.name, func(t *testing.T) {
+				payload := nonFiniteStruct(t, position, tc.n)
+
+				if got := helpers.CheckRegistrationDataStruct(payload); got != helpers.RegistrationDataUncanonicalizable {
+					t.Fatalf("CheckRegistrationDataStruct = %s, want uncanonicalizable", got)
+				}
+				// Not an aspiration — a statement of what the conversion costs. If this
+				// ever starts returning uncanonicalizable, structpb stopped rendering
+				// the value as a string and the doc comments naming that behaviour are
+				// out of date.
+				if got := helpers.CheckRegistrationData(payload.AsMap()); got != helpers.RegistrationDataAccepted {
+					t.Fatalf("CheckRegistrationData(AsMap()) = %s, want accepted — "+
+						"the documented blindness this entry point exists to route around", got)
+				}
+			})
+		}
+	}
+}
+
+// TestALiteralNonFiniteStringIsAccepted is why the map-based check cannot be repaired
+// in place. After AsMap has run, a NaN and an operator legally named "NaN" are the same
+// three bytes. A check that refused the text would refuse a valid registration.
+func TestALiteralNonFiniteStringIsAccepted(t *testing.T) {
+	for _, text := range []string{"NaN", "Infinity", "-Infinity"} {
+		t.Run(text, func(t *testing.T) {
+			payload, err := structpb.NewStruct(map[string]any{"legal_name": text})
+			if err != nil {
+				t.Fatalf("structpb.NewStruct: %v", err)
+			}
+			if got := helpers.CheckRegistrationDataStruct(payload); got != helpers.RegistrationDataAccepted {
+				t.Fatalf("verdict = %s, want accepted", got)
+			}
+		})
+	}
+}
+
+// TestTheRawEntryPointPinsTheOrderOfItsChecks covers the two orderings that are
+// OBSERVABLE from outside, both of which the proto now states.
+//
+// The third ordering — member count and depth before AsMap — is not observable here and
+// is deliberately not asserted: reversing it would still answer too_deep, because the
+// delegate checks depth as well. What that ordering buys is that the recursive
+// conversion never runs on a payload whose depth is still unknown, and the guard for it
+// is structural: registrationStructWalk is iterative.
+func TestTheRawEntryPointPinsTheOrderOfItsChecks(t *testing.T) {
+	t.Run("non-finite beats the byte cap", func(t *testing.T) {
+		// Both refusals apply. The proto pins this one, because a payload with no
+		// canonical form has no length, so "too large" would assert a measurement that
+		// was never taken.
+		payload, err := structpb.NewStruct(map[string]any{
+			"pad": strings.Repeat("x", helpers.MaxRegistrationDataBytes+1),
+			"n":   math.NaN(),
+		})
+		if err != nil {
+			t.Fatalf("structpb.NewStruct: %v", err)
+		}
+		if got := helpers.CheckRegistrationDataStruct(payload); got != helpers.RegistrationDataUncanonicalizable {
+			t.Fatalf("verdict = %s, want uncanonicalizable", got)
+		}
+	})
+
+	t.Run("the member count beats non-finite", func(t *testing.T) {
+		// The counts come first because they bound the document the later walks have to
+		// cross.
+		payload := map[string]any{}
+		for i := 0; i <= helpers.MaxRegistrationDataMembers; i++ {
+			payload["m"+strconv.Itoa(i)] = math.NaN()
+		}
+		raw, err := structpb.NewStruct(payload)
+		if err != nil {
+			t.Fatalf("structpb.NewStruct: %v", err)
+		}
+		if got := helpers.CheckRegistrationDataStruct(raw); got != helpers.RegistrationDataTooManyMembers {
+			t.Fatalf("verdict = %s, want too_many_members", got)
+		}
+	})
+}
+
+// TestAnAbsentPayloadIsAcceptedInEitherForm keeps the two entry points aligned on the
+// case a caller hits by accident: an agent that sends no business data at all. Whether
+// that is allowed is the published schema's `required` list to decide, not a bound's.
+func TestAnAbsentPayloadIsAcceptedInEitherForm(t *testing.T) {
+	if got := helpers.CheckRegistrationDataStruct(nil); got != helpers.RegistrationDataAccepted {
+		t.Errorf("nil Struct: verdict = %s, want accepted", got)
+	}
+	if got := helpers.CheckRegistrationDataStruct(&structpb.Struct{}); got != helpers.RegistrationDataAccepted {
+		t.Errorf("empty Struct: verdict = %s, want accepted", got)
+	}
+	// A RegisterRequest that never set the field hands its getter a nil Struct, which is
+	// the path an Exchange actually takes.
+	var req *rampv1.RegisterRequest
+	if got := helpers.CheckRegistrationDataStruct(req.GetRegistrationData()); got != helpers.RegistrationDataAccepted {
+		t.Errorf("unset field: verdict = %s, want accepted", got)
 	}
 }
 

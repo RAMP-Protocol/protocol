@@ -51,7 +51,7 @@ const wantDomainFields = 17
 // descriptor-derived membership check as the domain family.
 const digestPattern = `^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$`
 
-const wantDigestFields = 3
+const wantDigestFields = 4
 
 func fieldNames(fs []domainField) string {
 	names := make([]string, 0, len(fs))
