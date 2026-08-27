@@ -1167,9 +1167,11 @@ carrying a scheme or a path would choose the URI rather than name the host. `pat
 absolute URL path with no query or fragment delimiter and no whitespace or control byte,
 for the same reason. `content_hash` is bounded but not format-checked, because a bare hex
 digest and a `method:hexdigest` form both travel today and `hash_method` names the
-algorithm. `terms` caps at 32, the per-entry limit the rejection reason already named and
-the reference Exchange already enforced privately — moved into the contract so every
-implementation refuses the same size.
+algorithm. `terms` caps at 32, the limit the reference Exchange already enforced privately —
+moved into the contract so every implementation refuses the same size. Moving it also
+changed WHEN it is refused: as a wire rule it is batch-fatal like every other boundary
+rule, so an over-cap entry refuses the whole submission rather than dropping itself out
+of it, and the rejection reason that named the per-entry verdict is retired on that path.
 
 One accounting decision belongs here because it is not visible from the code. The
 parity allowlist is a shrink-only ratchet over documented divergences, and its only prior
@@ -1182,6 +1184,70 @@ Python surface for the arithmetic, which is gaming. The baseline moved 14 to 16 
 reviewed bump, and the gate now states the one growth it sanctions: a new Go symbol of an
 already-recorded divergence class, arriving with that class's reason or anchor. Whether
 the factory folds should be mappings at all is a separate question, left open on purpose.
+
+## A bound belongs on the phase whose cost it models, and the catalog relearned it
+
+The list caps on `ResourceEntry` and `LicenseTerm` were added to bound the work one push
+can cost. They do not, and the comment that said they did was wrong for a reason worth
+recording, because this contract has now met it twice.
+
+protovalidate does not short-circuit. It walks every element it is handed and collects
+every violation, and the cardinality rule is reported alongside the others rather than
+instead of them. Measured on this contract: an entry carrying 100,000 terms costs 393ms
+and allocates 100,001 violation objects — even though `terms` was already capped at 32,
+and the cap fires. The list was fully traversed on its way to being refused. A cap of N
+does not mean a validator handles at most N; it means a validator that has already handled
+however many arrived will say so.
+
+That is the same lesson the registration-schema work recorded above, in the same words: a
+bound belongs on the phase whose cost it models, and the caps there bounded the document
+rather than the work. So the caps here are kept and re-described for what they genuinely
+control — how large one entry may be, what a push can store, and how much a rejection has
+to name back — and the work is bounded where the work happens, at the transport, by the
+maximum request size the recipient will read. The SDK's server binding sets that cap on
+every handler and states the cost the default implies: the largest conformant push costs
+~150ms to validate, and the worst adversarial shape that still fits costs ~1.6s. Bounded,
+not small; an uncapped handler has no worst case at all.
+
+Two details of that cap are load-bearing. It covers the RAW body as well as the decoded
+message, because the verify face must buffer the whole body to check a signature over the
+exact bytes and therefore runs before the caller is known — an unauthenticated caller
+reaches only that read. And it is composed inside request-id, so a refusal still carries
+the correlation id the reject-path logs are read by.
+
+## The wire tier's rule ids are language-local, and the corpus says only what they share
+
+The ingest-tier rule ids share one namespace, as recorded above. The tier ABOVE them does
+not, and that is a property of where the ids come from rather than a choice anyone made:
+Go reports protovalidate's ids, TypeScript reports Zod's issue codes, Python reports
+Pydantic's error types. Three engines, three vocabularies, one behaviour.
+
+So the per-entry corpus compares the three languages at three strengths, one per column,
+and the split is not arbitrary — it is exactly what they can agree on. Field-level wire
+violations are recorded as a BOOLEAN, because no id survives the crossing; coverage comes
+instead from one case per rule, the same bargain the field-level validation corpus already
+strikes and pays for the same way. Cross-field violations are recorded as IDS, because
+message-level CEL ids are authored in the proto and all three ports emit those exact
+strings. Ingest-tier violations are recorded as WHOLE FINDINGS — id, path, token and
+message — because that tier is SDK-owned code in all three languages and its strings are
+what an Exchange puts in `warnings[]`.
+
+The cross-field column is the one that earns its keep. The two JSON ports cannot compose a
+message-level rule the way protovalidate does, so each hand-enumerates the sites reachable
+from an entry and walks them, and a hand-written walk fails by silently stopping short.
+Before the column existed, deleting three of the five walk sites from the TypeScript port
+left its entire suite green: no case isolated a `Restriction`, `Obligation` or nested
+`scope_license` rule, so the boolean stayed true either way and a publisher would have been
+told an overlapping term was fine. A conformance guard now derives the reachable rule set
+from the descriptor and fails until every one of them has a case isolating it, which is
+what makes the case list an obligation rather than a sample.
+
+One limit belongs in the record rather than in a comment nobody reads. The corpus is
+emitted by the Go oracle, so it can only carry inputs Go can construct and marshal. Legal
+proto-JSON that Go never emits — a numeric enum, `null` for a repeated field — is outside
+what this corpus can prove about the ports, and the ports do diverge there. That gap is
+real, it is not closed here, and closing it needs a different instrument than a
+Go-generated corpus.
 
 ## SSRF-guarded fetch: two flags, a corpus-locked transport
 

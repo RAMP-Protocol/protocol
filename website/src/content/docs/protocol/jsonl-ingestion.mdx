@@ -53,9 +53,9 @@ The feed is a **transport convenience**, not a third licensing model: every line
 | `user_types` | string[] | `Restriction{kind=USER_TYPE}.permitted[]` |
 | `geos` | string[] | `Restriction{kind=GEOGRAPHY}.permitted[]` |
 | `pricing` | `{model, unit, rate, currency}` | `LicenseTerm.pricing` (`model` ∈ `free` \| `per_unit` \| `flat`) |
-| `quotas` | `[{metric, limit, window}]` | `LicenseTerm.Quota[]` |
-| `obligations` | `[{kind, trigger, scope_license, detail}]` | `LicenseTerm.Obligation[]` |
-| `scopes` | string[] | `LicenseTerm.scopes` (entitlement-gated, e.g. `subscription:premium`) |
+| `quotas` | `[{metric, limit, window}]` (≤ 64) | `LicenseTerm.Quota[]` |
+| `obligations` | `[{kind, trigger, scope_license, detail}]` (≤ 64) | `LicenseTerm.Obligation[]` |
+| `scopes` | string[] (≤ 64) | `LicenseTerm.scopes` (entitlement-gated, e.g. `subscription:premium`) |
 
 Rules (enforced by protovalidate at the RPC boundary):
 
@@ -84,7 +84,7 @@ The check is advice about what the Exchange will say, not a substitute for it: t
 
 ## All-or-nothing
 
-`PushResources` is atomic: if any entry fails a hard validation rule — the envelope rules above, a term's shape rule, or a bare unregistered unit or metric — the **whole submission is rejected** (`InvalidArgument`, naming the offending entry) and **nothing is persisted**. The publisher fixes and resubmits the full set. Membership / lint issues are returned in `PushResourcesResponse.warnings[]` and do not block.
+`PushResources` is atomic at the wire tier: if any entry fails one of the rules above — the envelope rules or a term's shape and cross-field rules, all of them protovalidate rules applied at the RPC boundary — the **whole submission is rejected** (`InvalidArgument`, naming the offending entry) and **nothing is persisted**. The publisher fixes and resubmits the full set. The ingest tier that runs afterwards is per **entry**, not per submission: a bare unregistered `pricing.unit` or `quotas[].metric` rejects the entry that carries it and leaves the rest of the batch to upsert, which is why `PushResourcesResponse` answers with `accepted` and `rejected` counts rather than a single verdict. Membership / lint issues are returned in `PushResourcesResponse.warnings[]` and do not block.
 
 ## Extension profiles in the feed
 

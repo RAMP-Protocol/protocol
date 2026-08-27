@@ -272,8 +272,8 @@ resp, err := client.PushResources(ctx, &rampv1.PushResourcesRequest{
 ```
 
 ```typescript
-import { createCatalogClient } from "@ramp-protocol/sdk/client";
-import { validateResourceEntry } from "@ramp-protocol/sdk/licenseterm";
+import { createCatalogClient } from "@ramp-protocol/sdk-l1/client";
+import { validateResourceEntry } from "@ramp-protocol/sdk-l1/licenseterm";
 
 const client = createCatalogClient(catalogEndpoint, { signer: contributorSigner });
 const verdict = validateResourceEntry(entry);
