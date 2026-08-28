@@ -2,6 +2,165 @@
 
 ## Unreleased
 
+**A cross-field refinement turned off the wire policy for the whole message (TypeScript
+SDK fix; no wire change).** The composed cross-field schemas are the surface a TypeScript
+consumer is told to parse with, and each one is a Zod refinement wrapped AROUND the
+generated object rather than the object itself. `parseWire` drives its policy by
+INSPECTING the schema it is handed — strip unknown keys, refuse a lowerCamelCase
+`json_name` alias, read a `null` as no value — and a wrapper it could not see through was
+returned untouched.
+
+So no TypeScript code path applied the wire policy and the cross-field rules to the same
+payload. A camelCase answer parsed SUCCESSFULLY into a message with every multiword field
+missing, which is exactly what the alias refusal exists to prevent, and
+`get_account_status_response.terms_digest_requires_billing_ref` could not fire on the
+payload it was written for: `terms_digest` had already been dropped as an unknown key, and
+the call reported success. All eight composed schemas behaved this way, and the rule added
+earlier in this release was the eighth. Python was never affected — its composed model
+subclasses the generated model and inherits the wire validator.
+
+The policy seam now peels a refinement when it INSPECTS a schema, and still hands the
+ORIGINAL schema to `safeParse`, so the refinement itself runs unchanged. The wrapper is
+read as a method rather than by naming `z.ZodEffects`, which keeps the file working under
+both Zod majors: Zod 4 has no such class, and a refinement there keeps the schema's own
+type, so there is nothing to peel.
+
+**`REGISTRATION_FAILURE_REASON_ALREADY_REGISTERED` is deprecated and never emitted, and
+the schema gate now states its account-creation-only scope (comment and enum
+deprecation; no wire change).** The repeat-registration rule added earlier in this
+release says a repeat SUCCEEDS — it is answered from the stored record and returns the
+existing `billing_ref`. Reason 4 still read "identity already registered", so the enum
+and the rule answered the same request in opposite ways: one implementation refuses the
+repeat, another returns the account.
+
+Reason 4 is now marked `deprecated`, with `Register` forbidden from emitting it. The
+number is retained and MUST NOT be reused, and the value MUST NOT be given a new
+meaning. That last part is deliberate: it reads like a natural home for a future
+cross-account identity collision, and this contract defines no way for an Exchange to
+correlate business identity across accounts, so repurposing it later would silently
+change what it means for every client already built against this text.
+
+`AccountRegistration.data_schema` had the same gap. It calls itself the single home of
+the enforce/pass-through contract and stated its gate without exception, so a reader who
+went there for the whole rule got the wrong one. It now states that the gate runs on
+account creation only and points at the repeat-registration rule.
+
+**The composed cross-field models accepted payloads the Go oracle refuses (Python and
+TypeScript SDK fix; conformance-affecting, no wire change).** Both ports offer two
+surfaces for the message-CEL rules: a rule-id function that takes proto-JSON, and a
+COMPOSED model that layers the cross-field rules onto the generated field-level model.
+The rule-id function was correct in both. The composed surface — the one a consumer is
+told to use — was not, in two separate ways, and nothing connected the two lists.
+
+`GetAccountStatusResponse` had a registered rule and no composed model in either port,
+so a Python or TypeScript consumer accepted a response carrying a `terms_digest` with no
+`billing_ref`: an acceptance digest for an account that does not exist.
+
+Python had a second, wider fault. The composed model handed the rules a dump that
+renders an enum member as its Python repr, `ObligationKind.OBLIGATION_KIND_SHARE_ALIKE`,
+while the rules compare against the wire token, `OBLIGATION_KIND_SHARE_ALIKE`. The
+comparison never matched, so **every rule that reads an enum silently never fired** —
+`obligation.share_alike.requires_scope_license`, `pricing.free.zero_rate` and
+`pricing.per_unit.requires_unit`. TypeScript was unaffected.
+
+Both ports now pin the registry to the composed exports by name, and drive the corpus
+mutants through the composed models themselves. The second test is what found the enum
+fault: comparing the two lists proves a model EXISTS, never that its validator runs.
+
+**A `google.protobuf.Value` with no `kind` set is a second payload with no JSON form,
+and it was accepted (Go SDK fix; conformance-affecting, no wire change).** `Value` holds
+its payload in a `oneof`, and a `oneof` with no member set is well-formed on the wire:
+the binary decoder accepts it, and proto-JSON refuses to render it with "none of the
+oneof fields is set". So it belongs to the same refusal class as a non-finite number —
+no canonical encoding, therefore no measurable size — and
+`helpers.CheckRegistrationDataStruct` did not catch it, because the class had been
+written as though a non-finite number were its only member.
+
+It fails in the same shape as `NaN`, and for the same reason it cannot be caught after
+conversion: `AsMap` renders an unset `kind` as an absent value, which is exactly what a
+real JSON `null` gives, and `null` is a value a payload may legitimately carry. Both
+members of the class are now refused by the raw walk, which already visited every value,
+and the contract defines the class by what it means rather than by one example: a payload
+with **no JSON representation**. A payload carrying a real `null` is still accepted.
+
+**A registration payload carrying `NaN` or an infinity was accepted by a Go Exchange and
+refused by a Python one (Go SDK fix; conformance-affecting, no wire change).** `Struct`'s
+`number_value` is an IEEE-754 double, so a non-finite number crosses the wire intact —
+`structpb.NewNumberValue` does not refuse one and the binary codec carries it unchanged.
+JSON can write none of the three, so such a payload has no canonical form and no
+measurable size, which is what `uncanonicalizable` names. Go could not see it. The SDK's
+own doc comment named `RegisterRequest.GetRegistrationData().AsMap()` as the call site,
+and Go's protobuf runtime renders the three values as the STRINGS `"NaN"`, `"Infinity"`
+and `"-Infinity"` during that call, so the check received a well-formed string and
+answered `accepted`. Python and TypeScript decode into objects that keep the real float
+and refused the same payload. Two conformant Exchanges therefore answered the same
+signed request differently, and a Go Exchange stored the text `"NaN"` where the caller
+had sent a number.
+
+The fix is a new Go entry point, `helpers.CheckRegistrationDataStruct`, which reads the
+raw `*structpb.Struct`. **It cannot be a repair of the map-based check**, and that is
+worth stating because it looks like one: after `AsMap` has run, a non-finite number and
+an operator legally named `NaN` are the same three bytes, so a check that refused the
+text would refuse a valid registration. The conversion destroys the evidence, so the
+check has to precede it. `CheckRegistrationData` still exists for a caller whose payload
+never was a `Struct`, and its comment now says what it cannot see. Python and TypeScript
+get no new face: their existing checks already see the case, so a second entry point
+there would be an alias with nothing to do — it is recorded as a Go-only divergence in
+the parity matrix instead. No shared corpus can carry the case in any language, because
+JSON cannot write the value down.
+
+**The order of the registration gates is pinned, and two of the orderings were
+previously free choice (comment-only; conformance-affecting).** A payload is now checked
+in a stated sequence: top-level member count, nesting depth, canonicalizability, canonical
+byte size, then `terms_digest`, then the published `data_schema`.
+
+Two of those were unstated. **Canonicalizability precedes the byte cap** because the cap
+is DEFINED as the length of the RFC 8785 encoding — until that encoding exists there is
+no number to compare against, and answering "too large" for a payload that has no
+encoding at all asserts a measurement that was never taken. **The terms gate precedes the
+schema gate** because the schema may itself have changed in the revision the caller has
+not read. Validating a stale-terms caller against the CURRENT schema hands back field
+errors describing a document it has never seen, so it fixes those members, re-fetches,
+and finds the requirements have moved. Terms first means a caller is always told to read
+the current manifest before it is told anything about that manifest's contents. It also
+keeps one refusal to one remedy: `TERMS_DIGEST_STALE` says re-fetch and echo,
+`INVALID_REGISTRATION_DATA` says fix the payload, and a request earning both is given the
+one that has to be done first.
+
+**A repeat `Register` is answered from the stored record and runs none of the
+account-creation gates (comment-only; conformance-affecting).** Two rules were each
+stated absolutely and neither mentioned the other: `Register` returns the same
+`billing_ref` for the same agent, idempotent by design; and a `terms_digest` that differs
+from the published one is refused as stale, in a paragraph that calls its four cases "all
+defined". For a returning agent after the operator revises its terms the two give
+opposite answers, and an implementer reading the second paragraph alone will refuse the
+caller and believe they are conformant — which breaks every returning agent on the day
+the terms change, because the account it already holds becomes unreachable through the
+RPC that exists to return it. The rule is now written where the idempotency promise is
+made, together with the reason: a repeat discards `registration_data` entirely, so
+checking a member about to be thrown away reports an error about a value that has no
+effect. What a repeat still runs is stated too — signature verification and caller
+identity, the recipient check on `RegisterRequest.exchange`, and the field-level
+constraints — so "no gates" is not read as "no checks".
+
+**`GetAccountStatusResponse.terms_digest` (field 4) makes the accepted terms readable.**
+The protocol already required an Exchange to record the accepted digest with the account,
+and said plainly that this is what makes "which terms did this operator accept"
+answerable later. Nothing could ask. No RPC and no field returned the value, so the only
+party who could check what an operator had agreed to was the party holding the database —
+and the `MUST NOT` beside it, that an Exchange publishing no digest must ignore a
+presented one and must not record it as an acceptance, could not be tested through a
+public surface at all. Absence of the new field has exactly one meaning: no acceptance is
+recorded, either because the Exchange publishes no digest or because the account predates
+one. An Exchange holding a digest MUST return it — absence is already spoken for, so
+withholding would make the field state something untrue. The value is what was ACCEPTED,
+not what is published now; comparing it against a freshly fetched
+`WellKnownManifest.terms_digest` is how an agent discovers the terms moved under an
+account it already holds, which a repeat `Register` will no longer tell it. A message rule
+(`get_account_status_response.terms_digest_requires_billing_ref`) joins the digest to the
+account handle it hangs on, so a reader can never take an acceptance from a response that
+carries no account.
+
 **The TypeScript and Python SDKs gained a client, and it changed what they accept
 from a peer (no wire change; conformance-affecting).** Neither could SEND a RAMP
 request before; both now speak the Connect-unary JSON form the protocol's unary RPCs

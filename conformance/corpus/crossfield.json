@@ -1,5 +1,17 @@
 [
   {
+    "id": "GetAccountStatusResponse/cel/terms_digest_requires_billing_ref",
+    "message": "GetAccountStatusResponse",
+    "valid": false,
+    "rules": [
+      "get_account_status_response.terms_digest_requires_billing_ref"
+    ],
+    "json": {
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab",
+      "ver": "1.0"
+    }
+  },
+  {
     "id": "License/cel/digest_required_with_uri",
     "message": "License",
     "valid": false,

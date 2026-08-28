@@ -1,6 +1,6 @@
 """Cross-field (message-CEL) validation — the one genuinely net-new L1 surface.
 
-Mirrors the sdk/ts sibling (sdk/ts/src/crossfield.ts). The 9 cross-field rules
+Mirrors the sdk/ts sibling (sdk/ts/src/crossfield.ts). The cross-field rules
 live ONLY in proto/ramp/v1/ramp.proto as protovalidate message-CEL options; the
 Go oracle executes them via protovalidate. Field-level Pydantic (gen/python) and
 Zod cannot express them. This layer closes that gap on the Python side: it
@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import model_validator
 from wire.models import (
+    GetAccountStatusResponse,
     License,
     LicenseTerm,
     Obligation,
@@ -146,6 +147,22 @@ def _well_known_manifest_rules(o: dict[str, Any]) -> list[str]:
     return []
 
 
+def _get_account_status_response_rules(o: dict[str, Any]) -> list[str]:
+    """GetAccountStatusResponse.terms_digest_requires_billing_ref.
+
+    ``this.terms_digest == '' || this.billing_ref != ''``. The digest is what this
+    ACCOUNT accepted, so it cannot travel without the account handle it hangs on.
+    A reader that took the digest from a response carrying no billing_ref would be
+    reading an acceptance for an account that does not exist. Mirror of the
+    WellKnownManifest rule above, asked of the read side.
+    """
+    terms_digest = _str(_field(o, "terms_digest"))
+    billing_ref = _str(_field(o, "billing_ref"))
+    if terms_digest != "" and billing_ref == "":
+        return ["get_account_status_response.terms_digest_requires_billing_ref"]
+    return []
+
+
 def _registration_failure_rules(o: dict[str, Any]) -> list[str]:
     """RegistrationFailure.field_errors_scoped_to_invalid_data.
 
@@ -161,6 +178,7 @@ def _registration_failure_rules(o: dict[str, Any]) -> list[str]:
 
 
 _RULES_BY_MESSAGE: dict[str, Callable[[dict[str, Any]], list[str]]] = {
+    "GetAccountStatusResponse": _get_account_status_response_rules,
     "License": _license_rules,
     "LicenseTerm": _license_term_rules,
     "Obligation": _obligation_rules,
@@ -195,7 +213,15 @@ def cross_field_rule_ids(message: str, json: Any) -> list[str]:
 
 def _make_cross_field(base: type[Any], message: str) -> type[Any]:
     def _check(self: Any) -> Any:
-        violated = cross_field_rule_ids(message, self.model_dump(by_alias=True, exclude_none=True))
+        # mode="json" is load-bearing, not tidiness. The default dump renders an enum
+        # member as its Python repr ("ObligationKind.OBLIGATION_KIND_SHARE_ALIKE"),
+        # while every cross-field rule compares against the WIRE token
+        # ("OBLIGATION_KIND_SHARE_ALIKE"). Without it, each rule that reads an enum
+        # silently never fires: the model accepts a payload the Go oracle refuses, and
+        # no test noticed because the rule-id API is fed raw JSON and answers correctly.
+        violated = cross_field_rule_ids(
+            message, self.model_dump(by_alias=True, exclude_none=True, mode="json")
+        )
         if violated:
             joined = ", ".join(violated)
             msg = f"cross-field rule(s) violated: {joined}"
@@ -209,6 +235,9 @@ def _make_cross_field(base: type[Any], message: str) -> type[Any]:
     return type(f"{message}CrossField", (base,), namespace)
 
 
+GetAccountStatusResponseCrossField = _make_cross_field(
+    GetAccountStatusResponse, "GetAccountStatusResponse"
+)
 LicenseCrossField = _make_cross_field(License, "License")
 LicenseTermCrossField = _make_cross_field(LicenseTerm, "LicenseTerm")
 ObligationCrossField = _make_cross_field(Obligation, "Obligation")

@@ -1968,6 +1968,154 @@
     }
   },
   {
+    "id": "GetAccountStatusResponse/terms_digest/empty_ok",
+    "message": "GetAccountStatusResponse",
+    "valid": true,
+    "json": {
+      "active": true,
+      "billing_ref": "acct-seed",
+      "terms_digest": "",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "GetAccountStatusResponse/terms_digest/pattern#0",
+    "message": "GetAccountStatusResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "active": true,
+      "billing_ref": "acct-seed",
+      "terms_digest": "two words",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "GetAccountStatusResponse/terms_digest/pattern#1",
+    "message": "GetAccountStatusResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "active": true,
+      "billing_ref": "acct-seed",
+      "terms_digest": "1.2.3",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "GetAccountStatusResponse/terms_digest/pattern#2",
+    "message": "GetAccountStatusResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "active": true,
+      "billing_ref": "acct-seed",
+      "terms_digest": "!!bad!!",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "GetAccountStatusResponse/terms_digest/pattern#3",
+    "message": "GetAccountStatusResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "active": true,
+      "billing_ref": "acct-seed",
+      "terms_digest": "\u0000ctl\u0000",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "GetAccountStatusResponse/terms_digest/pattern#4",
+    "message": "GetAccountStatusResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "active": true,
+      "billing_ref": "acct-seed",
+      "terms_digest": " ",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "GetAccountStatusResponse/terms_digest/pattern#5",
+    "message": "GetAccountStatusResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "active": true,
+      "billing_ref": "acct-seed",
+      "terms_digest": "-5",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "GetAccountStatusResponse/terms_digest/pattern#6",
+    "message": "GetAccountStatusResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "active": true,
+      "billing_ref": "acct-seed",
+      "terms_digest": "NaN",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "GetAccountStatusResponse/terms_digest/pattern#7",
+    "message": "GetAccountStatusResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "active": true,
+      "billing_ref": "acct-seed",
+      "terms_digest": "Infinity",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "GetAccountStatusResponse/terms_digest/pattern#8",
+    "message": "GetAccountStatusResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "active": true,
+      "billing_ref": "acct-seed",
+      "terms_digest": "1E3",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "GetAccountStatusResponse/valid",
+    "message": "GetAccountStatusResponse",
+    "valid": true,
+    "json": {
+      "active": true,
+      "billing_ref": "acct-seed",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab",
+      "ver": "1.0"
+    }
+  },
+  {
     "id": "License/uri_digest/empty_ok",
     "message": "License",
     "valid": true,

@@ -41,6 +41,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // compileVector is one CompileRegistrationSchema case. The schema is carried as the
@@ -244,6 +246,22 @@ func buildRegDataVectors(t *testing.T) []regDataVector {
 		// The member cap, on the nose and one over.
 		{"members_at_the_cap", wide(MaxRegistrationDataMembers), RegistrationDataAccepted},
 		{"members_over_the_cap", wide(MaxRegistrationDataMembers + 1), RegistrationDataTooManyMembers},
+		// BOTH bounds broken at once, and the answer names the FIRST check in the proto's
+		// order. Every other case here breaks exactly one bound, so the order between the
+		// two counts is a thing all three ports could disagree about while every vector
+		// passed: swapping them still refuses this payload, just under the other name, and
+		// an agent that switches on the verdict is told the wrong thing about its payload.
+		// The pair is a vector rather than three separate language tests because the order
+		// is the contract's, not one implementation's.
+		{
+			"members_over_the_cap_and_nesting_over_the_depth_cap",
+			func() map[string]any {
+				out := wide(MaxRegistrationDataMembers + 1)
+				out["deep"] = nestedPayload(MaxRegistrationDataDepth + 1)
+				return out
+			}(),
+			RegistrationDataTooManyMembers,
+		},
 		// The byte cap, on the nose and one over.
 		{"bytes_at_the_cap", atCap(MaxRegistrationDataBytes), RegistrationDataAccepted},
 		{"bytes_over_the_cap", atCap(MaxRegistrationDataBytes + 1), RegistrationDataTooLarge},
@@ -296,6 +314,27 @@ func buildRegDataVectors(t *testing.T) []regDataVector {
 			// JSON has no way to say "the caller passed nil"; the rule treats an absent
 			// payload and an empty one alike, which is what this records.
 			data = map[string]any{}
+		}
+		// Every case is replayed through the RAW entry point too, because that is the one
+		// an Exchange calls. The two faces may differ on exactly one input — a non-finite
+		// number — and no vector can carry one, since JSON cannot write it down. So on
+		// this corpus they must agree case for case, and a difference here is a real
+		// divergence rather than the documented one.
+		//
+		// How high this floor actually is, measured by loosening the code under it:
+		// breaking the byte bound in a CheckRegistrationDataStruct that computes its own
+		// tail fails here, but breaking its raw member bound does NOT — the delegation to
+		// CheckRegistrationData answers too_many_members either way. That is the honest
+		// height. The raw member and depth guards exist to keep AsMap from recursing over
+		// an unmeasured payload, not to decide a verdict, so no corpus can see them; what
+		// this catches is the day the two faces stop sharing a tail.
+		raw, err := structpb.NewStruct(data)
+		if err != nil {
+			t.Fatalf("registration_data vector %s: structpb.NewStruct: %v", c.name, err)
+		}
+		if rawGot := CheckRegistrationDataStruct(raw); rawGot != got {
+			t.Fatalf("registration_data vector %s: CheckRegistrationDataStruct=%s, CheckRegistrationData=%s",
+				c.name, rawGot, got)
 		}
 		out = append(out, regDataVector{Name: c.name, Data: data, Verdict: got.String()})
 	}
