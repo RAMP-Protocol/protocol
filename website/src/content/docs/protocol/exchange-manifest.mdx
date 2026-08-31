@@ -112,7 +112,7 @@ The Exchange's offer-signing keys are **not** carried in `ramp.json`. They live 
 | `endpoint` | string | No | ExchangeService endpoint URL. **Must be on the host and port that serve this manifest, or a subdomain of that host on that port, and must not carry userinfo** — see [Endpoint host binding](#endpoint-host-binding) |
 | (offer-signing keys) | — | — | Not in `ramp.json`. See the [WBA directory](#the-wba-directory) at `/.well-known/http-message-signatures-directory` |
 | `health_endpoint` | string | No | Health check endpoint URL |
-| `catalog_endpoint` | string | No | CatalogService endpoint URL, if the Exchange exposes the service. **Same binding as `endpoint`** — on the host and port that serve this manifest, or a subdomain of that host on that port, no userinfo — see [Endpoint host binding](#endpoint-host-binding). Absent means not exposed; a publisher's client does not fall back to `endpoint` |
+| `catalog_endpoint` | string | No | CatalogService endpoint URL, if the Exchange exposes the service. **Same binding as `endpoint`** — on the host and port that serve this manifest, or a subdomain of that host on that port, no userinfo — see [Endpoint host binding](#endpoint-host-binding). Unlike `endpoint`, no SDK reads or checks this field: the catalog address is configuration, so a deployment that does read it from a manifest **must apply the binding itself** before dialling. Absent means not exposed; a publisher's client does not fall back to `endpoint` |
 | `protocol_versions_supported` | string[] | No | Supported RAMP protocol versions |
 | `pricing_models_supported` | string[] | No | Supported pricing models |
 | `delivery_methods_supported` | string[] | No | Supported delivery methods |

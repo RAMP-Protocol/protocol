@@ -105,12 +105,12 @@ Profile-specific claims use a namespaced format. Any Exchange that declares conf
 
 ## How You Push Data
 
-You push signed `ResourceAttestation` entries to Exchanges via the **CatalogService API**:
+You push signed `ResourceAttestation` entries to Exchanges via the **CatalogService API**, `POST /ramp.v1.CatalogService/PushResources`:
 
-```
-POST /ramp.v1.CatalogService/PushResources
-
+{/* ramp-validate: PushResourcesRequest */}
+```json
 {
+  "exchange": "exchange.example.com",
   "tenant_id": "hearst-media",
   "entries": [
     {
@@ -142,6 +142,8 @@ POST /ramp.v1.CatalogService/PushResources
   "caller_id": "gumgum.com"
 }
 ```
+
+`exchange` is REQUIRED and names the bare host of the Exchange this push is addressed to. The SDK's catalog client refuses a request without it **before signing**, so omitting it fails locally rather than at the Exchange.
 
 The request itself is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) in the HTTP headers (not an in-message field); `caller_id` identifies the pusher.
 
