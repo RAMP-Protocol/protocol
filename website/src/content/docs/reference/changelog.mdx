@@ -356,7 +356,12 @@ ids to the descriptor's CEL-id namespace without collisions.
 `connectserver.NewCatalogServiceHandler` composes the same request-id · verify · validate
 · error-detail stack over the generated CatalogService handler, so an Exchange
 implementer has a server-side starting point for the publisher-facing RPCs; contributor
-authorisation, tenant binding and per-entry verdicts stay the handler's job.
+authorisation, tenant binding and per-entry verdicts stay the handler's job. The validate
+step is opt-in on all three bindings and always has been — `ValidationOff` is the enum's
+zero value — so a deployment that wants the contract's boundary rules passes
+`WithValidation(ValidationStrict)` on the mount. The handler docs now say so rather than
+leaving it to be inferred from a stack diagram, and a handler asked for strict validation
+that cannot build the validator now fails at construction instead of serving without it.
 
 *Parity record:* thirteen L1 exports and the catalog client are mapped at
 three-language parity (130 symbols, 34 corpora). Two documented divergences join the

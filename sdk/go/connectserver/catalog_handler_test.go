@@ -165,3 +165,38 @@ func TestServerVerify_CatalogHandlerValidatesTheEnvelope(t *testing.T) {
 		t.Fatalf("origin ran %d times on a malformed push; the validate interceptor must refuse first", hits)
 	}
 }
+
+// The mirror of the case above, and the one the documentation now rests on: with no
+// WithValidation the SAME malformed entry reaches the origin. ValidationOff is the
+// enum's zero value, so a mount that never names the option and one that explicitly
+// opts out are the same request, and neither runs the contract's boundary rules. A
+// change to that default belongs with a change to the package doc, which states it;
+// this is what makes the two move together.
+func TestServerVerify_CatalogHandlerDoesNotValidateByDefault(t *testing.T) {
+	t.Parallel()
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("keygen: %v", err)
+	}
+	const keyID = "publisher.v1"
+	signer, err := helpers.NewEd25519Signer(keyID, priv)
+	if err != nil {
+		t.Fatalf("signer: %v", err)
+	}
+	resolver := helpers.NewStaticKeyResolver(map[string]ed25519.PublicKey{keyID: pub})
+	origin := &catalogEcho{}
+	srv := mountCatalog(t, origin,
+		rampserver.WithKeyResolver(resolver),
+		rampserver.WithReplayStore(newCountingReplayStore()),
+	)
+
+	client := rampconnect.NewCatalogClient(srv.URL, rampconnect.WithSigner(signer))
+	bad := validPush()
+	bad.Entries[0].Path = "no-leading-slash"
+	if _, err := client.PushResources(context.Background(), bad); err != nil {
+		t.Fatalf("PushResources: %v — with validation off the entry must reach the origin", err)
+	}
+	if hits, _ := origin.snapshot(); hits != 1 {
+		t.Fatalf("origin ran %d times, want 1: without WithValidation nothing checks the envelope", hits)
+	}
+}

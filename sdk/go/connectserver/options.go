@@ -150,6 +150,15 @@ func WithMaxRequestBytes(n int64) ServerOption {
 // + responses + error details) with WithValidation(connect.ValidationStrict). The
 // Validation enum is shared with the client (sdk/go/connect) so both faces select
 // strictness with one type.
+//
+// What Off means on a SERVER is worth stating plainly, because it is not symmetric
+// with the client: the contract's own boundary rules do not run. Everything the
+// protocol describes as refused before the handler — the field and message rules
+// protovalidate carries, and the caps a rejection reason was retired against —
+// simply is not checked, and the handler implementation sees the request whatever
+// shape it arrived in. ValidationOff is also the enum's ZERO VALUE, so a mount that
+// never names this option and one that explicitly opts out are the same request.
+// A deployment that wants the wire tier passes ValidationStrict on every mount.
 func WithValidation(v rampconnect.Validation) ServerOption {
 	return func(c *serverConfig) { c.validation = v }
 }

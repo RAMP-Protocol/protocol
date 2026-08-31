@@ -7,6 +7,18 @@
 // detail). KeyResolver and ReplayStore are injected by the application (ADR-020
 // §2/§3; the server interceptor order is deliberate — see NewExchangeServiceHandler).
 //
+// # Validation is opt-in, on every one of the three handlers
+//
+// The `validate` step named in that stack is composed ONLY when the application
+// passes WithValidation(connect.ValidationStrict). ValidationOff is the enum's zero
+// value, so a handler built with no options serves without protovalidate in either
+// direction — and a deleted WithValidation line is indistinguishable from an
+// explicit opt-out. Anything the contract describes as refused "at the boundary" —
+// the ResourceEntry envelope rules, the LicenseTerm rules and the caps the catalog
+// rejection reasons were retired against — arrives with that option and not
+// otherwise. A deployment that wants the contract's own wire tier passes it on
+// every mount; the reference implementation does, on all of them.
+//
 // It is a SEPARATE package from the client binding sdk/go/connect so that each face
 // exposes BARE, symmetric option names — this package's WithKeyResolver,
 // WithValidation, WithRequestIDFunc, WithInterceptors do not collide with the
