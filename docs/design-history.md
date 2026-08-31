@@ -1224,11 +1224,10 @@ full-cardinality push costs ~475ms to validate, and the worst conformant shape t
 fits under 4 MiB costs ~7.4s. Bounded, not small; an uncapped handler has no worst case at
 all.
 
-Two corrections that arrived with the first honest measurement, both worth keeping because
-each is a way a cost model can read as tighter than it is. The published figure was ~1.6s,
-and it described the contract the author intended rather than the one that shipped: with
-`Restriction.kind` open, a term could carry sixty-four distinct axes, the one-per-kind rule
-never short-circuited, and the real figure was an order of magnitude higher. A cost model
+Three corrections arrived with the honest measurements, each a way a cost model can read as
+tighter than it is. The published figure was ~1.6s, and it described the contract the author
+intended rather than the one that shipped: with `Restriction.kind` open a term could carry
+sixty-four distinct axes, and the real figure was an order of magnitude higher. A cost model
 that assumes a bound the contract does not state is not a measurement of the contract. And
 the transport cap bounds the decompressed message without bounding decompression: an
 over-cap body is inflated to completion so the error can name its size, which is bounded
@@ -1242,6 +1241,23 @@ strings and every `ResourceAttestation` member carry no length rule, so there is
 largest conformant entry and no largest conformant push — the transport cap can refuse a
 conformant one. That is the intended trade rather than a gap: bytes are the recipient's
 budget to set, and a deployment that must accept larger documents raises its own cap.
+
+The third correction is the one that outlived the other two, because it says where the
+argument above stops. Closing the axis was itself described as bounding the one-per-kind
+rule — a list longer than the axis set must repeat a kind, so `all()` would short-circuit —
+and that is wrong for the same reason the caps are: the rule refusing a number does not make
+that number EQUAL to another, so each undefined kind stays distinct and the walk runs in
+full. Measured: four thousand restrictions cost 17s to refuse, from 20 KB of wire and 56 KB
+of proto-JSON.
+
+Which is the limit of "bound the work at the transport". A read cap bounds work that is
+LINEAR in bytes, and nothing else. A rule that walks its list against itself is bounded by
+neither the cap on the list nor the cap on the request — 56 KB is far under any transport
+cap anyone would set — and the only thing that bounds it is a size test inside the rule,
+which short-circuits before the walk. The contract has exactly one such rule; it now carries
+that test, refuses the same input in 26ms, and a conformance guard holds the test's threshold
+equal to the field's own cap, because the rule stays silent above it and a cap raised alone
+would leave the lists in between both unchecked and accepted.
 
 Two details of that cap are load-bearing. It covers the RAW body as well as the decoded
 message, because the verify face must buffer the whole body to check a signature over the

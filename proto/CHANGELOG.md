@@ -2,19 +2,33 @@
 
 ## Unreleased
 
-**The restriction axis set is closed, and closing it bounds what a push costs to check
-(breaking, pre-1.0).** `Restriction.kind` carries `defined_only` beside its existing
-`not_in: [0]`, so a number outside the four defined axes is refused rather than ignored.
+**The restriction axis set is closed, and the rule that walks the restriction list
+against itself is bounded (breaking, pre-1.0).** Two changes; the second is what bounds
+the cost, and the first does not.
+
+`Restriction.kind` carries `defined_only` beside its existing `not_in: [0]`, so a number
+outside the four defined axes is refused rather than ignored.
 A custom axis was never a new number — it is `RESTRICTION_KIND_OTHER`, whose meaning
 rides in `permitted`/`prohibited` — and accepting an undefined one admitted a restriction
 no consumer can evaluate onto a term whose default is BINDING, which fails open on the
 axis a publisher most needs enforced.
 
-It also removes the shape that made the one-per-kind rule quadratic. That rule reads
-`this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)`,
-and with the axes open a term could carry sixty-four DISTINCT kinds, so `all()` never
-found a duplicate to short-circuit on and ran the full n² every time. With four axes, a
-list longer than four must repeat one.
+Closing the axis does NOT bound the one-per-kind rule, and an earlier draft of this
+entry said it did. That rule compares the list against itself, and `defined_only` does
+not make the numbers it refuses EQUAL — each stays distinct, so `all()` still finds no
+duplicate to stop on. Nor does the cap on the list help: protovalidate collects every
+violation rather than short-circuiting, so a field rule that fires still leaves the
+message rules to walk the whole oversized list. Measured, before the fix below: four
+thousand restrictions cost 17s to refuse from 20 KB of wire, and the reference Exchange
+reaches that rule before the caller is authenticated.
+
+So the rule now leads with a size test —
+`this.restrictions.size() > 8 || this.restrictions.all(r, …)` — and refuses the same
+input in 26ms. It short-circuits to TRUE, so a list longer than the cap reports
+`repeated.max_items` alone, which is its actual fault. A conformance guard holds the
+threshold equal to that cap, since raising the cap alone would let a list in between
+skip the duplicate check and pass. The TypeScript and Python cross-field faces evaluate
+this rule themselves and carry the same test, so all three agree on the silence.
 
 Measured on this contract, with the restrictions cap above: the worst CONFORMANT push
 that fits under the SDK's 4 MiB default read cap is 82 entries of 32 terms, each term
@@ -192,13 +206,17 @@ most 256, the bound a caller-chosen batch carries at `ResourceQuery.uris`. Every
 feed is under ten entries, so the batch cap sits far above real traffic and a larger feed
 is pushed in several submissions.
 
-`LicenseTerm.restrictions` carries at most 8, and the tighter bound is the point rather
-than an inconsistency: it is the one list the message rules walk QUADRATICALLY — the
-one-per-kind rule compares the list against itself, and each element's disjointness rule
-compares its two token lists pairwise — so a cap here bounds the RULE and not only the
-document. Only one restriction per axis is valid and `Restriction.kind` is now
-defined-only, so four is the longest conformant list and eight leaves room for an axis
-this version does not have. The largest downstream feed carries three.
+`LicenseTerm.restrictions` carries at most 8, and like the others this bounds the
+DOCUMENT rather than the rule — an earlier draft claimed otherwise. Only one restriction
+per axis is valid and `Restriction.kind` is now defined-only, so four is the longest
+conformant list and eight leaves room for an axis this version does not have. The largest
+downstream feed carries three.
+
+The tighter bound still earns its place, for a different reason: this is the one list a
+message rule walks against ITSELF, so the number is also the threshold of the size test
+that rule carries, and a conformance guard holds the two equal. The disjointness rule on
+each element is quadratic only in that element's two token lists, both capped at 64, so
+its cost is bounded per restriction and linear across the list.
 
 What these caps bound is the DOCUMENT: how large one entry may be, what a push can store,
 and how much a rejection has to name back. They do NOT bound the work of checking a push,

@@ -3450,9 +3450,11 @@ type Restriction struct {
 	// so a new number was never the extension mechanism — accepting one would
 	// admit a restriction no consumer can evaluate onto a term whose default is
 	// BINDING (see advisory below), which fails open on the axis a publisher most
-	// needs enforced. It also bounds the cost of the one-per-kind rule below: with
-	// the axes closed, a list longer than the axis set must repeat one, so that
-	// rule's all() short-circuits instead of comparing every pair.
+	// needs enforced. Closing the axis does NOT bound the cost of the one-per-kind
+	// rule below, and must not be read as doing so: a number this rule refuses is
+	// still distinct from every other, so that rule's all() finds no duplicate to
+	// stop on and walks the list in full anyway. Its cost is bounded by the size
+	// test the rule itself carries.
 	Kind RestrictionKind `protobuf:"varint,1,opt,name=kind,proto3,enum=ramp.v1.RestrictionKind" json:"kind,omitempty"`
 	// Tokens allowed on this axis. Empty = all permitted.
 	// For FUNCTION: "ai-input", "ai-train", "search", "editorial", "commercial", …
@@ -3743,12 +3745,20 @@ type LicenseTerm struct {
 	// At most 8, and this list is the one of the three that does NOT carry the
 	// contract's usual 64: only one restriction per axis is valid, the axis enum
 	// is defined-only, so four is the longest conformant list and eight leaves
-	// room for an axis this version does not have. The tighter bound is here
-	// because this is the list the message rules walk QUADRATICALLY — the
-	// one-per-kind rule below compares the list against itself, and each element's
-	// disjointness rule compares its two token lists pairwise. A cap on a list a
-	// rule walks twice bounds the rule; the caps on quotas and obligations bound
-	// only the document, which is why they differ.
+	// room for an axis this version does not have. Like the caps on quotas and
+	// obligations, this one bounds the DOCUMENT — how many restrictions one term
+	// may carry — and not the work of checking it: a validator walks every element
+	// it is handed before any cardinality rule is reported, so an over-cap list is
+	// traversed in full on its way to being refused.
+	//
+	// What makes this list different is that one rule walks it against ITSELF. The
+	// one-per-kind rule below is quadratic, so it carries its own size test and
+	// stays silent above this cap; a conformance guard holds the two numbers equal,
+	// because a cap raised without the test would leave the lists in between
+	// unchecked for duplicate axes and accepted. The neighbouring disjointness rule
+	// on each element is quadratic only in that element's two token lists, both
+	// capped at 64, so its cost is bounded per restriction and linear across the
+	// list — it needs no such test.
 	Restrictions []*Restriction `protobuf:"bytes,3,rep,name=restrictions,proto3" json:"restrictions,omitempty"`
 	// Usage caps. The agent must not exceed any individual Quota.
 	// At most 64, the bound every per-message list in this contract carries when
