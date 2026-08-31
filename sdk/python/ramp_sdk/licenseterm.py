@@ -351,6 +351,14 @@ def validate_resource_entry(entry: dict[str, Any]) -> EntryVerdict:
                     message=str(err["msg"]),
                 )
             )
+    # Everything below reads members off the entry, so a value that is not a dict has
+    # nothing to walk. The model above has already said so — a non-dict yields its own
+    # type violation — and continuing would raise AttributeError instead of returning
+    # that verdict. A publisher feeding this a parsed JSONL line reaches it with
+    # whatever the line held, so a malformed row must get a verdict like any other
+    # refusal rather than an exception the TypeScript port does not raise either.
+    if not isinstance(entry, dict):
+        return EntryVerdict(violations=violations, warnings=[])
     for path, message, value in _cross_field_sites(entry):
         for rule_id in cross_field_rule_ids(message, value):
             violations.append(

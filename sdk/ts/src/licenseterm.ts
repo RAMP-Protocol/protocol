@@ -383,6 +383,13 @@ export function validateResourceEntry(entry: Obj): EntryVerdict {
 			message: cause.message,
 		});
 	}
+	// Everything below reads members off the entry, so a value that is not an object
+	// has nothing to walk. The parse above has already said so — a non-object yields
+	// the schema's own type violation — and continuing would throw instead of
+	// returning that verdict. A publisher feeding this a parsed JSONL line reaches
+	// it with whatever the line held, so a malformed row must get a verdict like any
+	// other refusal rather than an exception the Python port does not raise either.
+	if (!asObj(entry)) return { ok: violations.length === 0, violations, warnings: [] };
 	for (const site of crossFieldSites(entry)) {
 		for (const id of crossFieldRuleIds(site.message, site.value)) {
 			violations.push({ rule: id, path: site.path, token: "", message: `cross-field rule violated: ${id}` });
