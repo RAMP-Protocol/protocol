@@ -1220,9 +1220,12 @@ control — how many terms one entry may carry, how many entries a push can stor
 many paths a rejection has to name back — and the work is bounded where the work happens,
 at the transport, by the maximum request size the recipient will read. The SDK's server
 binding sets that cap on every handler and states the cost the default implies: a
-full-cardinality push costs ~475ms to validate, and the worst conformant shape that still
-fits under 4 MiB costs ~7.4s. Bounded, not small; an uncapped handler has no worst case at
-all.
+full-cardinality push costs ~475ms to validate, and the most expensive conformant shape
+that still fits under 4 MiB costs ~1.8s. Bounded, not small; an uncapped handler has no
+worst case at all. That shape carries the SHORTEST legal tokens, which is the detail an
+earlier figure got backwards: cost tracks the number of elements walked and size tracks
+their length, so under a byte cap the expensive shape is the one spending its bytes on
+count rather than on length.
 
 Three corrections arrived with the honest measurements, each a way a cost model can read as
 tighter than it is. The published figure was ~1.6s, and it described the contract the author

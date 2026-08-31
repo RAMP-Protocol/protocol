@@ -37,18 +37,29 @@ const replayTTL = 5 * time.Minute
 // 4 MiB is chosen against both ends, measured. A FULL-CARDINALITY push — 256
 // entries each carrying the full 32 terms, one restriction per axis, every field
 // populated — is 0.81 MiB and validates in ~475ms, so a real catalog batch fits
-// with better than fourfold headroom. The worst CONFORMANT shape that still fits
-// under this cap is 82 entries of 32 terms, each term carrying one restriction per
-// axis with both token lists at their 64-item caps: 4.15 MiB and ~7.4s of
-// validation, with one more entry exceeding the cap. That is the number this
-// constant buys — not a small cost, but a bounded one.
+// with better than fourfold headroom. The most EXPENSIVE conformant shape that
+// still fits under this cap is 83 entries of 32 terms, each term carrying one
+// restriction per axis with both token lists at their 64-item caps and every token
+// a single character: 3.97 MiB and ~1.8s of validation, with one more entry
+// exceeding the cap. That is what this constant buys — not a small cost, but a
+// bounded one.
 //
-// The contract's own caps put a ceiling above it. Validation work is maximised by
-// the shape above, and every quantity it varies is capped: 256 entries, 32 terms,
-// 8 restrictions of which 4 can be conformant, 64 tokens per list. At the
-// 256-entry maximum that shape is 12.4 MiB and ~24.3s, and no conformant push can
-// cost more to check, so raising this cap past roughly 12.4 MiB buys no additional
-// protection from validation cost — only from the read below.
+// Note WHY that shape uses the shortest legal tokens, because it is the part that
+// is easy to get backwards. Validation cost tracks the number of ELEMENTS walked,
+// while size tracks their length, so under a byte cap the worst case is the
+// shape that spends its bytes on count rather than on length. The same 83-entry
+// structure with 64-character tokens is 88 MB and never reaches the validator;
+// filled to the cap instead, it is 3 entries and ~132ms. Every point between is
+// cheaper than the shape above, which is why that one is quoted.
+//
+// This is a measurement of one shape, not a ceiling over all of them. The
+// enumeration that would be needed for a ceiling — 256 entries, 32 terms, 8
+// restrictions, 64 tokens per list — leaves out quotas, obligations, scopes and
+// attestations, which are equally capped and equally walked; and it reasons only
+// about CONFORMANT pushes, while protovalidate collects every violation rather
+// than stopping at the first, so a non-conformant one is checked just as
+// thoroughly. Raising this cap raises the worst case roughly linearly; there is no
+// value past which it stops mattering.
 //
 // Note what that figure is and is not. It sizes a representative batch, NOT a
 // ceiling on a conformant one: the caps in the contract bound how MANY entries,

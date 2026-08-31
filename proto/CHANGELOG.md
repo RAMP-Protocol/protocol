@@ -30,14 +30,23 @@ threshold equal to that cap, since raising the cap alone would let a list in bet
 skip the duplicate check and pass. The TypeScript and Python cross-field faces evaluate
 this rule themselves and carry the same test, so all three agree on the silence.
 
-Measured on this contract, with the restrictions cap above: the worst CONFORMANT push
-that fits under the SDK's 4 MiB default read cap is 82 entries of 32 terms, each term
-carrying one restriction per axis with both token lists at their 64-item caps — 4.15 MiB,
-7.4s to validate; one more entry exceeds the cap. The contract's own caps put a ceiling on
-that work: at the 256-entry maximum the same shape is 12.4 MiB and 24.3s, and no
-conformant push can cost more to check, so raising the read cap past that buys nothing.
-A full-cardinality REAL batch — 256 entries, 32 terms each, one restriction per axis and
-every field populated — is 0.81 MiB and 475ms.
+Measured on this contract, with the restrictions cap above: the most EXPENSIVE conformant
+push that fits under the SDK's 4 MiB default read cap is 83 entries of 32 terms, each term
+carrying one restriction per axis with both token lists at their 64-item caps and every
+token a single character — 3.97 MiB, ~1.8s to validate; one more entry exceeds the cap.
+The shortest legal tokens are what make it the worst case: validation cost tracks the
+number of ELEMENTS walked while size tracks their length, so under a byte cap the
+expensive shape is the one that spends its bytes on count. The same structure with
+64-character tokens is 88 MB and never reaches the validator. A full-cardinality REAL
+batch — 256 entries, 32 terms each, one restriction per axis and every field populated —
+is 0.81 MiB and 475ms.
+
+An earlier draft of this entry put that figure at 4.15 MiB and 7.4s and called it a
+ceiling on conformant work. It was neither: the size was measured in MB and labelled MiB
+(and so read as larger than the cap it fits under), the seconds came from a different
+token length than the bytes did, and no ceiling follows from the caps — the enumeration
+behind it omits quotas, obligations, scopes and attestations, and protovalidate checks a
+non-conformant push as thoroughly as a conformant one.
 
 **A cross-field refinement turned off the wire policy for the whole message (TypeScript
 SDK fix; no wire change).** The composed cross-field schemas are the surface a TypeScript
@@ -255,11 +264,11 @@ composed inside request-id and outside verify, so a refusal still carries its
 `X-Request-ID`, and a body past the cap is now classified `resource_exhausted` rather than
 told its credentials were wrong. Measured: a full-cardinality push — 256 entries each
 carrying the full 32 terms, one restriction per axis, every field populated — is 0.81 MiB
-and validates in ~475ms, while the worst CONFORMANT shape that still fits under the cap is
-82 entries with both token lists at their caps, 4.15 MiB and ~7.4s. That is what the
-default buys: not a small worst case, but a bounded one, and the contract's own caps put a
-ceiling above it — at the 256-entry maximum the same shape is 12.4 MiB and ~24.3s, and no
-conformant push can cost more to check.
+and validates in ~475ms, while the most expensive conformant shape that still fits under
+the cap is 83 entries with both token lists at their caps and single-character tokens,
+3.97 MiB and ~1.8s. That is what the default buys: not a small worst case, but a bounded
+one. It is a measurement of one shape rather than a ceiling over all of them — raising the
+cap raises the worst case roughly linearly, with no value past which it stops mattering.
 
 The decompressed bound is not a bound on decompression WORK. Connect drains the remainder
 of an over-cap stream to size the error it returns, so the body is fully inflated before it
