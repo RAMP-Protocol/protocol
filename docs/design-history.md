@@ -1262,6 +1262,49 @@ what this corpus can prove about the ports, and the ports do diverge there. That
 real, it is not closed here, and closing it needs a different instrument than a
 Go-generated corpus.
 
+Two halves of it turned out NOT to need one, and finding that was worth the search. The
+null a real Exchange serves is on a singular MESSAGE field, which Go emits perfectly well
+— EmitUnpopulated is the codec's own option set — so the entry corpus now carries the same
+entries in that spelling beside the compact one, verdict taken from the message either
+way. The camelCase refusal is the opposite case and genuinely cannot be vectored: protojson
+ACCEPTS both spellings, so the oracle has no refusal to record, and the rule belongs to the
+two JSON ports whose schemas strip what they do not recognise. It is held by a mirrored
+test in each port instead. What remains outside the corpus is narrower than it looked: a
+numeric enum, and a null on a repeated field.
+
+## The license-term faces keep each language's idiom, and the map records only the name
+
+Two of them differ in shape across the three languages, deliberately, and neither
+difference belongs in `sdk/parity/symbol-map.json`. That map records whether a FACE exists
+in each language; the allowlist beside it is a shrink-only ratchet over SYMBOLS, for a
+face one language does not have. A symbol present in all three whose contract differs is
+not that, and filing it there would say the opposite of what is true — the map's presence
+check deliberately stops asserting an entry that carries an allowlist reason, so recording
+these as divergences would have switched off the check that the names still exist. Same
+treatment as the client defaults recorded further down, and as `SignAgentBinding`, whose
+Go and Python faces take different custody and are mapped as plain counterparts.
+
+**`NormalizeLicenseTerm` and `NormalizeResourceEntry` rewrite in place in Go and return a
+copy in the ports.** Go takes a `*rampv1.LicenseTerm` and mutates it; the ports take a
+proto-JSON object and hand back a new one, leaving the input alone. Each is the idiom of
+its language, and the Go shape is load-bearing downstream rather than incidental: the
+Exchange normalises the entry it is about to persist, so an in-place face is what lets the
+canonical tokens reach the row and the offer projection without a second copy. The corpus
+pins the OUTPUT, which is the part that must agree, and both port docstrings state the
+contract they keep.
+
+**`ValidateLicenseTerm` returns `([]RuleWarning, error)` in Go and a named `TermVerdict`
+in the ports.** A term yields at most one hard violation, and in Go that is an error —
+`RuleViolation` implements `error` precisely so the face can return it as one while a
+caller still reads the typed fields back through `errors.As`. The ports have no comparable
+idiom, so they name the pair. `EntryVerdict` is a struct in all three because an entry
+yields MANY violations and a tuple would not carry them.
+
+That leaves `TermVerdict` itself: a public name in two languages and absent from the third.
+The surface gate walks Go to the ports and is complete in that direction, so a port-only
+symbol is outside what it can see — by construction, not by oversight. Recording it here is
+the available answer; making the gate walk both ways is a larger change and its own.
+
 ## A contract that describes its checks and not its verdict gets read wrong
 
 `CatalogService`'s comment set out both validation tiers in detail — which rules run at the

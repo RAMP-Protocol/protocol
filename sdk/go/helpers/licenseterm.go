@@ -71,7 +71,14 @@ const (
 // violation); Path is the snake_case proto-JSON field path relative to the
 // message that was checked, e.g. "terms[2].pricing.unit"; Token is the
 // offending value when the rule is about one token, else empty; Message is the
-// human-readable reason, identical across the three SDKs.
+// human-readable reason.
+//
+// Message is identical across the three SDKs for an INGEST-tier violation, which
+// is SDK-owned code in each and whose strings are what an Exchange puts in
+// warnings[]. It is not, and cannot be, for a wire-tier one: there the reason
+// comes from each language's own validator — protovalidate, Zod, Pydantic — three
+// engines with three vocabularies. That is why the shared corpus records a
+// wire-tier violation as a boolean and an ingest-tier one as a whole finding.
 type RuleViolation struct {
 	Rule    string
 	Path    string
