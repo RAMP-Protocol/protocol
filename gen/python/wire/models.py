@@ -1960,7 +1960,7 @@ class ResourceEntry(WireModel):
     path: constr(pattern=r'^/[^?#\x00-\x20\x7f]*$', min_length=1, max_length=2048) = (
         Field(
             ...,
-            description='Content path — an absolute URL path such as "/premium/article-42.html":\n starts with "/", carries no query or fragment delimiter, no whitespace and\n no control character, and is at most 2048 bytes.',
+            description='Content path — an absolute URL path such as "/premium/article-42.html":\n starts with "/", carries no query or fragment delimiter, no whitespace and\n no control character, and is at most 2048 characters. Characters, not bytes:\n protovalidate\'s max_len counts Unicode code points, and the pattern admits\n non-ASCII, so a conformant path can exceed 2048 bytes.',
         )
     )
     provenance_source: constr(max_length=260) | None = Field(
