@@ -70,7 +70,7 @@ func NewCatalogClient(baseURL string, opts ...ClientOption) *CatalogClient {
 // naturally idempotent, so a key there would be ceremony rather than a
 // guarantee. `exchange` is the caller's to set — the bare domain of the
 // Exchange this push is meant for, which is the whole point of the field — and a
-// request that names none, or names something that is not a bare host, is
+// request that names none, or names something that is not a bare domain, is
 // refused before anything is signed or sent.
 //
 // An Exchange applies two tiers to every entry: the wire rules, then
@@ -101,7 +101,7 @@ func (c *CatalogClient) PushResources(ctx context.Context, req *rampv1.PushResou
 
 // RemoveResources removes the catalog entries the request's paths name. Same
 // envelope rule as PushResources: `ver` filled when empty, no idempotency key,
-// `exchange` required and refused locally when it is not a bare host.
+// `exchange` required and refused locally when it is not a bare domain.
 func (c *CatalogClient) RemoveResources(ctx context.Context, req *rampv1.RemoveResourcesRequest) (*rampv1.RemoveResourcesResponse, error) {
 	const op = "remove resources"
 	if req == nil {
@@ -154,27 +154,33 @@ func stampVer(ver *string) {
 }
 
 // requireRecipient refuses a catalog request that names no recipient, or one
-// whose recipient is not a bare host, BEFORE anything is signed or sent. The
+// whose recipient is not a bare domain, BEFORE anything is signed or sent. The
 // field is required on the wire and the Exchange rejects a request that names
 // someone else, so an unaddressed request can only be refused; refusing it here
 // names the remedy instead of relaying a validation failure from a round trip
 // away. It is a refusal to send, not a malformed message: the same verdict a
 // report or a dispute with no routable recipient gets.
 //
-// The refused value is redacted before it is named. IsBareHost returns (false, nil)
-// for a reference carrying userinfo, so a mistyped credential reaches the message
-// below verbatim; the routing check next door redacts for the same reason, and a
-// tier that echoes is the drift hostredact exists to prevent.
+// The predicate is IsBareDomain, the SHAPE rule, not the routing rule IsBareHost.
+// Nothing dials this value — a catalog client is built against an address the
+// publisher configured — so the only question it answers is whether the value is
+// the form the contract admits, which is the protovalidate pattern `exchange`
+// carries and the same rule the Exchange's own audience check applies on arrival.
+// The routing predicate is deliberately wider: an underscore, a trailing root dot
+// and a bracketed IPv6 literal are all usable hosts and none of them is a value
+// this field may hold, so vetting with it would sign and send a request the
+// recipient can only refuse — the round trip this check exists to save.
+//
+// The refused value is redacted before it is named. A reference carrying userinfo
+// is a verdict rather than a parse failure, so it reaches the message below
+// verbatim; the routing check next door redacts for the same reason, and a tier
+// that echoes is the drift hostredact exists to prevent.
 func requireRecipient(op, exchange string) error {
 	if exchange == "" {
 		return notSent(op, errors.New("request names no recipient; set exchange to the Exchange's bare domain"))
 	}
-	bare, err := helpers.IsBareHost(exchange)
-	if err != nil {
-		return notSent(op, fmt.Errorf("exchange %q: %w", hostredact.Userinfo(exchange), err))
-	}
-	if !bare {
-		return notSent(op, fmt.Errorf("%w: exchange %q is not a bare host", helpers.ErrInvalidHost, hostredact.Userinfo(exchange)))
+	if !helpers.IsBareDomain(exchange) {
+		return notSent(op, fmt.Errorf("exchange %q is not a bare domain", hostredact.Userinfo(exchange)))
 	}
 	return nil
 }

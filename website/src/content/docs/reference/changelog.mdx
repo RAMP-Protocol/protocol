@@ -295,7 +295,7 @@ cap as the agent verbs. It is a separate constructor because CatalogService is a
 address (`WellKnownManifest.catalog_endpoint`) and its caller holds a contributor key
 named by `caller_id`; the publisher chose the Exchange, so the leg runs on the plain
 transport. The messages carry no idempotency key and the client mints none; `ver` is
-stamped when empty; a request that names no bare-host recipient is refused before it is
+stamped when empty; a request that names no bare-domain recipient is refused before it is
 signed. The client-request corpus gains the three verbs, replayed in all three languages.
 
 The ingest-tier license-term checks moved out of the reference Exchange into the L1

@@ -57,7 +57,7 @@ from ._call import (
     validate_request,
 )
 from .._hostref import _redact_userinfo as redact_userinfo
-from ..hosts import is_bare_host
+from ..hosts import is_bare_domain
 from .errors import CallError, CallErrorKind, malformed, not_sent
 from .route import EndpointResolver, vet_exchange_endpoint
 
@@ -519,7 +519,7 @@ def _plan_catalog(cfg: ClientConfig, verb: _CatalogVerb, message: dict[str, Any]
     is theirs); no idempotency key is stamped, because the messages carry none — a catalog
     push is an upsert and naturally idempotent, so a key there would be ceremony.
     ``exchange`` is the caller's to set, the bare domain of the Exchange the call is meant
-    for; a request that names none, or names something that is not a bare host, is refused
+    for; a request that names none, or names something that is not a bare domain, is refused
     before anything is signed or sent — a refusal to send, the verdict a report with no
     routable recipient gets, not a malformed message.
 
@@ -541,21 +541,26 @@ def _stamp_ver(op: str, message: dict[str, Any]) -> dict[str, Any]:
 
 
 def _require_recipient(op: str, exchange: str) -> None:
-    """Refuse a catalog request whose recipient is missing or not a bare host.
+    """Refuse a catalog request whose recipient is missing or not a bare domain.
 
-    The refused value is redacted before it is named. ``is_bare_host`` returns False
-    for a reference carrying userinfo, so a mistyped credential would otherwise reach
-    the message below verbatim; the routing check next door redacts for the same
-    reason, and a tier that echoes is the drift ``_redact_userinfo`` exists to prevent.
+    The predicate is :func:`is_bare_domain`, the SHAPE rule, not the routing rule
+    :func:`is_bare_host`. Nothing dials this value — a catalog client is built against an
+    address the publisher configured — so the only question it answers is whether the
+    value is the form the contract admits, which is the protovalidate pattern ``exchange``
+    carries and the same rule the Exchange's own audience check applies on arrival. The
+    routing predicate is deliberately wider: an underscore, a trailing root dot and a
+    bracketed IPv6 literal are all usable hosts and none of them is a value this field may
+    hold, so vetting with it would sign and send a request the recipient can only refuse.
+
+    The refused value is redacted before it is named. A reference carrying userinfo is a
+    verdict rather than a parse failure, so it would otherwise reach the message below
+    verbatim; the routing check next door redacts for the same reason, and a tier that
+    echoes is the drift ``_redact_userinfo`` exists to prevent.
     """
     if exchange == "":
         raise not_sent(op, "request names no recipient; set exchange to the Exchange's bare domain")
-    try:
-        bare = is_bare_host(exchange)
-    except ValueError as exc:
-        raise not_sent(op, exc) from exc
-    if not bare:
-        raise not_sent(op, f"exchange {redact_userinfo(exchange)!r} is not a bare host")
+    if not is_bare_domain(exchange):
+        raise not_sent(op, f"exchange {redact_userinfo(exchange)!r} is not a bare domain")
 
 
 # ---------------------------------------------------------------------------

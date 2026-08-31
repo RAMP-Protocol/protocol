@@ -1148,8 +1148,20 @@ and pointed one of two roles at the wrong address. So the publisher role got a t
 constructor, on the Broker's precedent, sharing the plumbing and nothing else. The
 catalog messages carry no idempotency key, by the decision recorded under idempotency —
 an upsert and a delete are naturally idempotent — and the client mints none; it stamps
-`ver` when empty and refuses, before signing, a request that names no bare-host
+`ver` when empty and refuses, before signing, a request that names no bare-domain
 recipient, the same verdict a dispute with no `exchange` gets.
+
+That refusal uses the SHAPE predicate, `IsBareDomain`, and not the routing one the
+offer-derived legs use. The two are kept apart deliberately and the catalog leg is where
+the difference bites: nothing dials this value — the address is configuration — so the
+only question worth asking is whether the value is a form the contract admits, which is
+the protovalidate pattern the field carries and the same rule the Exchange's own audience
+check applies on arrival. The routing predicate is wider by design, because it answers
+whether a value is safe to concatenate into a URL: an underscore, a trailing root dot and
+a bracketed IPv6 literal are all usable hosts and none of them is a value `exchange` may
+hold. Vetting with it signed and sent requests the recipient could only refuse — the
+round trip this check exists to save. A port and a single-label host stay accepted, since
+both are live in the deployment's own catalog and both are what the wire rule admits.
 
 `catalog_endpoint` had carried no host binding while `endpoint` did. The predicate is the
 same one, applied for the same reason: a publisher's push is a signed call to that

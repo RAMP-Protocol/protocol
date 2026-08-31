@@ -176,11 +176,18 @@ func TestCatalog_RefusesAnUnaddressedRequestBeforeSending(t *testing.T) {
 	srv := serveCatalog(t, sig, origin)
 	client := rampconnect.NewCatalogClient(srv.URL, append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
+	// The last three are the reason this preflight uses the wire-domain rule rather
+	// than the routing one: every one of them is a perfectly usable HOST, so the
+	// routing predicate admits it, and none is a value `exchange` may carry. Vetting
+	// with the wider rule signed and sent them, to be refused a round trip away.
 	for name, exchange := range map[string]string{
-		"empty":       "",
-		"with_scheme": "https://exchange.test",
-		"with_path":   "exchange.test/catalog",
-		"userinfo":    "u:p@exchange.test",
+		"empty":        "",
+		"with_scheme":  "https://exchange.test",
+		"with_path":    "exchange.test/catalog",
+		"userinfo":     "u:p@exchange.test",
+		"underscore":   "_x.exchange.test",
+		"root_dot":     "exchange.test.",
+		"bracketed_ip": "[::1]:443",
 	} {
 		_, err := client.PushResources(context.Background(), &rampv1.PushResourcesRequest{
 			Exchange: exchange, TenantId: "tenant-1", Entries: []*rampv1.ResourceEntry{catalogEntry()},
@@ -198,6 +205,20 @@ func TestCatalog_RefusesAnUnaddressedRequestBeforeSending(t *testing.T) {
 	}
 	if origin.hitCount() != 0 {
 		t.Errorf("origin ran %d times; a refused request must never be sent", origin.hitCount())
+	}
+
+	// The other half of the rule, or the check above would pass on a predicate that
+	// refuses everything. A port is part of a bare domain and a single-label host is
+	// one, both because the deployment's own catalog carries them.
+	for _, exchange := range []string{"exchange.test", "exchange.test:8443", "edge"} {
+		if _, err := client.PushResources(context.Background(), &rampv1.PushResourcesRequest{
+			Exchange: exchange, TenantId: "tenant-1", Entries: []*rampv1.ResourceEntry{catalogEntry()},
+		}); err != nil {
+			t.Errorf("exchange %q was refused: %v", exchange, err)
+		}
+	}
+	if origin.hitCount() != 3 {
+		t.Errorf("origin ran %d times, want 3 — an accepted recipient must be sent", origin.hitCount())
 	}
 }
 
