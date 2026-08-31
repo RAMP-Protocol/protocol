@@ -74,6 +74,15 @@
       "requester_id": ""
     },
     {
+      "name": "push_resources_caller_ver_wins",
+      "verb": "pushResources",
+      "path": "/ramp.v1.CatalogService/PushResources",
+      "ver": "9.9",
+      "idempotency_key": "",
+      "key_minted": false,
+      "requester_id": ""
+    },
+    {
       "name": "remove_resources",
       "verb": "removeResources",
       "path": "/ramp.v1.CatalogService/RemoveResources",

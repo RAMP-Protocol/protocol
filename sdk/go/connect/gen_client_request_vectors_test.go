@@ -237,6 +237,17 @@ func catalogVectors(t *testing.T, baseOpts []rampconnect.ClientOption) []clientR
 		})
 		return err
 	})
+	// `ver` is filled only when the caller left it empty, on the catalog legs as on
+	// every other. Discovery had a case for that rule and the catalog verbs did not,
+	// so a port that stamped unconditionally — overwriting a version its caller chose
+	// deliberately — stayed green here while Go's own tests caught it.
+	capture("push_resources_caller_ver_wins", "pushResources", func(c *rampconnect.CatalogClient, exchange string) error {
+		_, err := c.PushResources(context.Background(), &rampv1.PushResourcesRequest{
+			Exchange: exchange, TenantId: "tenant-1", CallerId: "publisher.test", Ver: "9.9",
+			Entries: []*rampv1.ResourceEntry{entry},
+		})
+		return err
+	})
 	capture("remove_resources", "removeResources", func(c *rampconnect.CatalogClient, exchange string) error {
 		_, err := c.RemoveResources(context.Background(), &rampv1.RemoveResourcesRequest{
 			Exchange: exchange, TenantId: "tenant-1", Paths: []string{"/x"},

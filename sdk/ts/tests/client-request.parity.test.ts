@@ -127,8 +127,8 @@ async function call(name: string): Promise<UnaryRequest> {
 		await client.execute(await verifiedOffer(), { idempotencyKey: PINNED });
 	} else if (name === "resolve") {
 		await createBrokerClient("https://broker.test", options).resolve({});
-	} else if (name === "push_resources") {
-		await createCatalogClient("https://exchange.test", options).pushResources({
+	} else if (name.startsWith("push_resources")) {
+		const push: Record<string, unknown> = {
 			exchange: "exchange.test",
 			tenant_id: "tenant-1",
 			caller_id: "publisher.test",
@@ -144,7 +144,9 @@ async function call(name: string): Promise<UnaryRequest> {
 					],
 				},
 			],
-		});
+		};
+		if (name === "push_resources_caller_ver_wins") push["ver"] = "9.9";
+		await createCatalogClient("https://exchange.test", options).pushResources(push);
 	} else if (name === "remove_resources") {
 		await createCatalogClient("https://exchange.test", options).removeResources({
 			exchange: "exchange.test",
