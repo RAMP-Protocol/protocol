@@ -1123,10 +1123,11 @@ tier. So a geography token spelled `" de "` is refused by the wire pattern — w
 before any fold would have rescued it, and the SDK says so rather than quietly folding
 first and reporting an entry the Exchange would refuse. Where the Exchange stops at the
 first tier that fails, the SDK reports both, so a publisher fixes everything in one
-round; that is the one deliberate difference, and the corpus's per-entry list pins the
-composition in all three languages. The two JSON ports walk every message reachable from
-an entry explicitly for the cross-field rules, because their composed schemas attach per
-message and a top-level parse would never reach `terms[1].pricing`.
+round; that is the one deliberate difference. What the corpus's per-entry list pins is
+narrower than "the composition", and the section below on language-local rule ids says
+what it does pin, at three different strengths. The two JSON ports walk every message
+reachable from an entry explicitly for the cross-field rules, because their composed
+schemas attach per message and a top-level parse would never reach `terms[1].pricing`.
 
 ## A catalog client is its own constructor
 

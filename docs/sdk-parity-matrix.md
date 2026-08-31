@@ -20,7 +20,7 @@ Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring inv
 
 Legend: a name = the public face in that language · `—` = intentionally none (see Documented divergences). Every row here is at parity by construction: the gate rejects a mapped name that is absent from the live surface.
 
-### helpers — L1 pure primitives (crypto, canonicalization, money, scopes)
+### helpers — L1 pure primitives (crypto, canonicalization, money, scopes, license terms)
 
 | Go | python | ts |
 |---|---|---|
