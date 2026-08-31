@@ -1219,8 +1219,21 @@ control — how many terms one entry may carry, how many entries a push can stor
 many paths a rejection has to name back — and the work is bounded where the work happens,
 at the transport, by the maximum request size the recipient will read. The SDK's server
 binding sets that cap on every handler and states the cost the default implies: a
-full-cardinality push costs ~150ms to validate, and the worst adversarial shape that still
-fits costs ~1.6s. Bounded, not small; an uncapped handler has no worst case at all.
+full-cardinality push costs ~475ms to validate, and the worst conformant shape that still
+fits under 4 MiB costs ~7.4s. Bounded, not small; an uncapped handler has no worst case at
+all.
+
+Two corrections that arrived with the first honest measurement, both worth keeping because
+each is a way a cost model can read as tighter than it is. The published figure was ~1.6s,
+and it described the contract the author intended rather than the one that shipped: with
+`Restriction.kind` open, a term could carry sixty-four distinct axes, the one-per-kind rule
+never short-circuited, and the real figure was an order of magnitude higher. A cost model
+that assumes a bound the contract does not state is not a measurement of the contract. And
+the transport cap bounds the decompressed message without bounding decompression: an
+over-cap body is inflated to completion so the error can name its size, which is bounded
+only by the RAW read — 4 MiB compressed is 4.32 GB inflated, ~850ms spent on a request that
+is refused. A bound on a result is not a bound on the work that produced it, which is the
+same lesson one layer further down.
 
 They bound COUNTS and not bytes, which is worth saying plainly because the first
 re-description overreached in the other direction. `Obligation.detail`, the `License`

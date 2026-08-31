@@ -236,11 +236,20 @@ who the caller is, so an unauthenticated caller reaches that one. The body bound
 composed inside request-id and outside verify, so a refusal still carries its
 `X-Request-ID`, and a body past the cap is now classified `resource_exhausted` rather than
 told its credentials were wrong. Measured: a full-cardinality push — 256 entries each
-carrying the full 32 terms — is 0.31 MiB and validates in ~150ms, while the worst
-adversarial shape that still fits under the cap costs ~1.6s. That is what the default buys:
-not a small worst case, but a bounded one. The figure sizes a representative batch, not a
-ceiling on a conformant one: the contract's caps bound how many entries and terms a push
-carries, never how many bytes, so a conformant push can exceed this cap and be refused.
+carrying the full 32 terms, one restriction per axis, every field populated — is 0.81 MiB
+and validates in ~475ms, while the worst CONFORMANT shape that still fits under the cap is
+82 entries with both token lists at their caps, 4.15 MiB and ~7.4s. That is what the
+default buys: not a small worst case, but a bounded one, and the contract's own caps put a
+ceiling above it — at the 256-entry maximum the same shape is 12.4 MiB and ~24.3s, and no
+conformant push can cost more to check.
+
+The decompressed bound is not a bound on decompression WORK. Connect drains the remainder
+of an over-cap stream to size the error it returns, so the body is fully inflated before it
+is refused; what keeps that finite is the raw-body bound, and at 4 MiB of compressed input
+it is 4.32 GB inflated in ~850ms of CPU on a request that is then rejected. The byte figures
+size a representative batch, not a ceiling on a conformant one: the contract's caps bound
+how many entries and terms a push carries, never how many bytes, so a conformant push can
+exceed this cap and be refused.
 
 **The contract states that a push is all-or-nothing, and the prose follows it (docs).**
 `CatalogService` described both validation tiers in full — folding, alias resolution, which

@@ -26,13 +26,29 @@ const replayTTL = 5 * time.Minute
 // on its way to being refused. This is the bound that models that cost, which is
 // why it lives here and not on the fields.
 //
+// It bounds the decompressed message but does NOT make decompression free. When a
+// body inflates past the cap, Connect drains the rest of the stream to io.Discard
+// to report the size it would have been, so the whole thing is inflated before it
+// is refused. What keeps that finite is the RAW body bound below, not this one:
+// measured, 4 MiB of compressed input inflates to 4.32 GB in ~850ms of CPU on a
+// request that is then rejected. Memory stays flat, CPU does not. Lowering this
+// constant lowers both, roughly linearly.
+//
 // 4 MiB is chosen against both ends, measured. A FULL-CARDINALITY push — 256
-// entries each carrying the full 32 terms, every field at a realistic length — is
-// 0.31 MiB and validates in ~150ms, so a real catalog batch fits with better than
-// tenfold headroom. The worst ADVERSARIAL shape that still fits under this cap
-// costs ~1.6s of validation. That is the number this constant buys: not a small
-// cost, but a BOUNDED one, where an uncapped handler has no worst case at all —
-// the same shape at 22 MiB costs ~8s, and nothing stops it growing.
+// entries each carrying the full 32 terms, one restriction per axis, every field
+// populated — is 0.81 MiB and validates in ~475ms, so a real catalog batch fits
+// with better than fourfold headroom. The worst CONFORMANT shape that still fits
+// under this cap is 82 entries of 32 terms, each term carrying one restriction per
+// axis with both token lists at their 64-item caps: 4.15 MiB and ~7.4s of
+// validation, with one more entry exceeding the cap. That is the number this
+// constant buys — not a small cost, but a bounded one.
+//
+// The contract's own caps put a ceiling above it. Validation work is maximised by
+// the shape above, and every quantity it varies is capped: 256 entries, 32 terms,
+// 8 restrictions of which 4 can be conformant, 64 tokens per list. At the
+// 256-entry maximum that shape is 12.4 MiB and ~24.3s, and no conformant push can
+// cost more to check, so raising this cap past roughly 12.4 MiB buys no additional
+// protection from validation cost — only from the read below.
 //
 // Note what that figure is and is not. It sizes a representative batch, NOT a
 // ceiling on a conformant one: the caps in the contract bound how MANY entries,
