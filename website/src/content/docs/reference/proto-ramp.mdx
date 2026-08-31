@@ -371,7 +371,7 @@ Push or update content entries in the Exchange catalog. `entries` carries at lea
 
 ### ResourceEntry
 
-A single resource catalog entry. The envelope carries its own wire rules, so an entry that cannot become a catalog URI is refused at the boundary rather than after ingestion. The list caps below bound the **document** — how large one entry may be and what a submission can store — not the work of checking one: a validator walks every element it is handed before any cardinality rule is reported, so that cost is bounded at the transport instead.
+A single resource catalog entry. The envelope carries its own wire rules, so an entry that cannot become a catalog URI is refused at the boundary rather than after ingestion. The list caps below bound **how many** — how many terms one entry may carry, how many entries a submission can store — never how many bytes, and not the work of checking one: a validator walks every element it is handed before any cardinality rule is reported, so that cost is bounded at the transport instead. Several members inside an entry carry no length rule, so a conformant push has no size ceiling and the transport cap can refuse one.
 
 - `domain` is a bare host in the recipient-addressing shape (a port is allowed; a scheme, path, query or userinfo is not; at most 260 bytes). With `path` it forms the catalog URI by concatenation, so anything but a host would choose the URI rather than name the host.
 - `path` is an absolute URL path: it starts with `/`, carries no `?` or `#`, no whitespace and no control byte, and is 1–2048 bytes.

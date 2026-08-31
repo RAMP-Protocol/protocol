@@ -2237,9 +2237,11 @@ message PushResourcesRequest {
 // CatalogService for the second, ingest-time tier (token canonicalisation and
 // registry membership).
 //
-// The list caps here and on LicenseTerm bound the DOCUMENT: how large one entry
-// may be, what a push can store, and how much a rejection has to name back. They
-// do NOT bound the work of checking a push, and must not be read as doing so — a
+// The list caps here and on LicenseTerm bound HOW MANY, never how large: how many
+// terms one entry may carry, how many entries a push can store, and how many paths
+// a rejection has to name back. They do not bound the entry's SIZE either — several
+// members inside one carry no length rule — and they do NOT bound the work of
+// checking a push, and must not be read as doing so — a
 // validator walks every element it is handed and reports every violation before
 // any cardinality rule is applied, so an over-cap list is fully traversed on its
 // way to being refused. The work is bounded one layer down, by the maximum
@@ -2259,7 +2261,9 @@ message ResourceEntry {
   ];
   // Content path — an absolute URL path such as "/premium/article-42.html":
   // starts with "/", carries no query or fragment delimiter, no whitespace and
-  // no control character, and is at most 2048 bytes.
+  // no control character, and is at most 2048 characters. Characters, not bytes:
+  // protovalidate's max_len counts Unicode code points, and the pattern admits
+  // non-ASCII, so a conformant path can exceed 2048 bytes.
   string path = 2 [
     (buf.validate.field).string = {
       min_len: 1,

@@ -36,7 +36,7 @@ The feed is a **transport convenience**, not a third licensing model: every line
 | `provenance_source` | string | no | `ResourceEntry.provenance_source` | who supplied the metadata (audit trail; ≤ 260 bytes) |
 | `provenance_timestamp` | RFC3339 | no | `ResourceEntry.provenance_timestamp` | when it was collected / generated |
 | `license` | object | no (yes for any REFERENCE_ONLY term) | `LicenseTerm.license` | governing license document `{id, uri, uri_digest, name}` |
-| `terms` | array (1–32) | yes | `ResourceEntry.terms[]` | the licensing offers on this resource (see below); at most 32 per entry on the wire |
+| `terms` | array (≤ 32) | no | `ResourceEntry.terms[]` | the licensing offers on this resource (see below); at most 32 per entry on the wire. An entry with no terms is conformant — the Exchange simply makes no offer from it |
 | `ext` | object | no | `ResourceEntry.ext` | free-form extension metadata; carries fields with no typed slot (e.g. `previews[]`) and domain-profile data |
 | `ext_critical` | string[] | no | `ResourceEntry.ext_critical` | keys in `ext` a consumer MUST understand (COSE `crit` pattern) |
 | `attestations` | array (≤ 64) | no | `ResourceEntry.attestations[]` | signed attestations `{verifier, keyid, attested_at, uri, claims, signature}` |

@@ -1215,12 +1215,19 @@ however many arrived will say so.
 That is the same lesson the registration-schema work recorded above, in the same words: a
 bound belongs on the phase whose cost it models, and the caps there bounded the document
 rather than the work. So the caps here are kept and re-described for what they genuinely
-control — how large one entry may be, what a push can store, and how much a rejection has
-to name back — and the work is bounded where the work happens, at the transport, by the
-maximum request size the recipient will read. The SDK's server binding sets that cap on
-every handler and states the cost the default implies: the largest conformant push costs
-~150ms to validate, and the worst adversarial shape that still fits costs ~1.6s. Bounded,
-not small; an uncapped handler has no worst case at all.
+control — how many terms one entry may carry, how many entries a push can store, and how
+many paths a rejection has to name back — and the work is bounded where the work happens,
+at the transport, by the maximum request size the recipient will read. The SDK's server
+binding sets that cap on every handler and states the cost the default implies: a
+full-cardinality push costs ~150ms to validate, and the worst adversarial shape that still
+fits costs ~1.6s. Bounded, not small; an uncapped handler has no worst case at all.
+
+They bound COUNTS and not bytes, which is worth saying plainly because the first
+re-description overreached in the other direction. `Obligation.detail`, the `License`
+strings and every `ResourceAttestation` member carry no length rule, so there is no
+largest conformant entry and no largest conformant push — the transport cap can refuse a
+conformant one. That is the intended trade rather than a gap: bytes are the recipient's
+budget to set, and a deployment that must accept larger documents raises its own cap.
 
 Two details of that cap are load-bearing. It covers the RAW body as well as the decoded
 message, because the verify face must buffer the whole body to check a signature over the

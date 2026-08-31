@@ -207,10 +207,12 @@ whole to check an RFC 9421 signature over the exact bytes — which it does befo
 who the caller is, so an unauthenticated caller reaches that one. The body bound is
 composed inside request-id and outside verify, so a refusal still carries its
 `X-Request-ID`, and a body past the cap is now classified `resource_exhausted` rather than
-told its credentials were wrong. Measured: the largest conformant push — 256 entries each
+told its credentials were wrong. Measured: a full-cardinality push — 256 entries each
 carrying the full 32 terms — is 0.31 MiB and validates in ~150ms, while the worst
 adversarial shape that still fits under the cap costs ~1.6s. That is what the default buys:
-not a small worst case, but a bounded one.
+not a small worst case, but a bounded one. The figure sizes a representative batch, not a
+ceiling on a conformant one: the contract's caps bound how many entries and terms a push
+carries, never how many bytes, so a conformant push can exceed this cap and be refused.
 
 **The contract states that a push is all-or-nothing, and the prose follows it (docs).**
 `CatalogService` described both validation tiers in full — folding, alias resolution, which

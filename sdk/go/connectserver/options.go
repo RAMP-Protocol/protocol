@@ -26,13 +26,21 @@ const replayTTL = 5 * time.Minute
 // on its way to being refused. This is the bound that models that cost, which is
 // why it lives here and not on the fields.
 //
-// 4 MiB is chosen against both ends, measured. The largest CONFORMANT push — 256
-// entries each carrying the full 32 terms — is 0.31 MiB and validates in ~150ms,
-// so a real catalog batch fits with better than tenfold headroom. The worst
-// ADVERSARIAL shape that still fits under this cap costs ~1.6s of validation. That
-// is the number this constant buys: not a small cost, but a BOUNDED one, where an
-// uncapped handler has no worst case at all — the same shape at 22 MiB costs ~8s,
-// and nothing stops it growing.
+// 4 MiB is chosen against both ends, measured. A FULL-CARDINALITY push — 256
+// entries each carrying the full 32 terms, every field at a realistic length — is
+// 0.31 MiB and validates in ~150ms, so a real catalog batch fits with better than
+// tenfold headroom. The worst ADVERSARIAL shape that still fits under this cap
+// costs ~1.6s of validation. That is the number this constant buys: not a small
+// cost, but a BOUNDED one, where an uncapped handler has no worst case at all —
+// the same shape at 22 MiB costs ~8s, and nothing stops it growing.
+//
+// Note what that figure is and is not. It sizes a representative batch, NOT a
+// ceiling on a conformant one: the caps in the contract bound how MANY entries,
+// terms and attestations a push may carry, never how many bytes. Obligation.detail,
+// the License strings and every ResourceAttestation member are length-free, so a
+// conformant push can be arbitrarily large and this cap can refuse one. That is the
+// intended trade — the bound models the cost of CHECKING a submission, and a
+// deployment that must accept larger documents raises it.
 //
 // Lower it if the deployment does not accept a 256-entry batch; raising it raises
 // the worst case roughly linearly. Override per server with WithMaxRequestBytes.

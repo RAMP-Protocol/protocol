@@ -121,9 +121,17 @@ func replayNonce(v *helpers.VerifiedRequest) string {
 // The read is unbounded HERE by design and bounded one layer out: the handler
 // composes http.MaxBytesHandler outside this face, so r.Body is already capped
 // when it arrives and a body past the cap fails this ReadAll with
-// http.MaxBytesError rather than being buffered whole. Putting the bound in this
-// function instead would leave a hand-composed verifyMiddleware — the seam an
-// application may mount itself — reading without one.
+// http.MaxBytesError rather than being buffered whole.
+//
+// Outside rather than here, because where the bound sits decides what a refusal
+// carries. MaxBytesHandler is composed inside request-id, so an over-cap body is
+// refused with the X-Request-ID already stamped and the reject-path logs can be
+// read; a bound applied in this function would refuse after request-id had been
+// passed but from a face that answers on its own, and the correlation the ordering
+// exists to give would be lost. The cap also belongs to the handler's
+// configuration — one value, set once by WithMaxRequestBytes and shared with
+// Connect's own decoded-message bound — not to a middleware that has no access to
+// it.
 func bufferBody(r *http.Request) ([]byte, error) {
 	if r.Body == nil {
 		return nil, nil

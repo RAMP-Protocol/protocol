@@ -192,10 +192,12 @@ const catalogEndpointDecl = "optional string catalog_endpoint = 14"
 // No SDK reads catalog_endpoint at all today — the catalog client takes its address
 // as configuration and the endpoint predicate is reachable only from the agent
 // endpoint's resolver — so nothing here proves any code obeys the rule the comment
-// states. The rule is a consumer obligation a deployment that reads the field from
-// a manifest must honour itself; a resolver that would make it callable is the
-// recorded follow-up, and this guard is what keeps the two statements of it aligned
-// until then.
+// states. The rule is a consumer obligation: a deployment that reads the field from
+// a manifest rather than from its own configuration must apply the binding itself
+// before dialling. Giving it an SDK face means a catalog-endpoint resolver in all
+// three languages, which is a change this guard does not stand in for and does not
+// claim to; what it does is keep the two statements of one rule from drifting apart
+// while only one of them is implemented.
 func TestCatalogEndpointCommentStatesTheSameClauses(t *testing.T) {
 	comment := fieldComment(t, catalogEndpointDecl)
 
