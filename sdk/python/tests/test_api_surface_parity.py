@@ -618,3 +618,37 @@ def test_reading_the_sync_facade_is_load_bearing_or_it_is_not() -> None:
         f"{sorted(sync_only)}. They are in the parity surface — give each one a "
         "symbol-map entry, and rewrite this test to say so."
     )
+
+
+def test_the_sync_facade_exports_every_class_it_defines() -> None:
+    """The other direction, which is where the hole was.
+
+    ``enumerate_python`` builds the blocking face's contribution from ``__all__``, and the
+    check above only ever subtracts FROM it. So a class defined in the module and left OUT
+    of ``__all__`` is invisible to both: it does not reach the aggregated surface, and it
+    cannot make the difference above non-empty. That is how the blocking CatalogClient
+    shipped defined-but-unexported while its async twin was exported — no assertion in
+    this file could have gone red.
+
+    Compared as a SUBSET rather than an equality: ``ClientConfig`` is re-exported here for
+    a caller's convenience and defined elsewhere, so requiring the two sets to match would
+    fail on a name that is legitimately not this module's. Filtering on ``__module__`` is
+    what keeps the check to the classes this file actually owns.
+    """
+    import inspect
+
+    from ramp_sdk import sync as blocking
+
+    defined = {
+        name
+        for name, obj in vars(blocking).items()
+        if inspect.isclass(obj) and obj.__module__ == blocking.__name__ and not name.startswith("_")
+    }
+    assert defined, "no public class found in ramp_sdk.sync — this check would be vacuous"
+
+    missing = defined - set(blocking.__all__)
+    assert not missing, (
+        f"the blocking facade defines {sorted(missing)} but does not export them. A public "
+        "class absent from __all__ is unreachable through `from ramp_sdk.sync import *` and "
+        "invisible to the surface gate, which reads this module through __all__."
+    )

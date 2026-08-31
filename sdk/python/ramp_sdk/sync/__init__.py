@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 
     from ramp_sdk.core import DiscoveryResult, VerifiedOffer
 
-__all__ = ["BrokerClient", "Client", "ClientConfig"]
+__all__ = ["BrokerClient", "CatalogClient", "Client", "ClientConfig"]
 
 
 class _Face:
