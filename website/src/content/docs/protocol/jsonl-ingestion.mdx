@@ -21,19 +21,21 @@ The feed is a **transport convenience**, not a third licensing model: every line
 
 ## Record schema (one line = one resource)
 
+Every length bound below is in **characters — Unicode code points, not bytes**. That is what `protovalidate`'s `max_len` counts, and several of these fields admit non-ASCII, so a conformant value can be several times its character count in bytes: a 512-character CJK `title` is roughly 1.5 KB on the wire and still legal. Size a feed against the character count.
+
 | Field | Type | Required | Maps to | Why it exists |
 |---|---|---|---|---|
-| `domain` | string | yes | `ResourceEntry.domain` | resource origin; with `path` forms the canonical URI. A bare host in the recipient-addressing shape (port allowed; no scheme, path, query or userinfo; ≤ 260 bytes) |
-| `path` | string | yes | `ResourceEntry.path` | URL path of the resource: starts with `/`, no `?` or `#`, no whitespace or control byte, 1–2048 bytes |
-| `title` | string | no | `ResourceEntry.title` | human label (≤ 512 bytes) |
-| `content_id` | string | no | `ResourceEntry.content_id` | publisher's stable id; keys the resource id so a re-push upserts in place (≤ 255 bytes) |
+| `domain` | string | yes | `ResourceEntry.domain` | resource origin; with `path` forms the canonical URI. A bare host in the recipient-addressing shape (port allowed; no scheme, path, query or userinfo; ≤ 260 characters) |
+| `path` | string | yes | `ResourceEntry.path` | URL path of the resource: starts with `/`, no `?` or `#`, no whitespace or control character, 1–2048 characters |
+| `title` | string | no | `ResourceEntry.title` | human label (≤ 512 characters) |
+| `content_id` | string | no | `ResourceEntry.content_id` | publisher's stable id; keys the resource id so a re-push upserts in place (≤ 255 characters) |
 | `word_count` | int | no | `ResourceEntry.word_count` | content metric; informs token estimation (≥ 0) |
 | `estimated_quantity` | int | no | `ResourceEntry.estimated_quantity` | pre-computed metering quantity (e.g. `word_count × 1.32`; ≥ 0) |
-| `content_hash` | string | no | `ResourceEntry.content_hash` | integrity pin of the content bytes (≤ 255 bytes; bare hex or `method:hexdigest`, not format-checked) |
-| `hash_method` | string | no | `ResourceEntry.hash_method` | algorithm for `content_hash` (e.g. `sha256`; ≤ 64 bytes) |
+| `content_hash` | string | no | `ResourceEntry.content_hash` | integrity pin of the content bytes (≤ 255 characters; bare hex or `method:hexdigest`, not format-checked) |
+| `hash_method` | string | no | `ResourceEntry.hash_method` | algorithm for `content_hash` (e.g. `sha256`; ≤ 64 characters) |
 | `source` | string | no | `ResourceEntry.source` (`IngestionSource`) | provenance of the metadata (`INGESTION_SOURCE_CMS_API`, …) |
 | `resource_mutability` | string (enum) | no | `ResourceEntry.resource_mutability` (`ResourceMutability`) | `RESOURCE_MUTABILITY_STATIC`/`RESOURCE_MUTABILITY_DYNAMIC`/`RESOURCE_MUTABILITY_LIVE`; drives delivery-time hash-verification behavior. Omitting the field defaults the Offer to `RESOURCE_MUTABILITY_STATIC`; explicit `RESOURCE_MUTABILITY_UNSPECIFIED` is rejected |
-| `provenance_source` | string | no | `ResourceEntry.provenance_source` | who supplied the metadata (audit trail; ≤ 260 bytes) |
+| `provenance_source` | string | no | `ResourceEntry.provenance_source` | who supplied the metadata (audit trail; ≤ 260 characters) |
 | `provenance_timestamp` | RFC3339 | no | `ResourceEntry.provenance_timestamp` | when it was collected / generated |
 | `license` | object | no (yes for any REFERENCE_ONLY term) | `LicenseTerm.license` | governing license document `{id, uri, uri_digest, name}` |
 | `terms` | array (≤ 32) | no | `ResourceEntry.terms[]` | the licensing offers on this resource (see below); at most 32 per entry on the wire. An entry with no terms is conformant — the Exchange simply makes no offer from it |

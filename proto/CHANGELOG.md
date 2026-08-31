@@ -272,10 +272,12 @@ the envelope around them was not, so an entry with an empty `domain`, a `path` w
 leading slash, or a `domain` carrying a scheme or a path reached the Exchange and was
 refused — or quietly synthesised into a wrong catalog URI — only after ingestion had
 started. `domain` now carries the shared bare-host rule every addressed `exchange` field
-carries (a port is allowed; a scheme, path, query or userinfo is not; 260 bytes); `path`
-is an absolute URL path (`^/[^?#\x00-\x20\x7f]*$`, 1–2048 bytes); `title` (512),
+carries (a port is allowed; a scheme, path, query or userinfo is not; 260 characters);
+`path` is an absolute URL path (`^/[^?#\x00-\x20\x7f]*$`, 1–2048 characters); `title` (512),
 `content_id` and `content_hash` (255), `hash_method` (64) and `provenance_source` (260)
-are length-bounded; `word_count` and `estimated_quantity` are non-negative;
+are length-bounded — every one of these counts CHARACTERS (Unicode code points), which
+is what protovalidate's `max_len` counts, so a conformant value can exceed its character
+count in bytes; `word_count` and `estimated_quantity` are non-negative;
 `attestations` carries at most 64 entries and `terms` at most 32 — the cap
 `CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED` named, stated on the wire so every
 implementation refuses the same size. `content_hash` is deliberately not format-checked:
