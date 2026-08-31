@@ -135,7 +135,8 @@ Content published in WordPress
   -> Plugin hook fires (publish_post)
   -> Extract: title, word count, URL path, categories
   -> Compute: estimated_quantity = word_count * 1.32
-  -> Build PushResourcesRequest (caller_id) with the SDK's catalog client, which pre-checks the entry and signs it (RFC 9421)
+  -> Pre-check each entry with helpers.ValidateResourceEntry (advisory; the Exchange re-runs it)
+  -> Build PushResourcesRequest (caller_id) with the SDK's catalog client, which stamps ver, refuses a non-bare-domain exchange, and signs it (RFC 9421)
   -> POST to Exchange CatalogService.PushResources
   -> Exchange adds/updates catalog entry
 ```

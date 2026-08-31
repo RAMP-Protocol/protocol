@@ -161,7 +161,7 @@ The `catalog_contributors` field authorizes third parties to push attestations a
 
 ## Push Your Catalog with the SDK
 
-Whatever your source material — a JSONL feed, a sitemap, an RSL file, a crawl, a CMS plugin — it converges on one `ResourceEntry` per resource, and the SDK owns the rest: the shape, the Exchange's own validation run before anything is signed, and the push.
+Whatever your source material — a JSONL feed, a sitemap, an RSL file, a crawl, a CMS plugin — it converges on one `ResourceEntry` per resource, and the SDK owns the rest: the shape, the Exchange's own validation run for you to call before you push, and the push itself.
 
 1. Build a `ResourceEntry` per resource: `domain` (your bare host), `path` (an absolute URL path), the metadata you have, and one or more `terms` — every term carries a `pricing` (`model: FREE` is stated, never implied).
 2. Pre-check it with `validate_resource_entry` (Python), `validateResourceEntry` (TypeScript) or `helpers.ValidateResourceEntry` (Go). The verdict lists every rule the Exchange would refuse the entry on, with its field path, and the warnings the accepted terms would carry — the exact strings that come back in `PushResourcesResponse.warnings`. Token spellings and aliases (`generative-ai` → `ai-input`, `de` → `DE`) are canonicalised for you.
