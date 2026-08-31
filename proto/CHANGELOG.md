@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+**The offer-signature comments now state the implemented scheme: hex-encoded
+detached Ed25519, not a JWS (documentation correction; no wire change).** Since the
+initial public snapshot, the comments on `Offer.signature` and
+`Offer.signature_algorithm` described a JWS (alg=EdDSA) envelope. No implementation
+ever produced one: signing has always been hex(Ed25519) over the RFC 8785 JCS
+canonical form, verification has always hex-decoded, and every conformance vector
+carries a 128-character hex signature. An implementer who followed the comment
+instead of the code emitted a compact JWS that failed verification — and the file
+contradicted itself, because `AgentAcceptance` already documented the hex convention
+and named `Offer.signature` as the single normative definition.
+
+The proto comments, the website pages, and the SDK comments now state the
+implemented scheme. `signature_algorithm` is documented as the JOSE/JWA algorithm
+identifier (RFC 8037), advisory and excluded from the signed bytes. The v1.0
+entries below are left as written; they record what that release said.
+`Delegation.token` is unaffected — it genuinely is a JWT (base64url-encoded JWS).
+The attestation signature envelope remains an open decision, and the file header no
+longer asserts one.
+
 **A cross-field refinement turned off the wire policy for the whole message (TypeScript
 SDK fix; no wire change).** The composed cross-field schemas are the surface a TypeScript
 consumer is told to parse with, and each one is a Zod refinement wrapped AROUND the
