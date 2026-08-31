@@ -877,6 +877,78 @@
       "cross_field_rules": [],
       "term_rules": [],
       "warnings": []
+    },
+    {
+      "name": "wire_form_minimal_entry",
+      "entry": {
+        "attestations": [],
+        "domain": "publisher.example",
+        "ext": null,
+        "ext_critical": [],
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "obligations": [],
+            "pricing": {
+              "currency": "",
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "quotas": [],
+            "restrictions": [],
+            "scopes": [],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": true,
+      "structural": false,
+      "cross_field_rules": [],
+      "term_rules": [],
+      "warnings": []
+    },
+    {
+      "name": "wire_form_entry_with_restrictions_and_obligations",
+      "entry": {
+        "attestations": [],
+        "domain": "publisher.example",
+        "ext": null,
+        "ext_critical": [],
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "obligations": [
+              {
+                "kind": "OBLIGATION_KIND_ATTRIBUTION",
+                "trigger": "OBLIGATION_TRIGGER_ON_USE"
+              }
+            ],
+            "pricing": {
+              "currency": "",
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "quotas": [],
+            "restrictions": [
+              {
+                "advisory": false,
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train"
+                ],
+                "prohibited": []
+              }
+            ],
+            "scopes": [],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": true,
+      "structural": false,
+      "cross_field_rules": [],
+      "term_rules": [],
+      "warnings": []
     }
   ],
   "fold": [

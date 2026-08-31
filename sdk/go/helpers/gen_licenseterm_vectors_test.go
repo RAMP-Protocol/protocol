@@ -139,7 +139,23 @@ var ltVectorJSON = protojson.MarshalOptions{UseProtoNames: true}
 
 func ltProtoJSON(t *testing.T, m proto.Message) json.RawMessage {
 	t.Helper()
-	b, err := ltVectorJSON.Marshal(m)
+	return ltStableJSON(t, ltVectorJSON, m)
+}
+
+// ltWireJSON renders an entry the way an Exchange's own codec does. It is the
+// same message as ltProtoJSON's, spelled the way it actually arrives:
+// EmitUnpopulated writes an unset message field as a null and an unset scalar as
+// its zero, where the compact rendering omits both. The verdict recorded beside
+// it is the oracle's verdict on the MESSAGE, so a port that reads one spelling
+// differently from the other is what the case catches — the two are one entry.
+func ltWireJSON(t *testing.T, m proto.Message) json.RawMessage {
+	t.Helper()
+	return ltStableJSON(t, wireEmitJSONOptions, m)
+}
+
+func ltStableJSON(t *testing.T, opts protojson.MarshalOptions, m proto.Message) json.RawMessage {
+	t.Helper()
+	b, err := opts.Marshal(m)
 	if err != nil {
 		t.Fatalf("marshal %T: %v", m, err)
 	}
@@ -561,14 +577,15 @@ func buildLTEntryVectors(t *testing.T) []ltEntryVector {
 		{"no_terms_accepted", entry(func(e *rampv1.ResourceEntry) { e.Terms = nil })},
 	}
 	celIDs := ltCrossFieldRuleIDs(t)
-	out := make([]ltEntryVector, 0, len(cases))
-	for _, c := range cases {
-		before := ltProtoJSON(t, c.entry)
-		verdict := ValidateResourceEntry(c.entry) // REAL face
-		if after := ltProtoJSON(t, c.entry); string(after) != string(before) {
-			t.Fatalf("%s: ValidateResourceEntry modified its input", c.name)
+	// render is how the case's entry is spelled into the corpus. The verdict is
+	// taken from the MESSAGE either way, so the spelling is the only variable.
+	emit := func(name string, e *rampv1.ResourceEntry, render func(*testing.T, proto.Message) json.RawMessage) ltEntryVector {
+		before := render(t, e)
+		verdict := ValidateResourceEntry(e) // REAL face
+		if after := render(t, e); string(after) != string(before) {
+			t.Fatalf("%s: ValidateResourceEntry modified its input", name)
 		}
-		v := ltEntryVector{Name: c.name, Entry: before, OK: verdict.OK(),
+		v := ltEntryVector{Name: name, Entry: before, OK: verdict.OK(),
 			CrossFieldRules: []string{}, TermRules: []ltFinding{}, Warnings: ltWarningsOf(verdict.Warnings)}
 		for _, viol := range verdict.Violations {
 			switch {
@@ -580,7 +597,32 @@ func buildLTEntryVectors(t *testing.T) []ltEntryVector {
 				v.Structural = true
 			}
 		}
-		out = append(out, v)
+		return v
+	}
+	out := make([]ltEntryVector, 0, len(cases))
+	for _, c := range cases {
+		out = append(out, emit(c.name, c.entry, ltProtoJSON))
+	}
+	// The same entries again in the spelling an Exchange actually serves. A
+	// generated schema cannot express "a null is how proto-JSON writes an absent
+	// field", so that rule lives in each port's wire-policy seam — and a port
+	// that parses around the seam refuses a body the oracle and the other port
+	// both accept. Nothing caught that before these, because every other case is
+	// written in the compact spelling, where the null never appears.
+	for _, c := range []struct {
+		name  string
+		entry *rampv1.ResourceEntry
+	}{
+		{"wire_form_minimal_entry", entry(nil)},
+		{"wire_form_entry_with_restrictions_and_obligations", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"ai-train"}, nil)}
+			e.Terms[0].Obligations = []*rampv1.Obligation{{
+				Kind:    rampv1.ObligationKind_OBLIGATION_KIND_ATTRIBUTION,
+				Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE,
+			}}
+		})},
+	} {
+		out = append(out, emit(c.name, c.entry, ltWireJSON))
 	}
 	return out
 }

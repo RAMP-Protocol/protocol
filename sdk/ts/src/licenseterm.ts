@@ -17,6 +17,11 @@
 // registered token. Messages are the exact strings the Go oracle emits, which
 // are the strings an Exchange puts on the wire.
 
+import {
+	JSON_NAME_ALIAS_ERROR,
+	WireNamingError,
+	underWirePolicy,
+} from "../../../gen/ts/wire/base.ts";
 import { ResourceEntrySchema } from "../../../gen/ts/wire/schemas.ts";
 import * as functiontokens from "../../../gen/ts/vocab/functiontokens.ts";
 import * as geographytokens from "../../../gen/ts/vocab/geographytokens.ts";
@@ -338,14 +343,39 @@ function crossFieldSites(entry: Obj): Array<{ path: string; message: string; val
  * copy of the terms. The entry passed in is never modified. The Exchange stops
  * at the first tier that fails; this face reports both so a publisher fixes
  * everything in one round. Paths are relative to the entry.
+ *
+ * The wire tier runs UNDER THE WIRE POLICY, the same seam every other parse of a
+ * generated schema in this SDK goes through. A generated schema describes the
+ * message and cannot describe the two things that are true of the wire: a `null`
+ * is how proto-JSON spells "no value" for any field, and a lowerCamelCase
+ * json_name alias is out of contract. A bare safeParse would answer wrongly in
+ * both directions on bodies a publisher really produces — an Exchange serving
+ * EmitUnpopulated renders an unset message field as null, and stock
+ * protojson.Marshal emits camelCase, which the schemas STRIP, so an entry whose
+ * every multiword field was silently dropped would come back accepted. This
+ * face exists to predict the Exchange's verdict, so it applies the Exchange's
+ * reading of the bytes.
  */
 export function validateResourceEntry(entry: Obj): EntryVerdict {
 	const violations: RuleViolation[] = [];
-	const parsed = ResourceEntrySchema.safeParse(entry);
-	if (!parsed.success) {
-		for (const issue of parsed.error.issues) {
-			violations.push({ rule: `field.${issue.code}`, path: zodPath(issue.path), token: "", message: issue.message });
+	try {
+		const parsed = ResourceEntrySchema.safeParse(underWirePolicy(ResourceEntrySchema, entry, ""));
+		if (!parsed.success) {
+			for (const issue of parsed.error.issues) {
+				violations.push({ rule: `field.${issue.code}`, path: zodPath(issue.path), token: "", message: issue.message });
+			}
 		}
+	} catch (cause) {
+		// The naming refusal is the one policy failure that throws rather than
+		// returning an issue, so it is mapped to a violation here. Same id as the
+		// Python port reports it under, so a consumer branches on one string.
+		if (!(cause instanceof WireNamingError)) throw cause;
+		violations.push({
+			rule: `field.${JSON_NAME_ALIAS_ERROR}`,
+			path: cause.path,
+			token: "",
+			message: cause.message,
+		});
 	}
 	for (const site of crossFieldSites(entry)) {
 		for (const id of crossFieldRuleIds(site.message, site.value)) {
