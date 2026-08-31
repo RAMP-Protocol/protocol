@@ -103,8 +103,8 @@ func TestDocUnitsRegistered(t *testing.T) {
 
 // TestDocSignatureAlgorithm checks the two DETERMINISTIC forms of the Offer
 // signature algorithm in doc examples — the `signature_algorithm` JSON field and
-// the PascalCase Go `SignatureAlgorithm = "…"` — both of which are JOSE/JWS and
-// must be "EdDSA".
+// the PascalCase Go `SignatureAlgorithm = "…"` — both of which carry the JOSE/JWA
+// algorithm identifier and must be "EdDSA".
 //
 // An earlier version also tried to classify bare `alg=…` tokens (ed25519 for RFC
 // 9421 request signatures vs EdDSA for JOSE) by sniffing same-line context for
@@ -128,14 +128,14 @@ func TestDocSignatureAlgorithm(t *testing.T) {
 			if m := jsonField.FindStringSubmatch(line); m != nil && !isPlaceholder(m[1]) {
 				checked++
 				if m[1] != "EdDSA" {
-					flag(path, n, "signature_algorithm \""+m[1]+"\" should be \"EdDSA\" (JOSE/JWS)")
+					flag(path, n, "signature_algorithm \""+m[1]+"\" should be \"EdDSA\" (the JOSE/JWA identifier)")
 				}
 			}
 			// PascalCase Go form: Offer.SignatureAlgorithm = "…" — JOSE ⇒ EdDSA.
 			if m := goField.FindStringSubmatch(line); m != nil && !isPlaceholder(m[1]) {
 				checked++
 				if m[1] != "EdDSA" {
-					flag(path, n, "SignatureAlgorithm = \""+m[1]+"\" should be \"EdDSA\" (Offer signature is JOSE/JWS)")
+					flag(path, n, "SignatureAlgorithm = \""+m[1]+"\" should be \"EdDSA\" (the JOSE/JWA identifier)")
 				}
 			}
 		}

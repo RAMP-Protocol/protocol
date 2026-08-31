@@ -52,7 +52,8 @@ patterns=(
   # request signatures live in HTTP headers (RFC 9421), not message fields
   'caller_signature' 'agent_signature' 'orchestrator_signature' 'broker_signature'
   # the scalar offer_signature pair is gone: the execute-request now reflects the
-  # FULL signed Offer back (offer.signature carries the JWS). offer_id stays live.
+  # FULL signed Offer back (offer.signature carries the hex Ed25519 signature).
+  # offer_id stays live.
   'offer_signature' 'offer_signature_algorithm'
   # token / vocabulary — both the hyphenated token form and the prose spelling;
   # the canonical optional delegation format is biscuit-v3 (NEVER v2), and

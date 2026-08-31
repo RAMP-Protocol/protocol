@@ -47,7 +47,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
-# OFFER_SIGNATURE_ALGORITHM / ACCEPTANCE_SIGNATURE_ALGORITHM — the JWS alg advertised
+# OFFER_SIGNATURE_ALGORITHM / ACCEPTANCE_SIGNATURE_ALGORITHM — the JOSE/JWA algorithm
+# identifier advertised
 # on signed offers/acceptances. Always EdDSA for Ed25519 (mirror the Go constants).
 OFFER_SIGNATURE_ALGORITHM = "EdDSA"
 ACCEPTANCE_SIGNATURE_ALGORITHM = "EdDSA"

@@ -17,7 +17,7 @@ import (
 // fail later at execute. VerifyOffer is the building block the {verified,
 // rejected} split (the L2 Discover/Resolve surface) is built on.
 
-// OfferSignatureAlgorithm is the JWS alg advertised on signed offers
+// OfferSignatureAlgorithm is the JOSE/JWA algorithm identifier advertised on signed offers
 // (Offer.signature_algorithm). Always EdDSA for Ed25519.
 const OfferSignatureAlgorithm = "EdDSA"
 
