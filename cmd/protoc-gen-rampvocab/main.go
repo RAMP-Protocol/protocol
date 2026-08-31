@@ -238,17 +238,110 @@ type aliasEntry struct {
 	canonical string
 }
 
+// asciiFold is the direction an axis's tokens are folded to before they are looked
+// up. It is DERIVED from the registered tokens rather than declared, because the
+// token list is the only authored source and a second declaration could disagree
+// with it. An axis whose lettered tokens are all lowercase folds lower; all
+// uppercase folds upper; a caseless axis (no letters at all) accepts either.
+type asciiFold int
+
+const (
+	foldEither asciiFold = iota
+	foldLower
+	foldUpper
+)
+
+func (f asciiFold) String() string {
+	switch f {
+	case foldLower:
+		return "lowercase"
+	case foldUpper:
+		return "uppercase"
+	}
+	return "either case"
+}
+
+// axisFold reports which way this axis folds, or an error when its own tokens
+// disagree. A mixed-case token list has no fold that leaves every token unchanged,
+// so Canonical could not be a fixed point on it and the axis is unusable — which is
+// worth refusing at codegen whether or not the axis carries aliases.
+func axisFold(tokens []string) (asciiFold, error) {
+	seen := foldEither
+	for _, t := range tokens {
+		var f asciiFold
+		switch {
+		case t == asciiLowerASCII(t) && t == asciiUpperASCII(t):
+			continue // caseless (e.g. "*"), decides nothing
+		case t == asciiLowerASCII(t):
+			f = foldLower
+		case t == asciiUpperASCII(t):
+			f = foldUpper
+		default:
+			return foldEither, fmt.Errorf("token %q is neither all-lowercase nor all-uppercase, so no fold leaves it unchanged and Canonical cannot be a fixed point on this axis", t)
+		}
+		if seen != foldEither && seen != f {
+			return foldEither, fmt.Errorf("token %q is %s while another token on this axis is not; an axis folds one way, so its tokens must agree", t, f)
+		}
+		seen = f
+	}
+	return seen, nil
+}
+
+// asciiLowerASCII and asciiUpperASCII case-fold ASCII letters only, matching the
+// SDK's fold: a Unicode fold would turn U+212A into "k".
+func asciiLowerASCII(s string) string {
+	b := []byte(s)
+	for i := range b {
+		if b[i] >= 'A' && b[i] <= 'Z' {
+			b[i] += 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
+func asciiUpperASCII(s string) string {
+	b := []byte(s)
+	for i := range b {
+		if b[i] >= 'a' && b[i] <= 'z' {
+			b[i] -= 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
+// foldToken applies the axis's fold. foldEither leaves the value alone: the axis
+// has no letters to fold, so nothing about case can make an alias unreachable.
+func foldToken(f asciiFold, s string) string {
+	switch f {
+	case foldLower:
+		return asciiLowerASCII(s)
+	case foldUpper:
+		return asciiUpperASCII(s)
+	}
+	return s
+}
+
 // parseAliases reads "alias=canonical" entries against the axis's registered
 // tokens and refuses anything the generated Canonical face could not honour:
 // an alias that is itself a token (it would shadow a registration), a canonical
 // that is not a token (it would canonicalise INTO an unregistered value), a
-// duplicate alias, and an alias that is not already trimmed and lowercase (the
-// SDK folds before it looks up, so an alias the fold can never produce is dead).
+// duplicate alias, and an alias the axis's own fold could never produce (the SDK
+// folds before it looks up, so such an alias is dead on arrival).
+//
+// The fold direction comes from the axis's registered tokens, never from an
+// assumption: FUNCTION and USER_TYPE fold lower, GEOGRAPHY folds upper, and an
+// alias is required to be a fixed point of whichever this axis uses. Reading it as
+// "lowercase" would pass a geography alias that can never match — exactly the class
+// this check exists to catch.
 // Codegen fails loudly here rather than emitting a map that quietly misroutes.
 func parseAliases(tokens []string, raw []string) ([]aliasEntry, error) {
 	registered := make(map[string]bool, len(tokens))
 	for _, t := range tokens {
 		registered[t] = true
+	}
+	fold, err := axisFold(tokens)
+	if err != nil {
+		return nil, err
 	}
 	seen := make(map[string]bool, len(raw))
 	out := make([]aliasEntry, 0, len(raw))
@@ -260,8 +353,11 @@ func parseAliases(tokens []string, raw []string) ([]aliasEntry, error) {
 		if strings.Contains(canonical, "=") {
 			return nil, fmt.Errorf("alias entry %q carries more than one '='", entry)
 		}
-		if alias != strings.ToLower(strings.TrimSpace(alias)) {
-			return nil, fmt.Errorf("alias %q must be authored trimmed and lowercase — the SDK folds a token before it looks it up, so this spelling could never match", alias)
+		if alias != strings.TrimSpace(alias) {
+			return nil, fmt.Errorf("alias %q must be authored trimmed — the SDK trims a token before it looks it up, so this spelling could never match", alias)
+		}
+		if folded := foldToken(fold, alias); folded != alias {
+			return nil, fmt.Errorf("alias %q must be authored %s on this axis — its tokens fold that way, and the SDK folds a token before it looks it up, so this spelling could never match (did you mean %q?)", alias, fold, folded)
 		}
 		if registered[alias] {
 			return nil, fmt.Errorf("alias %q is itself a registered token; an alias cannot shadow a registration", alias)

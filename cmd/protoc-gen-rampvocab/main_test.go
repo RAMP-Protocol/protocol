@@ -179,6 +179,59 @@ func TestParseAliasesRefusesWhatCanonicalCannotHonour(t *testing.T) {
 	}
 }
 
+// The fold direction is the axis's own, not an assumption that every axis folds
+// lower. GEOGRAPHY registers uppercase tokens and the SDK folds a geography token
+// UP before looking it up, so a lowercase geography alias is dead on arrival — it
+// is the exact class this check exists to catch, and reading the rule as
+// "lowercase" would have waved it through.
+func TestParseAliasesFoldsTheWayTheAxisDoes(t *testing.T) {
+	lower := []string{"ai-train", "ai-input"}
+	upper := []string{"*", "EU", "EEA"}
+
+	if _, err := parseAliases(upper, []string{"europe=EU"}); err == nil {
+		t.Error("a lowercase alias on an uppercase axis was accepted; the SDK folds up, so it could never match")
+	}
+	if got, err := parseAliases(upper, []string{"EUROPE=EU"}); err != nil {
+		t.Errorf("an uppercase alias on an uppercase axis was refused: %v", err)
+	} else if len(got) != 1 || got[0].alias != "EUROPE" || got[0].canonical != "EU" {
+		t.Errorf("parseAliases = %v, want one EUROPE->EU entry", got)
+	}
+	if _, err := parseAliases(lower, []string{"TRAIN-AI=ai-train"}); err == nil {
+		t.Error("an uppercase alias on a lowercase axis was accepted")
+	}
+}
+
+// A caseless axis decides nothing about case; a mixed-case one is refused outright,
+// because no fold leaves every token unchanged and Canonical could not then be the
+// fixed point NormalizeLicenseTerm's idempotency depends on.
+func TestAxisFold(t *testing.T) {
+	for name, tc := range map[string]struct {
+		tokens  []string
+		want    asciiFold
+		wantErr bool
+	}{
+		"lower":               {[]string{"ai-train", "ai-input"}, foldLower, false},
+		"upper":               {[]string{"EU", "EEA"}, foldUpper, false},
+		"caseless":            {[]string{"*", "1", "-"}, foldEither, false},
+		"upper_with_caseless": {[]string{"*", "EU"}, foldUpper, false},
+		"mixed_token":         {[]string{"AiTrain"}, foldEither, true},
+		"disagreeing_tokens":  {[]string{"ai-train", "EU"}, foldEither, true},
+	} {
+		got, err := axisFold(tc.tokens)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("%s: axisFold(%q) accepted, want error", name, tc.tokens)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s: axisFold(%q) = %v", name, tc.tokens, err)
+		} else if got != tc.want {
+			t.Errorf("%s: axisFold(%q) = %v, want %v", name, tc.tokens, got, tc.want)
+		}
+	}
+}
+
 func TestAliasFaceNamesAreReserved(t *testing.T) {
 	// A token spelled like the emitted alias face must fail loudly in every
 	// language rather than shadow it.
