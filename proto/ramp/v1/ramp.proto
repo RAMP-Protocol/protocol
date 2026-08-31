@@ -2355,16 +2355,26 @@ message PushResourcesResponse {
   // RAMP protocol version — "1.0". Stamped by the sender from a single
   // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
-  // Number of entries accepted
+  // Number of entries accepted. A push is all-or-nothing, so a successful push
+  // stored every entry it carried and this is the submission's own size. A push
+  // that could not be applied is not a response at all: it travels as a non-OK
+  // transport error carrying ErrorDetail.catalog_rejection.
   int32 accepted = 2;
-  // Number of entries rejected
+  // Number of entries rejected. Structurally always 0 on this path, and kept for
+  // the same reason CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED is kept: a
+  // rejection returns an error rather than a response, so there is no successful
+  // answer in which this can be non-zero. It remains meaningful only for a
+  // deployment that applies catalog rules somewhere the all-or-nothing rule above
+  // does not front. Do NOT read a zero here as "nothing failed" — read `accepted`.
   int32 rejected = 3;
 
-  // Non-fatal issues encountered during ingestion.
-  // Examples: unrecognized vocab token in a Restriction (term accepted but flagged),
-  //           REFERENCE_ONLY term missing License.uri (informational).
-  // Warnings do not cause rejection — they are surfaced so publishers can fix
-  // their feeds without a hard failure.
+  // Non-fatal issues encountered during ingestion — the ingest tier's lint, which
+  // accepts the term and flags it. Examples: an unregistered bare restriction
+  // token on any axis, and an OBLIGATION_KIND_OTHER obligation with no detail.
+  // Warnings do not cause rejection; they are surfaced so publishers can fix their
+  // feeds without a hard failure. A condition that rejects is not a warning — a
+  // REFERENCE_ONLY term with no License.uri, for instance, is refused by
+  // license_term.reference_only.requires_uri and never reaches this list.
   repeated string warnings = 4;
 
   // Extension point

@@ -579,7 +579,8 @@ class ProviderRelationship(Enum):
 
 class PushResourcesResponse(WireModel):
     accepted: conint(ge=-2147483648, le=2147483647) | None = Field(
-        None, description='Number of entries accepted'
+        None,
+        description="Number of entries accepted. A push is all-or-nothing, so a successful push\n stored every entry it carried and this is the submission's own size. A push\n that could not be applied is not a response at all: it travels as a non-OK\n transport error carrying ErrorDetail.catalog_rejection.",
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -587,7 +588,8 @@ class PushResourcesResponse(WireModel):
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
     rejected: conint(ge=-2147483648, le=2147483647) | None = Field(
-        None, description='Number of entries rejected'
+        None,
+        description='Number of entries rejected. Structurally always 0 on this path, and kept for\n the same reason CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED is kept: a\n rejection returns an error rather than a response, so there is no successful\n answer in which this can be non-zero. It remains meaningful only for a\n deployment that applies catalog rules somewhere the all-or-nothing rule above\n does not front. Do NOT read a zero here as "nothing failed" — read `accepted`.',
     )
     ver: str | None = Field(
         '',
@@ -595,7 +597,7 @@ class PushResourcesResponse(WireModel):
     )
     warnings: list[str] | None = Field(
         None,
-        description='Non-fatal issues encountered during ingestion.\n Examples: unrecognized vocab token in a Restriction (term accepted but flagged),\n           REFERENCE_ONLY term missing License.uri (informational).\n Warnings do not cause rejection — they are surfaced so publishers can fix\n their feeds without a hard failure.',
+        description="Non-fatal issues encountered during ingestion — the ingest tier's lint, which\n accepts the term and flags it. Examples: an unregistered bare restriction\n token on any axis, and an OBLIGATION_KIND_OTHER obligation with no detail.\n Warnings do not cause rejection; they are surfaced so publishers can fix their\n feeds without a hard failure. A condition that rejects is not a warning — a\n REFERENCE_ONLY term with no License.uri, for instance, is refused by\n license_term.reference_only.requires_uri and never reaches this list.",
     )
 
 
