@@ -13,6 +13,8 @@ package connectserver_test
 
 import (
 	"bytes"
+	"context"
+	"crypto/ed25519"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,8 +22,13 @@ import (
 	"strings"
 	"testing"
 
+	connectrpc "connectrpc.com/connect"
+
+	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
+	rampconnect "github.com/RAMP-Protocol/protocol/sdk/go/connect"
 	rampserver "github.com/RAMP-Protocol/protocol/sdk/go/connectserver"
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
 // postRaw sends bytes straight at a procedure, bypassing the Connect client, so the
@@ -95,6 +102,104 @@ func TestReadCap_BodyWithinTheCapStillReachesVerification(t *testing.T) {
 	}
 	if hits, _ := origin.snapshot(); hits != 0 {
 		t.Errorf("origin ran %d times on an unsigned push", hits)
+	}
+}
+
+// gzipCatalogClient builds a SIGNED catalog client that compresses what it sends,
+// mounted against a server holding the matching key.
+//
+// Signed is not a detail here, it is the only way to reach the second bound at all:
+// verify sits between the raw read and Connect's decoder, so an unsigned caller is
+// refused before anything is decompressed — which is precisely what the raw bound
+// exists to cover, and why the two bounds need separate cases.
+func gzipCatalogClient(
+	t *testing.T, origin *catalogEcho, opts ...rampserver.ServerOption,
+) *rampconnect.CatalogClient {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("keygen: %v", err)
+	}
+	const keyID = "publisher.v1"
+	signer, err := helpers.NewEd25519Signer(keyID, priv)
+	if err != nil {
+		t.Fatalf("signer: %v", err)
+	}
+	srv := mountCatalog(t, origin, append([]rampserver.ServerOption{
+		rampserver.WithKeyResolver(helpers.NewStaticKeyResolver(map[string]ed25519.PublicKey{keyID: pub})),
+		rampserver.WithReplayStore(newCountingReplayStore()),
+	}, opts...)...)
+	return rampconnect.NewCatalogClient(srv.URL,
+		rampconnect.WithSigner(signer),
+		rampconnect.WithClientOptions(connectrpc.WithSendGzip()))
+}
+
+// inflatingPush is a CONFORMANT push — 256 entries, the wire maximum, each with a
+// full-length path — built from one repeated byte so it is tiny compressed and
+// large decoded. That it is conformant is the point: the cap models the cost of
+// checking a submission, not its legality, so the shape that reaches it is an
+// ordinary large batch rather than a malformed one.
+func inflatingPush() *rampv1.PushResourcesRequest {
+	req := &rampv1.PushResourcesRequest{
+		Ver: helpers.ProtocolVersion, Exchange: "exchange.test",
+		TenantId: "tenant-1", CallerId: "publisher.test",
+	}
+	for i := 0; i < 256; i++ {
+		req.Entries = append(req.Entries, &rampv1.ResourceEntry{
+			Domain: "publisher.test",
+			Path:   "/" + strings.Repeat("a", 2047),
+			Terms: []*rampv1.LicenseTerm{{
+				Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED,
+				Pricing:   &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"},
+			}},
+		})
+	}
+	return req
+}
+
+// The SECOND bound: a request small enough on the wire to pass the raw read and
+// large enough to exhaust the cap once Connect has decompressed it. This is the
+// case the 4 MiB default's rationale is written about — a gzip body inflates
+// roughly a thousandfold — and the only shape that can tell the two bounds apart,
+// since an uncompressed body is measured the same by both.
+//
+// Deleting connectrpc.WithReadMaxBytes from the handler options leaves every other
+// case in this file green and turns this one red.
+func TestReadCap_CompressedRequestIsRefusedOnceInflated(t *testing.T) {
+	t.Parallel()
+	origin := &catalogEcho{}
+	client := gzipCatalogClient(t, origin, rampserver.WithMaxRequestBytes(64<<10))
+
+	_, err := client.PushResources(context.Background(), inflatingPush())
+
+	if err == nil {
+		t.Fatal("a message that only fits before it is decompressed must be refused")
+	}
+	if got := connectrpc.CodeOf(err); got != connectrpc.CodeResourceExhausted {
+		t.Fatalf("inflated over-cap message: code = %v, want resource_exhausted (err=%v)", got, err)
+	}
+	if hits, _ := origin.snapshot(); hits != 0 {
+		t.Errorf("origin ran %d times on a message that only fits compressed", hits)
+	}
+}
+
+// The control. A compressed request under BOTH bounds must be applied normally —
+// without it, a handler that refused every compressed request, or one whose cap was
+// simply far too low, would pass the case above.
+func TestReadCap_CompressedRequestWithinBothBoundsIsApplied(t *testing.T) {
+	t.Parallel()
+	origin := &catalogEcho{}
+	client := gzipCatalogClient(t, origin, rampserver.WithMaxRequestBytes(64<<10))
+
+	resp, err := client.PushResources(context.Background(), validPush())
+	if err != nil {
+		t.Fatalf("under-cap compressed push: %v", err)
+	}
+	if resp.GetAccepted() != 1 {
+		t.Errorf("accepted = %d, want 1", resp.GetAccepted())
+	}
+	if hits, _ := origin.snapshot(); hits != 1 {
+		t.Errorf("origin ran %d times, want 1 — a compressed request within both bounds is ordinary", hits)
 	}
 }
 
