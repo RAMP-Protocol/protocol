@@ -3444,7 +3444,15 @@ func (x *License) GetUriDigest() string {
 //	USER_TYPE — RAMP user/organization categories
 type Restriction struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Which dimension this restriction applies to.
+	// Which dimension this restriction applies to. Defined-only: the axis set is
+	// CLOSED, and a number outside it is refused rather than ignored. A custom
+	// axis is RESTRICTION_KIND_OTHER, whose meaning rides in permitted/prohibited,
+	// so a new number was never the extension mechanism — accepting one would
+	// admit a restriction no consumer can evaluate onto a term whose default is
+	// BINDING (see advisory below), which fails open on the axis a publisher most
+	// needs enforced. It also bounds the cost of the one-per-kind rule below: with
+	// the axes closed, a list longer than the axis set must repeat one, so that
+	// rule's all() short-circuits instead of comparing every pair.
 	Kind RestrictionKind `protobuf:"varint,1,opt,name=kind,proto3,enum=ramp.v1.RestrictionKind" json:"kind,omitempty"`
 	// Tokens allowed on this axis. Empty = all permitted.
 	// For FUNCTION: "ai-input", "ai-train", "search", "editorial", "commercial", …
@@ -3732,17 +3740,24 @@ type LicenseTerm struct {
 	Semantics TermSemantics `protobuf:"varint,2,opt,name=semantics,proto3,enum=ramp.v1.TermSemantics" json:"semantics,omitempty"`
 	// Usage restrictions (function, geography, user-type).
 	// Multiple restrictions are AND-combined — the agent must satisfy all of them.
-	// At most 64, the bound every other per-message list in this contract carries.
-	// Only one restriction per axis is valid anyway, so the cap is far above any
-	// conformant term; it bounds what a single term can carry, not the work of
-	// checking one — a validator walks every element it is handed before the cap
-	// is reported, so the cost of checking is bounded at the transport instead.
+	// At most 8, and this list is the one of the three that does NOT carry the
+	// contract's usual 64: only one restriction per axis is valid, the axis enum
+	// is defined-only, so four is the longest conformant list and eight leaves
+	// room for an axis this version does not have. The tighter bound is here
+	// because this is the list the message rules walk QUADRATICALLY — the
+	// one-per-kind rule below compares the list against itself, and each element's
+	// disjointness rule compares its two token lists pairwise. A cap on a list a
+	// rule walks twice bounds the rule; the caps on quotas and obligations bound
+	// only the document, which is why they differ.
 	Restrictions []*Restriction `protobuf:"bytes,3,rep,name=restrictions,proto3" json:"restrictions,omitempty"`
 	// Usage caps. The agent must not exceed any individual Quota.
-	// At most 64, for the reason restrictions carries.
+	// At most 64, the bound every per-message list in this contract carries when
+	// no rule walks it more than once. It bounds what one term may carry, not the
+	// work of checking one — a validator walks every element it is handed before
+	// the cap is reported, so the cost of checking is bounded at the transport.
 	Quotas []*Quota `protobuf:"bytes,4,rep,name=quotas,proto3" json:"quotas,omitempty"`
 	// Post-use behavioral requirements.
-	// At most 64, for the reason restrictions carries.
+	// At most 64, for the reason quotas carries.
 	Obligations []*Obligation `protobuf:"bytes,5,rep,name=obligations,proto3" json:"obligations,omitempty"`
 	// Pricing for this term. REQUIRED for every term regardless of semantics —
 	// an agent cannot act on a priceless term, so absent Pricing is a validation
@@ -9777,9 +9792,10 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05_nameB\f\n" +
 	"\n" +
 	"_immutableB\r\n" +
-	"\v_uri_digest\"\x8a\x03\n" +
-	"\vRestriction\x126\n" +
-	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindB\b\xbaH\x05\x82\x01\x02 \x00R\x04kind\x12C\n" +
+	"\v_uri_digest\"\x8c\x03\n" +
+	"\vRestriction\x128\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12C\n" +
 	"\tpermitted\x18\x02 \x03(\tB%\xbaH\"\x92\x01\x1f\x10@\"\x1br\x19\x10\x01\x18@2\x13^[A-Za-z0-9._:*-]+$R\tpermitted\x12E\n" +
 	"\n" +
 	"prohibited\x18\x03 \x03(\tB%\xbaH\"\x92\x01\x1f\x10@\"\x1br\x19\x10\x01\x18@2\x13^[A-Za-z0-9._:*-]+$R\n" +
@@ -9802,7 +9818,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\vLicenseTerm\x12/\n" +
 	"\alicense\x18\x01 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x12>\n" +
 	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsB\b\xbaH\x05\x82\x01\x02 \x00R\tsemantics\x12B\n" +
-	"\frestrictions\x18\x03 \x03(\v2\x14.ramp.v1.RestrictionB\b\xbaH\x05\x92\x01\x02\x10@R\frestrictions\x120\n" +
+	"\frestrictions\x18\x03 \x03(\v2\x14.ramp.v1.RestrictionB\b\xbaH\x05\x92\x01\x02\x10\bR\frestrictions\x120\n" +
 	"\x06quotas\x18\x04 \x03(\v2\x0e.ramp.v1.QuotaB\b\xbaH\x05\x92\x01\x02\x10@R\x06quotas\x12?\n" +
 	"\vobligations\x18\x05 \x03(\v2\x13.ramp.v1.ObligationB\b\xbaH\x05\x92\x01\x02\x10@R\vobligations\x127\n" +
 	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingB\x06\xbaH\x03\xc8\x01\x01H\x01R\apricing\x88\x01\x01\x12 \n" +

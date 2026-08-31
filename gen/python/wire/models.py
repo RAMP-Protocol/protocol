@@ -1456,7 +1456,8 @@ class Restriction(WireModel):
         description='Fail-closed by default. When false (the default), this restriction is\n BINDING: an agent that cannot evaluate every token in it — including an\n unknown vendor token — MUST decline the term. Set advisory = true to\n downgrade an unverifiable restriction to non-blocking. This deliberately\n inverts the COSE-`crit` opt-in default: a license restriction a consumer\n does not understand should stop it, not be silently ignored.',
     )
     kind: RestrictionKind = Field(
-        ..., description='Which dimension this restriction applies to.'
+        ...,
+        description="Which dimension this restriction applies to. Defined-only: the axis set is\n CLOSED, and a number outside it is refused rather than ignored. A custom\n axis is RESTRICTION_KIND_OTHER, whose meaning rides in permitted/prohibited,\n so a new number was never the extension mechanism — accepting one would\n admit a restriction no consumer can evaluate onto a term whose default is\n BINDING (see advisory below), which fails open on the axis a publisher most\n needs enforced. It also bounds the cost of the one-per-kind rule below: with\n the axes closed, a list longer than the axis set must repeat one, so that\n rule's all() short-circuits instead of comparing every pair.",
     )
     permitted: (
         list[constr(pattern=r'^[A-Za-z0-9._:*-]+$', min_length=1, max_length=64)] | None
@@ -1795,7 +1796,7 @@ class LicenseTerm(WireModel):
     )
     obligations: list[Obligation] | None = Field(
         None,
-        description='Post-use behavioral requirements.\n At most 64, for the reason restrictions carries.',
+        description='Post-use behavioral requirements.\n At most 64, for the reason quotas carries.',
         max_length=64,
     )
     part_label: str | None = Field(
@@ -1808,13 +1809,13 @@ class LicenseTerm(WireModel):
     )
     quotas: list[Quota] | None = Field(
         None,
-        description='Usage caps. The agent must not exceed any individual Quota.\n At most 64, for the reason restrictions carries.',
+        description='Usage caps. The agent must not exceed any individual Quota.\n At most 64, the bound every per-message list in this contract carries when\n no rule walks it more than once. It bounds what one term may carry, not the\n work of checking one — a validator walks every element it is handed before\n the cap is reported, so the cost of checking is bounded at the transport.',
         max_length=64,
     )
     restrictions: list[Restriction] | None = Field(
         None,
-        description='Usage restrictions (function, geography, user-type).\n Multiple restrictions are AND-combined — the agent must satisfy all of them.\n At most 64, the bound every other per-message list in this contract carries.\n Only one restriction per axis is valid anyway, so the cap is far above any\n conformant term; it bounds what a single term can carry, not the work of\n checking one — a validator walks every element it is handed before the cap\n is reported, so the cost of checking is bounded at the transport instead.',
-        max_length=64,
+        description="Usage restrictions (function, geography, user-type).\n Multiple restrictions are AND-combined — the agent must satisfy all of them.\n At most 8, and this list is the one of the three that does NOT carry the\n contract's usual 64: only one restriction per axis is valid, the axis enum\n is defined-only, so four is the longest conformant list and eight leaves\n room for an axis this version does not have. The tighter bound is here\n because this is the list the message rules walk QUADRATICALLY — the\n one-per-kind rule below compares the list against itself, and each element's\n disjointness rule compares its two token lists pairwise. A cap on a list a\n rule walks twice bounds the rule; the caps on quotas and obligations bound\n only the document, which is why they differ.",
+        max_length=8,
     )
     scopes: list[str] | None = Field(
         None,

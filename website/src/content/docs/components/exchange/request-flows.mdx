@@ -776,7 +776,7 @@ func (h *ExchangeHandler) ReportUsage(
 
 ## Attestation Verification at Catalog Push
 
-Before the handler below runs, the wire tier has already refused a malformed push: the `ResourceEntry` envelope rules (bare-host `domain`, absolute `path`, bounded fields, at most 32 terms, and at most 256 entries in the submission) and the `LicenseTerm` rules (including at most 64 restrictions, quotas or obligations per term) are protovalidate rules applied at the boundary. The handler then canonicalises the terms and applies registry membership — the ingest tier — before the attestation checks. Both tiers ship in the SDK as a publisher pre-check, so a conforming feed rarely reaches this flow with a refusable entry.
+Before the handler below runs, the wire tier has already refused a malformed push: the `ResourceEntry` envelope rules (bare-host `domain`, absolute `path`, bounded fields, at most 32 terms, and at most 256 entries in the submission) and the `LicenseTerm` rules (including at most 8 restrictions, and at most 64 quotas or obligations, per term) are protovalidate rules applied at the boundary. The handler then canonicalises the terms and applies registry membership — the ingest tier — before the attestation checks. Both tiers ship in the SDK as a publisher pre-check, so a conforming feed rarely reaches this flow with a refusable entry.
 
 When `CatalogService.PushResources` includes attestations, the Exchange performs additional verification before accepting entries into the resource catalog.
 
