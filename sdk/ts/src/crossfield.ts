@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  GetAccountStatusResponseSchema,
   LicenseSchema,
   LicenseTermSchema,
   ObligationSchema,
@@ -11,7 +12,7 @@ import {
 
 // Cross-field (message-CEL) refinements — the one genuinely net-new L1 surface.
 //
-// The 9 cross-field rules live ONLY in proto/ramp/v1/ramp.proto as protovalidate
+// The cross-field rules live ONLY in proto/ramp/v1/ramp.proto as protovalidate
 // message-CEL options; the Go oracle executes them via protovalidate. Field-level
 // Zod (gen/ts/wire/schemas.ts) and Pydantic cannot express them. This layer
 // closes that gap on the TS side: it transcribes each CEL predicate VERBATIM
@@ -172,6 +173,23 @@ function wellKnownManifestRules(o: Obj): string[] {
 }
 
 /**
+ * GetAccountStatusResponse.terms_digest_requires_billing_ref:
+ * `this.terms_digest == '' || this.billing_ref != ''`. The digest is what this
+ * ACCOUNT accepted, so it cannot travel without the account handle it hangs on. A
+ * reader that took the digest from a response carrying no billing_ref would be
+ * reading an acceptance for an account that does not exist. Mirror of the
+ * WellKnownManifest rule above, asked of the read side.
+ */
+function getAccountStatusResponseRules(o: Obj): string[] {
+  const termsDigest = str(field(o, "terms_digest"));
+  const billingRef = str(field(o, "billing_ref"));
+  if (termsDigest !== "" && billingRef === "") {
+    return ["get_account_status_response.terms_digest_requires_billing_ref"];
+  }
+  return [];
+}
+
+/**
  * RegistrationFailure.field_errors_scoped_to_invalid_data:
  * `this.field_errors.size() == 0 || this.reason == 6`. The member list names what
  * failed the published schema, so any other reason carrying it publishes detail
@@ -188,6 +206,7 @@ function registrationFailureRules(o: Obj): string[] {
 }
 
 const RULES_BY_MESSAGE: Record<string, (o: Obj) => string[]> = {
+  GetAccountStatusResponse: getAccountStatusResponseRules,
   License: licenseRules,
   LicenseTerm: licenseTermRules,
   Obligation: obligationRules,
@@ -228,6 +247,10 @@ function attach<T extends z.ZodTypeAny>(schema: T, message: string): z.ZodEffect
   });
 }
 
+export const GetAccountStatusResponseCrossFieldSchema = attach(
+  GetAccountStatusResponseSchema,
+  "GetAccountStatusResponse",
+);
 export const LicenseCrossFieldSchema = attach(LicenseSchema, "License");
 export const LicenseTermCrossFieldSchema = attach(LicenseTermSchema, "LicenseTerm");
 export const ObligationCrossFieldSchema = attach(ObligationSchema, "Obligation");

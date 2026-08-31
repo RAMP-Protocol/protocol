@@ -167,9 +167,10 @@ function keep(out: Record<string, unknown>, key: string, value: unknown): void {
 	});
 }
 
-/** Peel the wrapper kinds that decorate a field without changing what it holds. Only the
- * three the generator emits, and `.unwrap()`/`.removeDefault()` are spelled the same way
- * in Zod 3 and Zod 4 — which is the whole reason this reads rather than rebuilds. */
+/** Peel the wrapper kinds that decorate a schema without changing what it holds: the ones
+ * the generator emits around a field, and the refinement the cross-field layer attaches
+ * around a whole message. `.unwrap()` and `.removeDefault()` are spelled the same way in
+ * Zod 3 and Zod 4 — which is the whole reason this reads rather than rebuilds. */
 function unwrapped(schema: z.ZodTypeAny): z.ZodTypeAny {
 	let s = schema;
 	for (;;) {
@@ -181,8 +182,36 @@ function unwrapped(schema: z.ZodTypeAny): z.ZodTypeAny {
 			s = s.removeDefault() as z.ZodTypeAny;
 			continue;
 		}
+		// A REFINEMENT wraps the object without changing what it holds. This is how the
+		// cross-field layer attaches its rules (sdk/ts/src/crossfield.ts), and without this
+		// branch the ZodObject test in underWirePolicy fails on every composed schema, so
+		// the whole wire policy is skipped for it: a camelCase answer parses successfully
+		// into a message with every multiword field missing, and the cross-field rule that
+		// needed one of those fields cannot fire. Peeling here is INSPECTION ONLY — parseWire
+		// still hands the ORIGINAL schema to safeParse, so the refinement still runs.
+		//
+		// Read as a method rather than through `instanceof z.ZodEffects`, because that class
+		// exists only in Zod 3. In Zod 4 a refinement keeps the schema's own class, so the
+		// ZodObject test already holds and there is nothing to peel — and naming the class
+		// would throw, since scripts/check-canonical.sh runs this file under Zod 4.
+		const innerType = (s as { innerType?: () => z.ZodTypeAny }).innerType;
+		if (typeof innerType === "function") {
+			// A PREPROCESS effect rewrites the input BEFORE the inner schema sees it, so the
+			// inner shape is not the shape of what arrives here and the policy would be
+			// applied against the wrong object. refine, superRefine and transform all check
+			// the input against the inner schema first, so for those the inner shape is right.
+			if (effectType(s) === "preprocess") return s;
+			s = innerType.call(s) as z.ZodTypeAny;
+			continue;
+		}
 		return s;
 	}
+}
+
+/** Which kind of Zod 3 effect a schema carries. Only reached when `innerType` is present,
+ * which in Zod 3 is ZodEffects and nothing else. */
+function effectType(s: z.ZodTypeAny): string {
+	return (s as unknown as { _def: { effect: { type: string } } })._def.effect.type;
 }
 
 /**

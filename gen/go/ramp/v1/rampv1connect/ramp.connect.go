@@ -129,8 +129,10 @@ type ExchangeServiceClient interface {
 	// derives who is registering from the verified signature, never from the
 	// request body. Registering again for the same agent returns the same
 	// billing_ref (idempotent by design), which is why this RPC carries no
-	// idempotency_key. A refused registration travels as a non-OK transport
-	// error carrying ErrorDetail.registration_failure.
+	// idempotency_key; the repeat is answered from the stored account record and
+	// runs none of the account-creation gates — see "Repeat registration" in the
+	// Agent Account Registration section header. A refused registration travels as
+	// a non-OK transport error carrying ErrorDetail.registration_failure.
 	Register(context.Context, *connect.Request[v1.RegisterRequest]) (*connect.Response[v1.RegisterResponse], error)
 	// Read-only check of whether the calling agent's account is active.
 	// Identity comes from the request signature, so the request carries no
@@ -282,8 +284,10 @@ type ExchangeServiceHandler interface {
 	// derives who is registering from the verified signature, never from the
 	// request body. Registering again for the same agent returns the same
 	// billing_ref (idempotent by design), which is why this RPC carries no
-	// idempotency_key. A refused registration travels as a non-OK transport
-	// error carrying ErrorDetail.registration_failure.
+	// idempotency_key; the repeat is answered from the stored account record and
+	// runs none of the account-creation gates — see "Repeat registration" in the
+	// Agent Account Registration section header. A refused registration travels as
+	// a non-OK transport error carrying ErrorDetail.registration_failure.
 	Register(context.Context, *connect.Request[v1.RegisterRequest]) (*connect.Response[v1.RegisterResponse], error)
 	// Read-only check of whether the calling agent's account is active.
 	// Identity comes from the request signature, so the request carries no

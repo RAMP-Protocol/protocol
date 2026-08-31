@@ -118,6 +118,18 @@ func seeds() map[string]proto.Message {
 			TermsUri:    proto.String("https://exchange.example/terms"),
 			TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
 		},
+		// The read side of the same digest, and the same auto-fill shape: terms_digest
+		// carries a pattern so auto-fill populates it, billing_ref is a plain string
+		// with no field rule so auto-fill leaves it empty, and the pair is joined by a
+		// message CEL rule — an accepted digest hangs on an account. Seeding both keeps
+		// the terms_digest pattern mutants honest here too: they trip the pattern
+		// alone rather than the pattern and the cross-field rule together.
+		"GetAccountStatusResponse": &rampv1.GetAccountStatusResponse{
+			Ver:         "1.0",
+			BillingRef:  "acct-seed",
+			Active:      true,
+			TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
+		},
 		"TenantFeeRate":   &rampadminv1.TenantFeeRate{TenantId: "tenant-seed", FeeRateBps: 0},
 		"ReportingPolicy": &rampadminv1.ReportingPolicy{TenantId: "tenant-seed", RequiredFields: []string{"x"}},
 	}
@@ -318,6 +330,18 @@ func writeCrossField(v protovalidate.Validator) {
 				TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
 			},
 			"well_known_manifest.terms_digest_requires_terms_uri",
+		},
+		{
+			// The read-side mirror: the digest is what an ACCOUNT accepted, so it
+			// cannot travel without the handle it hangs on. A client that read it
+			// from an accountless response would hold an acceptance for an account
+			// that does not exist.
+			"GetAccountStatusResponse/cel/terms_digest_requires_billing_ref",
+			&rampv1.GetAccountStatusResponse{
+				Ver:         "1.0",
+				TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
+			},
+			"get_account_status_response.terms_digest_requires_billing_ref",
 		},
 		{
 			"Restriction/cel/permitted_prohibited_disjoint",

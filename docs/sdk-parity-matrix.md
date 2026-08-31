@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 130 symbols at cross-language parity · 16 documented divergences · 175 Go-idiomatic exclusions · 34 conformance corpora, each tri-replayed.
+**At a glance:** 130 symbols at cross-language parity · 16 documented divergences · 176 Go-idiomatic exclusions · 34 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -290,6 +290,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.AudienceMismatch` | Member of the mapped helpers.AudienceVerdict vocabulary. Python and TypeScript spell it as a literal rather than a named export, and the shared audience corpus pins the token every language must answer. |
 | `helpers.AudienceNoVerdict` | Member of the mapped helpers.AudienceVerdict vocabulary. Python and TypeScript spell it as a literal rather than a named export, and the shared audience corpus pins the token every language must answer. |
 | `helpers.BrokerKeyIDPrefix` | Relay keyID wire-prefix constant; inlined per language. |
+| `helpers.CheckRegistrationDataStruct` | Go-only raw-Struct face of the mapped helpers.CheckRegistrationData, and deliberately absent from the ports: it exists because a payload with NO JSON REPRESENTATION loses the evidence for that when Go converts a Struct to a map. The class has two members and the conversion erases both — a non-finite number becomes the string "NaN", "Infinity" or "-Infinity", which a payload may also carry legitimately, and a Value with no member of its kind oneof set becomes nil, which is also what a real JSON null gives — so the check has to run before the conversion. Python and TypeScript are handed a decoded object rather than protobuf nodes: it keeps the real float, so their check_registration_data / checkRegistrationData already see the non-finite member, and the unset-kind member has no spelling in either language. A second entry point there would be an alias with nothing to do. The verdict vocabulary is what the three share, and the registration-schema corpus pins it; neither member has a vector in any language, because JSON cannot write either value down. |
 | `helpers.ComponentParam` | Go value type for an RFC 9421 covered-component parameter; py/ts model components inline. |
 | `helpers.CoveredComponent` | Go value type for an RFC 9421 covered component; py/ts model components inline. |
 | `helpers.ErrAcceptanceSignatureInvalid` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |

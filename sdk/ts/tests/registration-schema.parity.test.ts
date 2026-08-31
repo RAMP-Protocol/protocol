@@ -279,4 +279,27 @@ describe("registration-schema parity", () => {
 		}
 	});
 
+	it("answers too_deep before uncanonicalizable when a payload is both", () => {
+		// The order the proto states, on the one adjacent pair this port can get wrong.
+		// Depth is checked before the payload is canonicalized, so a payload that breaks
+		// both bounds is refused for its depth: the canonicalizability answer is only
+		// trustworthy once the payload is known to be walkable at all.
+		//
+		// Only the non-finite member of the class is testable here. The other member —
+		// a protobuf Value with no kind set — has no JavaScript spelling, because this
+		// port is handed a decoded object rather than protobuf nodes. Go covers that one.
+		//
+		// Deliberately shallow enough that no runtime recursion limit is involved: the
+		// verdict must come from the bound in the contract, not from whatever this
+		// engine happens to survive.
+		let deep: Record<string, unknown> = { leaf: "x" };
+		for (let i = 0; i <= maxRegistrationDataDepth; i++) deep = { n: deep };
+		const payload = { bad: Number.NaN, deep };
+
+		// Both faults are really present, or the test proves nothing.
+		expect(checkRegistrationData({ bad: Number.NaN })).toBe("uncanonicalizable");
+		expect(checkRegistrationData({ deep })).toBe("too_deep");
+		expect(checkRegistrationData(payload)).toBe("too_deep");
+	});
+
 });
