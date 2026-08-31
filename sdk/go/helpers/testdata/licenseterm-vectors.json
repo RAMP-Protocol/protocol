@@ -2155,6 +2155,32 @@
       "warnings": []
     },
     {
+      "name": "unregistered_token_without_kind_names_the_unset_enum",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "permitted": [
+              "flibbertigibbet"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": [
+        {
+          "rule": "restriction.token.registered",
+          "path": "restrictions[0].permitted[0]",
+          "token": "flibbertigibbet",
+          "message": "unregistered RESTRICTION_KIND_UNSPECIFIED restriction token \"flibbertigibbet\" (term accepted)"
+        }
+      ]
+    },
+    {
       "name": "empty_term_accepted",
       "term": {},
       "violation": null,

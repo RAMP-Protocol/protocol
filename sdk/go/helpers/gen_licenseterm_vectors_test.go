@@ -445,6 +445,16 @@ func buildLTValidateVectors(t *testing.T) []ltValidateVector {
 		{"attribution_obligation_without_detail_accepted", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
 			x.Obligations = []*rampv1.Obligation{{Kind: rampv1.ObligationKind_OBLIGATION_KIND_ATTRIBUTION, Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE}}
 		})},
+		// A restriction with no kind. The wire tier refuses it — kind is not_in [0] —
+		// but this face runs the ingest tier alone, so the warning is reached and its
+		// text is what the three languages had never been held to: Go formats the enum
+		// and names the unset value, while a port interpolating the raw JSON string
+		// would leave a gap where the kind should be. The messages here are the exact
+		// bytes an Exchange puts in warnings[], so the difference is what a publisher
+		// is told, not a rendering detail.
+		{"unregistered_token_without_kind_names_the_unset_enum", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{{Permitted: []string{"flibbertigibbet"}}}
+		})},
 		{"empty_term_accepted", &rampv1.LicenseTerm{}},
 	}
 	out := make([]ltValidateVector, 0, len(cases))

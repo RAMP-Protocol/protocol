@@ -79,6 +79,8 @@ type Obj = Record<string, unknown>;
 const KIND_FUNCTION = "RESTRICTION_KIND_FUNCTION";
 const KIND_GEOGRAPHY = "RESTRICTION_KIND_GEOGRAPHY";
 const KIND_USER_TYPE = "RESTRICTION_KIND_USER_TYPE";
+// The enum's zero, as the oracle spells it when a restriction carries no kind.
+const KIND_UNSPECIFIED = "RESTRICTION_KIND_UNSPECIFIED";
 const OBLIGATION_KIND_OTHER = "OBLIGATION_KIND_OTHER";
 
 function asObj(v: unknown): Obj | undefined {
@@ -224,7 +226,11 @@ function restrictionTokenWarning(kind: string, tok: string, path: string): RuleW
 		rule: RULE_RESTRICTION_TOKEN_REGISTERED,
 		path,
 		token: tok,
-		message: `unregistered ${kind} restriction token "${tok}" (term accepted)`,
+		// An absent kind is the enum's zero, and the oracle names it: Go formats the
+		// enum, which spells the unset value rather than leaving a gap. These strings
+		// are the exact bytes an Exchange puts in warnings[], so a doubled space here
+		// is a real difference in what a publisher is told, not a rendering detail.
+		message: `unregistered ${kind || KIND_UNSPECIFIED} restriction token "${tok}" (term accepted)`,
 	};
 }
 

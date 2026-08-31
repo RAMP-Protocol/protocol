@@ -44,6 +44,8 @@ RULE_OBLIGATION_OTHER_REQUIRES_DETAIL = "obligation.other.requires_detail"
 _KIND_FUNCTION = "RESTRICTION_KIND_FUNCTION"
 _KIND_GEOGRAPHY = "RESTRICTION_KIND_GEOGRAPHY"
 _KIND_USER_TYPE = "RESTRICTION_KIND_USER_TYPE"
+#: The enum's zero, as the oracle spells it when a restriction carries no kind.
+_KIND_UNSPECIFIED = "RESTRICTION_KIND_UNSPECIFIED"
 _OBLIGATION_KIND_OTHER = "OBLIGATION_KIND_OTHER"
 
 _JSON_WHITESPACE = " \t\n\r"
@@ -218,11 +220,15 @@ def _bare_unregistered(token: str, registered: Any) -> bool:
 def _restriction_token_warning(kind: str, tok: str, path: str) -> RuleWarning | None:
     if tok == "" or _is_namespaced(tok) or known_restriction_token(kind, tok):
         return None
+    # An absent kind is the enum's zero, and the oracle names it: Go formats the enum,
+    # which spells the unset value rather than leaving a gap. These strings are the exact
+    # bytes an Exchange puts in warnings[], so a doubled space here is a real difference
+    # in what a publisher is told, not a rendering detail.
     return RuleWarning(
         rule=RULE_RESTRICTION_TOKEN_REGISTERED,
         path=path,
         token=tok,
-        message=f'unregistered {kind} restriction token "{tok}" (term accepted)',
+        message=f'unregistered {kind or _KIND_UNSPECIFIED} restriction token "{tok}" (term accepted)',
     )
 
 
