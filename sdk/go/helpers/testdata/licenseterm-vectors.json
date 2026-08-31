@@ -326,6 +326,83 @@
       "warnings": []
     },
     {
+      "name": "structural_over_cap_restrictions_silences_one_per_kind",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "restrictions": [
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train"
+                ]
+              },
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train"
+                ]
+              },
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train"
+                ]
+              },
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train"
+                ]
+              },
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train"
+                ]
+              },
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train"
+                ]
+              },
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train"
+                ]
+              },
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train"
+                ]
+              },
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "ai-train"
+                ]
+              }
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": true,
+      "cross_field_rules": [],
+      "term_rules": [],
+      "warnings": []
+    },
+    {
       "name": "cross_field_license_term_reference_only_requires_uri",
       "entry": {
         "domain": "publisher.example",

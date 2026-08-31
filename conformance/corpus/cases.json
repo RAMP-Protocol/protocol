@@ -2875,7 +2875,6 @@
     "message": "LicenseTerm",
     "valid": false,
     "rules": [
-      "license_term.one_restriction_per_kind",
       "repeated.max_items"
     ],
     "json": {

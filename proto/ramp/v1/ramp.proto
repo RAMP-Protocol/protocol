@@ -1381,10 +1381,27 @@ message LicenseTerm {
   };
   // At most one Restriction per axis — restrictions on the same kind are
   // AND-combined, so duplicates are an authoring error.
+  //
+  // The leading size test is what bounds this rule, and it is load-bearing rather
+  // than an optimisation. The predicate compares the list against itself, so it is
+  // quadratic, and the max_items cap on the field does NOT stop it: protovalidate
+  // collects every violation rather than short-circuiting, so a field rule that
+  // fires still leaves the message rules to walk the whole oversized list. Nor does
+  // the enum being defined-only help — an undefined number is still distinct from
+  // every other, so all() never finds the duplicate it would stop on. Measured
+  // without the test, four thousand restrictions cost seventeen seconds to refuse
+  // from twenty kilobytes of wire, before any caller was authenticated.
+  //
+  // It short-circuits to TRUE rather than false so an over-long list reports
+  // repeated.max_items alone, which is its actual fault; failing here instead would
+  // name the wrong rule. The threshold MUST equal that cap — a list longer than the
+  // cap is refused by it, and one shorter is cheap to walk — and a conformance test
+  // holds the two numbers together, because raising the cap alone would let a
+  // duplicate-axis term through the gap.
   option (buf.validate.message).cel = {
     id: "license_term.one_restriction_per_kind"
     message: "at most one restriction is allowed per kind"
-    expression: "this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)"
+    expression: "this.restrictions.size() > 8 || this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)"
   };
 
   // Governing license document. Authoritative for REFERENCE_ONLY terms, which

@@ -9822,7 +9822,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01:\x9c\x02\xbaH\x98\x02\x1a\x95\x02\n" +
 	"-obligation.share_alike.requires_scope_license\x12DSHARE_ALIKE requires scope_license to identify a license (id or uri)\x1a\x9d\x01this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))B\x10\n" +
 	"\x0e_scope_licenseB\t\n" +
-	"\a_detail\"\xf3\x06\n" +
+	"\a_detail\"\x93\a\n" +
 	"\vLicenseTerm\x12/\n" +
 	"\alicense\x18\x01 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x12>\n" +
 	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsB\b\xbaH\x05\x82\x01\x02 \x00R\tsemantics\x12B\n" +
@@ -9832,9 +9832,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingB\x06\xbaH\x03\xc8\x01\x01H\x01R\apricing\x88\x01\x01\x12 \n" +
 	"\x06scopes\x18\a \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x12\"\n" +
 	"\n" +
-	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01:\x95\x03\xbaH\x91\x03\x1a\xe2\x01\n" +
-	"(license_term.reference_only.requires_uri\x12>REFERENCE_ONLY terms must carry a license with a non-empty uri\x1avthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')\x1a\xa9\x01\n" +
-	"%license_term.one_restriction_per_kind\x12+at most one restriction is allowed per kind\x1aSthis.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)B\n" +
+	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01:\xb5\x03\xbaH\xb1\x03\x1a\xe2\x01\n" +
+	"(license_term.reference_only.requires_uri\x12>REFERENCE_ONLY terms must carry a license with a non-empty uri\x1avthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')\x1a\xc9\x01\n" +
+	"%license_term.one_restriction_per_kind\x12+at most one restriction is allowed per kind\x1asthis.restrictions.size() > 8 || this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)B\n" +
 	"\n" +
 	"\b_licenseB\n" +
 	"\n" +

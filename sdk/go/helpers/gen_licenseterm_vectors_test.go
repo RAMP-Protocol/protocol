@@ -532,6 +532,18 @@ func buildLTEntryVectors(t *testing.T) []ltEntryVector {
 				ltRestriction(ltKindFunction, []string{"crawl"}, nil),
 			}
 		})},
+		// The twin of the case above, one past the restrictions cap. The one-per-kind
+		// rule carries a size test so a list longer than the cap reports the cap and
+		// nothing else, and all three languages must agree on that silence: the ports
+		// evaluate this rule themselves, so without a vector here a port that kept
+		// reporting it would diverge from the wire with every suite green. Duplicate
+		// kinds throughout, so the rule WOULD fire were the list short enough.
+		{"structural_over_cap_restrictions_silences_one_per_kind", entry(func(e *rampv1.ResourceEntry) {
+			for i := 0; i < 9; i++ {
+				e.Terms[0].Restrictions = append(e.Terms[0].Restrictions,
+					ltRestriction(ltKindFunction, []string{"ai-train"}, nil))
+			}
+		})},
 		{"cross_field_license_term_reference_only_requires_uri", entry(func(e *rampv1.ResourceEntry) {
 			e.Terms[0].Semantics = rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY
 		})},
