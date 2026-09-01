@@ -304,24 +304,22 @@ type TenantSigningConfig struct {
     // CDN should accept signatures from both keys during rotation.
     PreviousKey *SigningKey
 
-    // CDN type determines the signing algorithm.
-    CDNType CDNType // CloudFront, Akamai, Fastly, GenericHMAC
+    // Which delivery-URL scheme this tenant uses.
+    Scheme SigningScheme
 }
 
 type SigningKey struct {
-    KeyID      string    // Key-Pair-Id (CloudFront), token name (Akamai), etc.
-    PrivateKey []byte    // PEM-encoded private key or HMAC secret
+    KeyID      string    // Key-Pair-Id for CloudFront; the key thumbprint for Ed25519
+    PrivateKey []byte    // Ed25519 private key, or a PEM-encoded RSA private key
     ValidFrom  time.Time
     ValidUntil time.Time // 90-day max per NFR
 }
 
-type CDNType int
+type SigningScheme string
 
 const (
-    CDNCloudFront CDNType = iota
-    CDNAkamai
-    CDNFastly
-    CDNGenericHMAC
+    SchemeEd25519 SigningScheme = "ED25519"
+    SchemeCFRSA   SigningScheme = "AWS_CLOUDFRONT_RSA"
 )
 ```
 
@@ -367,20 +365,10 @@ The `report_id` linkage is critical -- it connects the dispute to the agent's pr
 
 **Storage**: Dispute records share the same durable store as transaction records (PostgreSQL for Growth tier, ClickHouse for Scale tier). They are indexed by `dispute_id`, `transaction_id`, and `(billing_ref, filed_at)` for compliance queries.
 
-## Signed URL HMAC Canonicalization
+## Signed URL Canonicalization
 
-This section applies to **signed URLs only** (content delivery via CDN), not to offer signatures. Signed URLs use HMAC-SHA256 because the Exchange and the CDN edge function share a secret — this is a two-party relationship where symmetric signing is appropriate. Offer signatures use Ed25519 (see the Signing Keys section and the OfferSigner interface).
+This section applies to **signed URLs only** (content delivery), not to offer signatures. Both use Ed25519; they differ in which key signs and who verifies.
 
-Both the Exchange (signer) and the edge function (verifier) MUST use the same canonical format for HMAC input. Signed URL fields are concatenated with `\n` delimiters in this fixed order:
+The signed message is the literal `GET`, one newline, then the canonical URL: the whole URL with the `sig` parameter removed and the remaining query sorted by key. Scheme, host and path are covered verbatim, and so is every publisher query parameter. The signature is base64url with no padding. The full rules, including the parameter set and the verification order, are on the [signed URL verification](/components/edge-function/signed-url-verification) page, which is normative.
 
-```
-baseURL\nexpires\nagent_id\ntxn_id
-```
-
-Where:
-- `baseURL` — the content URL without query parameters (e.g., `https://cdn.example.com/premium/article.html`)
-- `expires` — Unix timestamp in seconds (string representation)
-- `agent_id` — the agent's RFC 7638 JWK Thumbprint (matches `TransactionResponse.agent_identity_hash`)
-- `txn_id` — the transaction ID (ULID)
-
-This format is shared between the Exchange SignURL implementation and the edge function verification logic. See the edge function design doc for the verifier implementation.
+The Exchange records `signed_url_hash` — SHA-256 of the URL verbatim — on the transaction, and the delivery endpoint records the same hash on its delivery event. That pair is the join key for three-sided reconciliation; there is no transaction-id URL parameter.
