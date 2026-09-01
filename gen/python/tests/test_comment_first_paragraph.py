@@ -43,7 +43,7 @@ TITLE_FIELDS = ("Offer", "ResourceEntry", "UsageAsset")
 #: paragraph into `title`. Spot checks, not the whole set — the build-time guard owns
 #: completeness; these name the cases a reader can check against the .proto by eye.
 FIRST_PARAGRAPH_HEADS = (
-    ("Offer", "signature", "REQUIRED. JWS (alg=EdDSA) over the canonical serialization"),
+    ("Offer", "signature", "REQUIRED. Hex-encoded detached Ed25519 signature over the canonical"),
     ("Requester", "scopes", "Entitlement scopes. Declare what the requester can access."),
     ("License", "uri", "Canonical identity of the license document (RFC 3986)."),
     ("ResourceQuery", "supported_profiles", "Domain extension profiles the caller understands."),

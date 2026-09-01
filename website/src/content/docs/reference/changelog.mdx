@@ -3,7 +3,29 @@ title: "Changelog"
 description: "RAMP protocol changelog"
 ---
 
+This page contains curated public release notes. For the exhaustive maintainer
+and protocol history, see [`proto/CHANGELOG.md`](https://github.com/RAMP-Protocol/protocol/blob/main/proto/CHANGELOG.md).
+
 ## Unreleased
+
+**The offer-signature comments now state the implemented scheme: hex-encoded
+detached Ed25519, not a JWS (documentation correction; no wire change).** Since the
+initial public snapshot, the comments on `Offer.signature` and
+`Offer.signature_algorithm` described a JWS (alg=EdDSA) envelope. No implementation
+ever produced one: signing has always been hex(Ed25519) over the RFC 8785 JCS
+canonical form, verification has always hex-decoded, and every conformance vector
+carries a 128-character hex signature. An implementer who followed the comment
+instead of the code emitted a compact JWS that failed verification — and the file
+contradicted itself, because `AgentAcceptance` already documented the hex convention
+and named `Offer.signature` as the single normative definition.
+
+The proto comments, the website pages, and the SDK comments now state the
+implemented scheme. `signature_algorithm` is documented as the JOSE/JWA algorithm
+identifier (RFC 8037), advisory and excluded from the signed bytes. The v1.0
+entries below are left as written; they record what that release said.
+`Delegation.token` is unaffected — it genuinely is a JWT (base64url-encoded JWS).
+The attestation signature envelope remains an open decision, and the file header no
+longer asserts one.
 
 **The restriction axis set is closed, and the rule that walks the restriction list
 against itself is bounded (breaking, pre-1.0).** Two changes; the second is what bounds
@@ -1303,6 +1325,16 @@ maps, and is expected to be network-isolated by deployments. See
 [Proto: Admin v1](/reference/proto-admin/) for the full reference. `SetOfferPrice`
 and `SetDeliveryWitnessMode` are deferred to follow-up work.
 
+**Biscuits removed; the entitlement mechanism is unchanged (breaking).** JWT is now
+the only entitlement/capability token format. The mechanism itself is format-neutral
+and does not change: the capability token rides a covered header, renamed
+`X-RAMP-Entitlement-Biscuit` → `X-Entitlement-Token`, and the verifier enforces that
+header's signature coverage without ever parsing the token. Removed are the
+Biscuit-specific pieces — the `token_format` value `"biscuit-v3"` (JWT was already the
+default) and `DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION` (18), since attenuation is a
+Biscuit concept. The generic entitlement denial reasons (12–17) are unaffected. This is
+a pre-v1 breaking change.
+
 **Protocol standardization — unified error/response contract + a Connect RPC for
 every role (breaking).** Three threads land together:
 
@@ -1454,7 +1486,7 @@ major design decisions is recorded in [`docs/design-history.md`](https://github.
 ### Authentication
 
 - **Auth-agnostic** — the Exchange advertises supported methods: GNAP (RFC 9635), OAuth + DPoP, OAuth Bearer, mTLS.
-- **JWS for content signatures** — `Offer` and attestation signatures use JWS Compact Serialization (`alg=EdDSA`).
+- **Content signatures** — the v1.0 documentation described `Offer` and attestation signatures as JWS Compact Serialization (`alg=EdDSA`). That was incorrect for `Offer` signatures, which have always been hex-encoded detached Ed25519 over the RFC 8785 JCS canonical form. The attestation signature encoding remains unspecified.
 - **RFC 9421 for request signatures** — HTTP Message Signatures authenticate agents and each intermediary hop.
 - **Retrieval-URL identity binding** — the Exchange MAY bind a signed `retrieval_endpoint` to the agent via `agent_identity_hash` (RFC 7638 JWK Thumbprint, DPoP-style per RFC 9449), verifiable fully offline by a capable edge function.
 

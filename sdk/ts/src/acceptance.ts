@@ -21,7 +21,7 @@ import canonicalize from "canonicalize";
 
 import { utf8Bytes } from "./base64url.ts";
 
-/** The JWS alg advertised on AgentAcceptance.signature. Always EdDSA for Ed25519
+/** The JOSE/JWA algorithm identifier advertised on AgentAcceptance.signature. Always EdDSA for Ed25519
  * (mirror helpers.AcceptanceSignatureAlgorithm). */
 export const ACCEPTANCE_SIGNATURE_ALGORITHM = "EdDSA";
 

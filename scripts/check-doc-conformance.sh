@@ -52,7 +52,8 @@ patterns=(
   # request signatures live in HTTP headers (RFC 9421), not message fields
   'caller_signature' 'agent_signature' 'orchestrator_signature' 'broker_signature'
   # the scalar offer_signature pair is gone: the execute-request now reflects the
-  # FULL signed Offer back (offer.signature carries the JWS). offer_id stays live.
+  # FULL signed Offer back (offer.signature carries the hex Ed25519 signature).
+  # offer_id stays live.
   'offer_signature' 'offer_signature_algorithm'
   # token / vocabulary — both the hyphenated token form and the prose spelling;
   # the canonical optional delegation format is biscuit-v3 (NEVER v2), and
@@ -92,6 +93,15 @@ patterns=(
   # the JSON-key form so it does NOT collide with the live `keyid` identifier or
   # with legitimate "keys carry no kid" prose.
   'public_keys' 'invalidation_url' 'KeyInvalidationList' '"kid"[[:space:]]*:'
+  # The offer content signature is a hex-encoded detached Ed25519 signature over
+  # RFC 8785 JCS — it was documented as a JWS from the initial snapshot without
+  # any implementation ever producing one, and the wording was corrected
+  # everywhere at once. These are the retired phrasings of that claim. The bare
+  # token "JWS" stays legal: Delegation.token genuinely is a JWT (base64url-
+  # encoded JWS), and ramp.proto:1851 legitimately says "(NOT a JWS)".
+  'JWS \(alg=EdDSA\)' 'JWS \(EdDSA\)' 'JWS / Ed25519' 'EdDSA via JWS'
+  'JWS EdDSA signature' 'JWS Compact Serialization on Offer'
+  'JWS for content signatures' 'Offer JWS' 'JWS alg'
 )
 
 # Files where naming a removed identifier is legitimate (they record history).

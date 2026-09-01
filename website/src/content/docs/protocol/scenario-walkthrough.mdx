@@ -304,7 +304,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
          ] }
      ]
      delivery_method: DELIVERY_METHOD_INSTRUCTIONS
-     signature: "<JWS (EdDSA) over the entire canonical Offer — every field, incl. terms, pricing, expires_at>"
+     signature: "<hex-encoded detached Ed25519 signature over the entire canonical Offer — every field, incl. terms, pricing, expires_at>"
      signature_algorithm: "EdDSA"
 
    Offer B (subscription):
@@ -323,7 +323,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
      delivery_method: DELIVERY_METHOD_INSTRUCTIONS
      reporting: { required: true, window: "86400s",
                   required_fields: ["transaction_id", "function", "consumed_quantity"] }
-     signature: "<JWS (EdDSA) over the entire canonical Offer — every field, incl. terms, pricing, expires_at>"
+     signature: "<hex-encoded detached Ed25519 signature over the entire canonical Offer — every field, incl. terms, pricing, expires_at>"
      signature_algorithm: "EdDSA"
 ```
 

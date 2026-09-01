@@ -4,6 +4,7 @@
     "Requester.billing_ref",
     "WellKnownManifest.registration_schema",
     "DENIAL_REASON_BILLING_REF_INACTIVE",
+    "DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION",
     "Offer.quality",
     "Offer.restrictions",
     "ResourceQuery.intermediaries",

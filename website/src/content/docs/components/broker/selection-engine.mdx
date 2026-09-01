@@ -426,16 +426,9 @@ func unitCostOf(o rankedOffer) float64 {
 The Broker SHOULD verify `exchange_signature` on the winning Offer before proceeding. This prevents an Exchange from tampering with its own offer fields after signing.
 
 ```go
-func verifyOfferSignature(offer *rampv1.Offer, exchange string, pubKeys map[string]crypto.PublicKey) error {
+func verifyOfferSignature(offer *rampv1.Offer, exchange string, pubKeys map[string]ed25519.PublicKey) error {
     if offer.Signature == "" {
         return fmt.Errorf("offer signature is required but empty")
-    }
-
-    payload := canonicalizeOffer(offer)
-
-    alg := "EdDSA" // JWS/JOSE alg for offer signatures
-    if offer.SignatureAlgorithm != "" {
-        alg = offer.SignatureAlgorithm
     }
 
     key, ok := pubKeys[exchange]
@@ -443,7 +436,7 @@ func verifyOfferSignature(offer *rampv1.Offer, exchange string, pubKeys map[stri
         return fmt.Errorf("no public key for exchange %q", exchange)
     }
 
-    return verifySignature(alg, key, payload, []byte(offer.Signature))
+    return helpers.VerifyOffer(offer, offer.Signature, key)
 }
 ```
 

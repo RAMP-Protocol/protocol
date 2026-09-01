@@ -2592,13 +2592,13 @@ type Offer struct {
 	// relaying Broker has nothing to group or dial on, and the swap-protection
 	// above is vacuous when the signed bytes carry no recipient at all.
 	Exchange string `protobuf:"bytes,8,opt,name=exchange,proto3" json:"exchange,omitempty"`
-	// REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
-	// Offer — every field, including `pricing`, `terms` (the full licensing
-	// payload), `expires_at`, and `exchange`. Only `signature` and
-	// `signature_algorithm` are excluded from the signed bytes. `expires_at` is
-	// signed so the offer's validity window is integrity-protected: a relaying
-	// Broker cannot extend (or shorten) the TTL of a signed offer to replay it
-	// outside the window the Exchange intended.
+	// REQUIRED. Hex-encoded detached Ed25519 signature over the canonical
+	// serialization of the ENTIRE Offer — every field, including `pricing`,
+	// `terms` (the full licensing payload), `expires_at`, and `exchange`. Only
+	// `signature` and `signature_algorithm` are excluded from the signed bytes.
+	// `expires_at` is signed so the offer's validity window is
+	// integrity-protected: a relaying Broker cannot extend (or shorten) the TTL
+	// of a signed offer to replay it outside the window the Exchange intended.
 	//
 	// CANONICAL SIGNING (RFC 8785 JCS over canonical proto-JSON). The signed bytes
 	// are:
@@ -2659,7 +2659,9 @@ type Offer struct {
 	// Agent SHOULD verify the signature (RFC 2119) against the Exchange's public
 	// key, and MUST reject an offer whose `expires_at` is in the past.
 	Signature string `protobuf:"bytes,9,opt,name=signature,proto3" json:"signature,omitempty"`
-	// JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.
+	// JOSE/JWA algorithm identifier (RFC 8037 §3.1). Always 'EdDSA' for
+	// Ed25519. Advisory only: this field is cleared before the canonical
+	// payload is signed, so it is not covered by the signature.
 	SignatureAlgorithm string `protobuf:"bytes,10,opt,name=signature_algorithm,json=signatureAlgorithm,proto3" json:"signature_algorithm,omitempty"`
 	// If set, this offer is available under an existing subscription/deal.
 	// No per-request billing — usage tracked against subscription quota.
