@@ -294,7 +294,10 @@ class DomainVerificationChallenge(WireModel):
 
 
 class DomainVerificationConfirmation(WireModel):
-    cdn_type: str | None = Field(None, description='CDN type this key is for.')
+    cdn_type: str | None = Field(
+        None,
+        description='Which delivery-URL verification scheme this key is for: "edge-ed25519" (a\n code-capable edge that verifies the Ed25519 URL signature itself) or\n "cloudfront" (AWS CloudFront trusted key groups, RSA, verified natively by\n the CDN). Mirrors the Exchange-side tenant signing scheme.',
+    )
     domain: str | None = Field('', description='The domain being verified.')
     exchange: constr(
         pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
@@ -310,7 +313,7 @@ class DomainVerificationConfirmation(WireModel):
     )
     signing_key: str | None = Field(
         None,
-        description='Optional: signing key to register upon successful verification.\n If present, the key is registered atomically with verification.\n Key format depends on CDN type (PEM for CloudFront, hex for HMAC).',
+        description='Optional: signing key to register upon successful verification.\n If present, the key is registered atomically with verification.\n Format follows cdn_type: a PEM-encoded RSA public key for "cloudfront", or\n the base64url-encoded raw Ed25519 public key (the JWK "x" value) for\n "edge-ed25519".',
     )
     token: str | None = Field(
         '', description='The challenge token (echoed from DomainVerificationChallenge).'
