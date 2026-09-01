@@ -204,7 +204,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "uri": "https://creditdata.com/reports/duns/123456789",
       "offers": [
         {
-          "offer_id": "offer-credit-acme-001",
+          "offer_id": "42ca26c7-7a24-4864-bbee-80b5763f1ec7",
           "exchange": "exchange.creditdata.com",
           "title": "D&B Comprehensive Business Report — Acme Corp",
           "pricing": {
@@ -281,7 +281,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "uri": "https://pacer.uscourts.gov/case/2:24-cv-01234",
       "offers": [
         {
-          "offer_id": "offer-legal-001",
+          "offer_id": "e94e65fc-293e-48bd-9f35-8b38345944d1",
           "exchange": "exchange.legaldata.com",
           "title": "Acme Corp v. Widget Inc — Complete Docket",
           "pricing": {
@@ -341,7 +341,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "uri": "https://pacer.uscourts.gov/case/3:25-cv-05678",
       "offers": [
         {
-          "offer_id": "offer-legal-002",
+          "offer_id": "b570b9a9-3bd8-47ed-a580-c3245981a573",
           "exchange": "exchange.legaldata.com",
           "title": "State of CA v. Acme Corp — Environmental Complaint",
           "pricing": {
@@ -369,7 +369,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "uri": "https://pacer.uscourts.gov/case/1:23-cv-09012",
       "offers": [
         {
-          "offer_id": "offer-legal-003",
+          "offer_id": "a37467da-1ba4-4490-9072-75d7194882ea",
           "exchange": "exchange.legaldata.com",
           "title": "Acme Corp v. Former CTO — IP Dispute",
           "pricing": {
@@ -410,7 +410,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-K-2025.htm",
       "offers": [
         {
-          "offer_id": "offer-sec-10k-2025",
+          "offer_id": "03c04bbf-7366-407c-9391-62b92b6d27e5",
           "exchange": "exchange.secdata.com",
           "title": "Acme Corp 10-K Annual Report FY2025",
           "pricing": {
@@ -450,15 +450,15 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
     },
     {
       "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-K-2024.htm",
-      "offers": [{ "offer_id": "offer-sec-10k-2024", "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
+      "offers": [{ "offer_id": "bbfaac3d-b885-4d6c-9b8f-a5530872b05a", "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
     },
     {
       "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-Q-2025-Q3.htm",
-      "offers": [{ "offer_id": "offer-sec-10q-q3", "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
+      "offers": [{ "offer_id": "0be5ae1b-4d02-4d85-808e-ff2413bf5d58", "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
     },
     {
       "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-Q-2025-Q2.htm",
-      "offers": [{ "offer_id": "offer-sec-10q-q2", "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
+      "offers": [{ "offer_id": "30e7156c-fe30-4b24-9fb9-8017b52bfc89", "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
     }
   ]
 }
@@ -527,7 +527,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
   "items": [
     {
       "offer": {
-        "offer_id": "offer-credit-acme-001",
+        "offer_id": "42ca26c7-7a24-4864-bbee-80b5763f1ec7",
         "exchange": "exchange.creditdata.com",
         "title": "D&B Comprehensive Business Report — Acme Corp",
         "pricing": {
@@ -571,7 +571,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
   "items": [
     {
       "offer": {
-        "offer_id": "offer-legal-001",
+        "offer_id": "e94e65fc-293e-48bd-9f35-8b38345944d1",
         "exchange": "exchange.legaldata.com",
         "title": "Acme Corp v. Widget Inc — Complete Docket",
         "pricing": {
@@ -596,7 +596,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
     },
     {
       "offer": {
-        "offer_id": "offer-legal-002",
+        "offer_id": "b570b9a9-3bd8-47ed-a580-c3245981a573",
         "exchange": "exchange.legaldata.com",
         "title": "State of CA v. Acme Corp — Environmental Complaint",
         "pricing": {
@@ -616,7 +616,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
     },
     {
       "offer": {
-        "offer_id": "offer-legal-003",
+        "offer_id": "a37467da-1ba4-4490-9072-75d7194882ea",
         "exchange": "exchange.legaldata.com",
         "title": "Acme Corp v. Former CTO — IP Dispute",
         "pricing": {
@@ -649,7 +649,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
   "agent_identity_hash": "3a2b1c0d...",
   "items": [
     {
-      "offer_id": "offer-legal-001",
+      "offer_id": "e94e65fc-293e-48bd-9f35-8b38345944d1",
       "transaction_id": "txn-legal-001",
       "billing_id": "bill-legal-001",
       "retrieval_endpoint": "https://cdn.legaldata.com/pacer/24cv01234.pdf?expires=1742486700&agent_id=3a2b1c0d...&txn_id=txn-legal-001&sig=hmac-sha256-f1e2d3...",
@@ -658,7 +658,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
       "expires_at": "2026-03-20T14:15:00Z"
     },
     {
-      "offer_id": "offer-legal-002",
+      "offer_id": "b570b9a9-3bd8-47ed-a580-c3245981a573",
       "transaction_id": "txn-legal-002",
       "billing_id": "bill-legal-002",
       "retrieval_endpoint": "https://cdn.legaldata.com/pacer/25cv05678.pdf?expires=1742486700&agent_id=3a2b1c0d...&txn_id=txn-legal-002&sig=hmac-sha256-a4b5c6...",
@@ -667,7 +667,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
       "expires_at": "2026-03-20T14:15:00Z"
     },
     {
-      "offer_id": "offer-legal-003",
+      "offer_id": "a37467da-1ba4-4490-9072-75d7194882ea",
       "transaction_id": "txn-legal-003",
       "billing_id": "bill-legal-003",
       "retrieval_endpoint": "https://cdn.legaldata.com/pacer/23cv09012.pdf?expires=1742486700&agent_id=3a2b1c0d...&txn_id=txn-legal-003&sig=hmac-sha256-d7e8f9...",

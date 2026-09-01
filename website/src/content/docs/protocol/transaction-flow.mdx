@@ -69,7 +69,7 @@ Key fields:
   "exchange": "exchange.ssp-example.com",
   "offers": [
     {
-      "offer_id": "offer-tc-4921",
+      "offer_id": "9d5735d7-1f17-4801-8dcf-7cac0b7b32b0",
       "exchange": "exchange.ssp-example.com",
       "title": "The Future of AI Infrastructure",
       "ext": {
@@ -149,7 +149,7 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
       "uri": "https://cdn.ramp-protocol.org/premium/ai-infrastructure.html",
       "offers": [
         {
-          "offer_id": "offer-tc-4921",
+          "offer_id": "9d5735d7-1f17-4801-8dcf-7cac0b7b32b0",
           "exchange": "exchange.ssp-example.com",
           "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001515", "unit": "accesses" },
           "signature": "a1b2c3...",
@@ -161,7 +161,7 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
       "uri": "https://cdn.ramp-protocol.org/premium/gpu-shortage-2026.html",
       "offers": [
         {
-          "offer_id": "offer-tc-4922",
+          "offer_id": "89636cda-93f6-460e-af7f-2b6aef0f491b",
           "exchange": "exchange.ssp-example.com",
           "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001200", "unit": "accesses" },
           "signature": "d4e5f6...",
@@ -187,14 +187,14 @@ When the requester has a subscription, the Exchange includes both per-request an
 {
   "offers": [
     {
-      "offer_id": "offer-tc-4921",
+      "offer_id": "9d5735d7-1f17-4801-8dcf-7cac0b7b32b0",
       "exchange": "exchange.ssp-example.com",
       "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001515", "unit": "accesses" },
       "signature": "a1b2c3...",
       "signature_algorithm": "EdDSA"
     },
     {
-      "offer_id": "sub-offer-tc-4921",
+      "offer_id": "c5b01a4e-6536-4a42-a4fc-e41a1df1913d",
       "exchange": "exchange.ssp-example.com",
       "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD", "unit_cost": "0" },
       "subscription_id": "SUB-12345",
@@ -233,7 +233,7 @@ When the requester holds a subscription, the Exchange attaches `SubscriptionQuot
 {
   "offers": [
     {
-      "offer_id": "sub-offer-tc-4921",
+      "offer_id": "c5b01a4e-6536-4a42-a4fc-e41a1df1913d",
       "exchange": "exchange.ssp-example.com",
       "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" },
       "subscription_id": "SUB-12345",
@@ -290,7 +290,7 @@ Content-Type: application/json
   "items": [
     {
       "offer": {
-        "offer_id": "offer-tc-4921",
+        "offer_id": "9d5735d7-1f17-4801-8dcf-7cac0b7b32b0",
         "exchange": "exchange.ssp-example.com",
         "title": "The Future of AI Infrastructure",
         "pricing": {
@@ -373,7 +373,7 @@ For batch transactions, use the `items` array:
   "items": [
     {
       "offer": {
-        "offer_id": "offer-tc-4921",
+        "offer_id": "9d5735d7-1f17-4801-8dcf-7cac0b7b32b0",
         "exchange": "exchange.ssp-example.com",
         "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001515", "unit": "accesses" },
         "expires_at": "2026-03-14T02:30:00Z",
@@ -383,7 +383,7 @@ For batch transactions, use the `items` array:
     },
     {
       "offer": {
-        "offer_id": "offer-tc-4922",
+        "offer_id": "89636cda-93f6-460e-af7f-2b6aef0f491b",
         "exchange": "exchange.ssp-example.com",
         "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001200", "unit": "accesses" },
         "expires_at": "2026-03-14T02:30:00Z",
@@ -402,7 +402,7 @@ For batch transactions, use the `items` array:
   "ver": "1.0",
   "items": [
     {
-      "offer_id": "offer-tc-4921",
+      "offer_id": "9d5735d7-1f17-4801-8dcf-7cac0b7b32b0",
       "transaction_id": "txn-mp-batch-001",
       "billing_id": "bill-batch-001",
       "retrieval_endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Signature=...",
@@ -410,7 +410,7 @@ For batch transactions, use the `items` array:
       "expires_at": "2026-03-14T02:30:00Z"
     },
     {
-      "offer_id": "offer-tc-4922",
+      "offer_id": "89636cda-93f6-460e-af7f-2b6aef0f491b",
       "transaction_id": "txn-mp-batch-002",
       "billing_id": "bill-batch-002",
       "retrieval_endpoint": "https://cdn.ramp-protocol.org/server/premium/gpu-shortage.html?Signature=...",
@@ -639,7 +639,7 @@ message Preview {
 
 ```json
 {
-  "offer_id": "offer-reuters-001",
+  "offer_id": "9bb01145-326e-42a9-b2ac-058e3114bdfc",
   "exchange": "exchange.ssp-example.com",
   "title": "Climate Summit Photo - Reuters",
   "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.50", "currency": "USD", "unit": "accesses" },
