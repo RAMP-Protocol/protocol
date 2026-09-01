@@ -231,7 +231,7 @@ The Exchange performs:
 2. **Agent authentication** — verifies the request's RFC 9421 HTTP Message Signature against the agent's published public key.
 3. **Balance check** — confirms `research-bot@startup.com` has sufficient balance ($0.05).
 4. **WAL write** — records the transaction in the write-ahead log before generating the signed URL (write-before-sign invariant).
-5. **Signed URL generation** — HMAC-SHA256 over `(base_url, expires, agent_id, txn_id)` using the Exchange-CDN shared secret.
+5. **Signed URL generation** — Ed25519 over `"GET\n" + <canonical URL>` with the tenant's signing key. The delivery endpoint verifies it with the Exchange's published public key.
 
 Response:
 
@@ -243,7 +243,7 @@ Response:
       "offer_id": "3a1cf96e-74b7-4c5d-abb0-925c3f83dfe3",
       "transaction_id": "txn-tc-001",
       "billing_id": "bill-tc-001",
-      "retrieval_endpoint": "https://cdn.techcrunch.com/premium/ai-agents-commerce.html?expires=1742403900&agent_id=7a3f8c1d...&txn_id=txn-tc-001&sig=hmac-sha256-d4e5f6...",
+      "retrieval_endpoint": "https://cdn.techcrunch.com/premium/ai-agents-commerce.html?agent_id=7a3f8c1d...&exp=1742403900&kid=vJ3xR1mQ...&sig=d4e5f6...",
       "cost": {
         "amount": "0.05",
         "currency": "USD"
@@ -268,14 +268,14 @@ The signed URL is valid for 5 minutes. The `agent_identity_hash` (the agent's RF
 The agent fetches the content via the signed URL:
 
 ```bash
-GET https://cdn.techcrunch.com/premium/ai-agents-commerce.html?expires=1742403900&agent_id=7a3f8c1d...&txn_id=txn-tc-001&sig=hmac-sha256-d4e5f6...
+GET https://cdn.techcrunch.com/premium/ai-agents-commerce.html?agent_id=7a3f8c1d...&exp=1742403900&kid=vJ3xR1mQ...&sig=d4e5f6...
 ```
 
 The CDN edge function verifies:
-1. HMAC-SHA256 signature matches (Exchange-CDN shared secret)
+1. The Ed25519 signature verifies against the Exchange's published public key
 2. URL has not expired
 3. `agent_id` in URL matches the requesting agent's identity hash
-4. `txn_id` is recorded for three-sided reconciliation
+4. The signed-URL hash is recorded for three-sided reconciliation
 
 **Content hash verification**: Because `resource_mutability` is `STATIC`, the agent computes SHA-256 of the delivered HTML and compares it against `identity.content_hash` from the offer. Match confirms the content is exactly what was promised. Mismatch would be grounds for a `DisputeTransaction`.
 
@@ -525,7 +525,7 @@ The remaining steps follow the same pattern as Scenario A, with one key differen
       "offer_id": "c2301145-0f74-43af-be4e-eb8cd2a988be",
       "transaction_id": "txn-bb-001",
       "billing_id": "bill-bb-sub-001",
-      "retrieval_endpoint": "https://cdn.marketdata.example.com/earnings/NVDA/2026-Q1-transcript.html?expires=1742404200&agent_id=8b4f9d2e...&txn_id=txn-bb-001&sig=hmac-sha256-a7b8c9...",
+      "retrieval_endpoint": "https://cdn.marketdata.example.com/earnings/NVDA/2026-Q1-transcript.html?agent_id=8b4f9d2e...&exp=1742404200&kid=vJ3xR1mQ...&sig=a7b8c9...",
       "cost": {
         "amount": "0",
         "currency": "USD"
@@ -620,7 +620,7 @@ result, err := client.Fetch(ctx, url)
 - **Agent → Exchange**: RFC 9421 HTTP Message Signature (Ed25519 over the HTTP request — method, target URI, and body content digest — in the `Signature` / `Signature-Input` headers)
 - **Delegation**: delegation JWT signed by principal's Ed25519 key, holder-of-key bound via `cnf.jkt` (offline-verifiable)
 - **Exchange → Agent**: `exchange_signature` on Offer (Ed25519, stateless verification)
-- **Signed URLs**: HMAC-SHA256 (Exchange-CDN shared secret, agent identity bound)
+- **Signed URLs**: Ed25519 (Exchange-signed, publicly verifiable, agent identity bound)
 
 ## Next Steps
 

@@ -342,7 +342,7 @@ Each item's `offer` is the full signed Offer reflected back exactly as received 
 }
 ```
 
-The `retrieval_endpoint` is a CDN signed URL bound to `agent_identity_hash`. A bearer-only CDN serves it on signature + expiry alone (HMAC + short TTL + TLS); a capable edge function additionally requires the agent to present its public key and an RFC 9421 signature, verifying the binding offline. See [Signed URL Verification](/components/edge-function/signed-url-verification).
+The `retrieval_endpoint` is a CDN signed URL bound to `agent_identity_hash`. A bearer-only CDN serves it on signature + expiry alone (the URL signature + short TTL + TLS); a capable edge function additionally requires the agent to present its public key and an RFC 9421 signature, verifying the binding offline. See [Signed URL Verification](/components/edge-function/signed-url-verification).
 
 ### What Happens Inside the Exchange
 
@@ -352,7 +352,7 @@ The `retrieval_endpoint` is a CDN signed URL bound to `agent_identity_hash`. A b
 4. Verify offer signature (reconstruct offer from signed token)
 5. Authorize billing (`BillingAdapter.Authorize`) -- or skip for subscription offers
 6. Write transaction to WAL (must succeed before signing URL)
-7. Generate HMAC-SHA256 signed URL (Exchange-CDN shared secret)
+7. Generate the Ed25519 signed delivery URL (or a CloudFront RSA canned policy, per the tenant's signing scheme)
 8. Create reporting obligation with deadline
 
 ### Batch TransactionRequest

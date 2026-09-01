@@ -69,14 +69,11 @@ ramp-cli                    Exchange                   Provider CDN
 ### Generate a signing key
 
 ```bash
-# CloudFront (ECDSA P-256 recommended)
-ramp-cli key generate --cdn cloudfront --algorithm ecdsa-p256
+# A code-capable edge (Cloudflare, Fastly, Lambda@Edge) verifies Ed25519
+ramp-cli key generate --cdn edge-ed25519
 
-# Akamai (HMAC-SHA256)
-ramp-cli key generate --cdn akamai
-
-# Fastly (HMAC-SHA256)
-ramp-cli key generate --cdn fastly
+# AWS CloudFront verifies RSA natively, via a trusted key group
+ramp-cli key generate --cdn cloudfront --algorithm rsa-2048
 ```
 
 ### Push key to an Exchange
@@ -207,14 +204,12 @@ See [Content Attestation](/protocol/content-attestation/) for the full attestati
 
 ## CDN Key Types
 
-| CDN | Key Type | Algorithm |
-|---|---|---|
-| CloudFront | Asymmetric | ECDSA P-256 (recommended) or RSA-2048 |
-| Akamai | Symmetric | Auth Token 2.0 (HMAC-SHA256) |
-| Fastly | Symmetric | Custom VCL (HMAC-SHA256) |
-| Generic | Symmetric | HMAC-SHA256 |
+| Delivery endpoint | `cdn_type` | Key Type | Algorithm |
+|---|---|---|---|
+| Edge function (Cloudflare, Fastly, Lambda@Edge) | `edge-ed25519` | Asymmetric | Ed25519 |
+| AWS CloudFront | `cloudfront` | Asymmetric | RSA-2048 |
 
-CloudFront's asymmetric model provides the strongest security separation: the Exchange holds the private key for signing, CloudFront holds the public key for verification.
+Both are asymmetric, so the separation is universal: the Exchange holds the private key for signing and the delivery endpoint holds only the public key for verification. What differs is whether the delivery endpoint can run code — and therefore whether it can enforce agent identity binding. CloudFront verifies natively but cannot, so its URLs are bearer credentials; an edge function does both.
 
 ## Onboarding Checklist
 

@@ -391,7 +391,7 @@ Response:
     {
       "transaction_id": "txn-eurlex-001",
       "billing_id": "bill-eurlex-001",
-      "retrieval_endpoint": "https://cdn.eurlex.europa.eu/legal-content/EN/TXT/XML/?uri=CELEX:32024R1689&expires=1742404200&agent_id=3e8f1a2b...&txn_id=txn-eurlex-001&sig=hmac-sha256-e7f8a9...",
+      "retrieval_endpoint": "https://cdn.eurlex.europa.eu/legal-content/EN/TXT/XML/?agent_id=3e8f1a2b...&exp=1742404200&kid=gY2kP7mV...&sig=e7f8a9...&uri=CELEX:32024R1689",
       "cost": {
         "amount": "0",
         "currency": "EUR"
@@ -409,7 +409,7 @@ Response:
 }
 ```
 
-Cost is zero. The signed URL still includes agent identity binding and HMAC verification -- even free content flows through the standard transaction pipeline for auditability.
+Cost is zero. The signed URL still includes agent identity binding and signature verification -- even free content flows through the standard transaction pipeline for auditability.
 
 ---
 
@@ -418,9 +418,10 @@ Cost is zero. The signed URL still includes agent identity binding and HMAC veri
 The agent fetches via the signed URL:
 
 ```
-GET https://cdn.eurlex.europa.eu/legal-content/EN/TXT/XML/?uri=CELEX:32024R1689
-    &expires=1742404200&agent_id=3e8f1a2b...&txn_id=txn-eurlex-001
-    &sig=hmac-sha256-e7f8a9...
+GET https://cdn.eurlex.europa.eu/legal-content/EN/TXT/XML/
+    ?agent_id=3e8f1a2b...&exp=1742404200&kid=gY2kP7mV...
+    &sig=e7f8a9...
+    &uri=CELEX:32024R1689
 ```
 
 EUR-Lex delivers the regulation as **Akoma Ntoso XML** -- the OASIS standard for legislative documents. Because `resource_mutability` is `STATIC`, the agent verifies the SHA-256 hash against `identity.content_hash`. A match confirms this is the exact Official Journal text as published on 12 July 2024.

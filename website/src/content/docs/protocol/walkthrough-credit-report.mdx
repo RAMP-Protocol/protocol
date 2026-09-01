@@ -451,7 +451,7 @@ The Exchange performs:
 2. **Agent authentication** — verifies the request's RFC 9421 HTTP Message Signature (alg=ed25519, carried in HTTP headers) against the agent's public key published in the WBA directory at `legalcorp.com/.well-known/http-message-signatures-directory`.
 3. **Balance check** — confirms `due-diligence-bot@legalcorp.com` has sufficient balance ($61.99).
 4. **WAL write** — records the transaction in the write-ahead log before generating the signed URL (write-before-sign invariant).
-5. **Signed URL generation** — HMAC-SHA256 over `(base_url, expires, agent_id, txn_id)` using the Exchange-CDN shared secret.
+5. **Signed URL generation** — Ed25519 over `"GET\n" + <canonical URL>` with the tenant's signing key. The delivery endpoint verifies it with the Exchange's published public key.
 
 Response:
 
@@ -463,7 +463,7 @@ Response:
     {
       "transaction_id": "txn-dnb-acme-001",
       "billing_id": "bill-dnb-acme-001",
-      "retrieval_endpoint": "https://api.dnb.com/ramp/deliver/123456789/standard?expires=1742475900&agent_id=9c5f0d3e...&txn_id=txn-dnb-acme-001&sig=hmac-sha256-b8c9d0e1...",
+      "retrieval_endpoint": "https://api.dnb.com/ramp/deliver/123456789/standard?agent_id=9c5f0d3e...&exp=1742475900&kid=hT4nR8yK...&sig=b8c9d0e1...",
       "cost": {
         "amount": "61.99",
         "currency": "USD"
@@ -489,14 +489,14 @@ The signed URL is valid for 5 minutes. The `agent_identity_hash` (the agent's RF
 The agent fetches the credit report via the signed URL:
 
 ```bash
-GET https://api.dnb.com/ramp/deliver/123456789/standard?expires=1742475900&agent_id=9c5f0d3e...&txn_id=txn-dnb-acme-001&sig=hmac-sha256-b8c9d0e1...
+GET https://api.dnb.com/ramp/deliver/123456789/standard?agent_id=9c5f0d3e...&exp=1742475900&kid=hT4nR8yK...&sig=b8c9d0e1...
 ```
 
 D&B's delivery endpoint verifies:
-1. HMAC-SHA256 signature matches (Exchange-CDN shared secret)
+1. The Ed25519 signature verifies against the Exchange's published public key
 2. URL has not expired
 3. `agent_id` in URL matches the requesting agent's identity hash
-4. `txn_id` is recorded for three-sided reconciliation
+4. The signed-URL hash is recorded for three-sided reconciliation
 
 The agent receives the credit report as JSON:
 

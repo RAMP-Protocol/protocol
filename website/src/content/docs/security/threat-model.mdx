@@ -42,7 +42,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 ### T5: Provider revenue skimming
 **Attack**: Exchange tells provider 1,000 transactions occurred; actually processed 1,500.
 **Countermeasure (reconciliation)**: **Three-sided reconciliation.** Provider's CDN logs, Exchange's transaction log, and usage reports must all agree.
-**Countermeasure (protocol)**: Signed URLs include transaction_id in URL parameters for CDN-to-Exchange reconciliation.
+**Countermeasure (protocol)**: Both sides record `signed_url_hash` — SHA-256 of the delivery URL verbatim. The Exchange stores it on the transaction and the delivery endpoint stores it on its delivery event, so the two logs join on a value neither side chooses.
 
 ### T6: Overly long signed URL expiry
 **Attack**: Exchange issues 24-hour URLs instead of 5-minute, enabling reuse.
@@ -50,13 +50,13 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T7: Signing key leakage
 **Attack**: Exchange shares signing keys with a preferred requester, enabling URL forgery.
-**Countermeasure (protocol)**: **Asymmetric signing.** Provider holds the private key; Exchange requests signed URLs from provider's signing service.
+**Countermeasure (protocol)**: **Asymmetric signing, with per-tenant key isolation.** The Exchange holds a separate private key per tenant in a secrets manager and signs there; the delivery endpoint verifies with the matching public key, published in the Exchange's key directory. A leaked verification key forges nothing, and a compromised edge cannot mint URLs, because no signing capability is ever distributed. Sharing a signing key with one requester would require exporting a tenant private key, which no code path does.
 
 ## 2. Demand-Side Threats (Dishonest Agent / Requester)
 
 ### T8: Signed URL sharing
 **Attack**: Agent A pays, shares signed URL with Agents B, C, D before expiry.
-**Countermeasure (protocol)**: **Agent-bound signed URLs.** Embed the agent's RFC 7638 JWK Thumbprint (`agent_identity_hash`) in the HMAC-signed URL; a capable edge function requires the fetcher to present its public key + an RFC 9421 signature (proof-of-possession) and checks `thumbprint(presented key) == agent_identity_hash`. Implemented via `agent_identity_hash` on `TransactionResponse`.
+**Countermeasure (protocol)**: **Agent-bound signed URLs.** Embed the agent's RFC 7638 JWK Thumbprint (`agent_identity_hash`) as the URL's `agent_id` parameter, covered by the URL's Ed25519 signature; a capable edge function requires the fetcher to present its public key + an RFC 9421 signature (proof-of-possession) and checks `thumbprint(presented key) == agent_identity_hash`. Implemented via `agent_identity_hash` on `TransactionResponse`.
 
 ### T9: Systematic caching / content mirroring
 **Attack**: Agent fetches every article once, caches locally forever, never pays again.

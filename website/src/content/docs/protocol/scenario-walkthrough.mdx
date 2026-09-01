@@ -51,7 +51,7 @@ Before any agent request, providers configure their domains and Exchanges ingest
 }
 ```
 
-**Edge function** — deployed on Hearst's CDN (CloudFront/Akamai/Fastly). Blocks unauthorized AI bots with 403 + `X-Content-Rules` header pointing to the Exchange. Verifies HMAC-SHA256 signed URLs for authorized requests.
+**Edge function** — deployed on Hearst's CDN (Cloudflare/Fastly/Lambda@Edge). Blocks unauthorized AI bots with 403 + `X-Content-Rules` header pointing to the Exchange. Verifies Ed25519 signed URLs for authorized requests, using the Exchange's published public key.
 
 ### 0b. Agent Key Announcement
 
@@ -756,17 +756,17 @@ The request body is identical to the direct case; the forwarding chain lives in 
      reporting_required: true,
      reporting_deadline: "2026-03-16T15:00:00Z"
    }
-9. Sign URL (HMAC-SHA256 — Exchange<->CDN shared secret, separate from Ed25519 offer signing):
-   baseURL = "https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html"
-   canonical = baseURL + "\n" + expires + "\n" + agent_id + "\n" + txn_id
-   sig = HMAC-SHA256(canonical, shared_secret)
+9. Sign the delivery URL (Ed25519, tenant signing key — a different key from the
+   Ed25519 offer signing key, verified by a different party):
+   canonical = "GET\n" + <the URL below without its sig parameter, query sorted>
+   sig = base64url(Ed25519-sign(canonical, tenant private key))
 
    Signed URL:
    https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html
-     ?expires=1710517800
-     &agent_id=e3b0c442...
-     &txn_id=txn-alpha-001
-     &sig=<HMAC-SHA256 of "baseURL\nexpires\nagent_id\ntxn_id">
+     ?agent_id=e3b0c442...
+     &exp=1710517800
+     &kid=vJ3xR1mQ...
+     &sig=k7Qm2xR9vT4nB8aL...
 
 10. Create reporting obligation: due by 2026-03-16T15:00:00Z
 ```
@@ -782,7 +782,7 @@ The request body is identical to the direct case; the forwarding chain lives in 
       "transaction_id": "txn-alpha-001",
       "billing_id": "bill-sub-alpha-001",
       "resource_title": "AI Regulation: What Providers Need to Know",
-      "retrieval_endpoint": "https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html?expires=1710517800&agent_id=e3b0c442...&txn_id=txn-alpha-001&sig=d4e5f6a7b8c9...",
+      "retrieval_endpoint": "https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html?agent_id=e3b0c442...&exp=1710517800&kid=vJ3xR1mQ...&sig=k7Qm2xR9vT4nB8aL...",
       "cost": { "amount": "0", "currency": "USD", "unit_cost": "0" },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
       "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
@@ -802,35 +802,36 @@ The `subscription_unit_value` field carries the per-unit cost ($0.05) even thoug
 
 ---
 
-## Phase 4: Content Fetch (HMAC Signed URL, Agent Identity Binding)
+## Phase 4: Content Fetch (Ed25519 Signed URL, Agent Identity Binding)
 
 ```
 Agent -> CDN: GET https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html
-              ?expires=1710517800
-              &agent_id=e3b0c442...
-              &txn_id=txn-alpha-001
-              &sig=d4e5f6a7b8c9...
-              Header: X-Agent-Id: claude-agent-001
-              Header: X-Agent-Domain: claude.ai
+              ?agent_id=e3b0c442...
+              &exp=1710517800
+              &kid=vJ3xR1mQ...
+              &sig=k7Qm2xR9vT4nB8aL...
+              Header: X-RAMP-Agent-Key: <agent public key, base64url>
+              Header: Signature-Input: sig1=("@method" "@target-uri");keyid=...;alg="ed25519";created=...;expires=...
+              Header: Signature: sig1=:<standard base64>:
 
 Edge Function:
-  1. Has signed URL params? YES
-  2. Verify HMAC-SHA256 signature:
-     canonical = "https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html\n1710517800\ne3b0c442...\ntxn-alpha-001"
-     HMAC-SHA256(canonical, shared_secret) == sig param? -> PASS
-  3. Check expiry: 1710517800 > now? -> PASS (URL valid for 5 minutes)
-  4. Check agent identity binding:
-     SHA256(requester.id + ":" + requester.domain) == "e3b0c442..."? -> PASS
-     (Prevents one agent from using another agent's signed URL)
-  5. Pass through -> CDN serves content from S3/origin
+  1. Has a sig param? YES
+  2. Resolve kid to a public key from the Exchange key directory (cached)
+  3. Verify the Ed25519 signature over "GET\n<URL without sig, query sorted>" -> PASS
+  4. Check expiry: exp > now? -> PASS (URL valid for 5 minutes)
+  5. Check agent identity binding:
+     thumbprint(presented public key) == agent_id? -> PASS
+     Verify the RFC 9421 signature with that key (proof of possession) -> PASS
+     (The agent must hold the private half; presenting the public key is not enough)
+  6. Strip agent_id, exp, kid, sig -> CDN serves content from S3/origin
 
 CDN access log records:
-  - URL with all params (txn_id, agent_id, sig)
+  - URL with all params (agent_id, exp, kid, sig)
   - Client IP, timestamp, bytes transferred, HTTP 200
   - This log is controlled by the provider (Hearst) and used for reconciliation
 ```
 
-**HMAC canonicalization format**: The signed URL uses `\n` (newline) as the delimiter between fields in the canonical string. The order is: `baseURL\nexpires\nagent_id\ntxn_id`. This is an Exchange-CDN concern (symmetric HMAC-SHA256 shared secret), entirely separate from the Ed25519 asymmetric signatures used for offer signing and request authentication.
+**Canonical message**: the literal `GET`, one newline, then the whole URL with the `sig` parameter removed and the remaining query sorted by key — so scheme, host, path and every other parameter are covered. The delivery-URL signature and the offer signature are both Ed25519; they use different keys and are verified by different parties. See [Signed URL Verification](/components/edge-function/signed-url-verification).
 
 ---
 
@@ -898,12 +899,13 @@ A successful `UsageReportResponse` carries only the Exchange-assigned `report_id
 Three independent records that must agree:
 
 ```
-1. CDN access log (Hearst controls):
-   - txn_id=txn-alpha-001 fetched at 15:25:00, 200 OK, 45KB
-   - agent_id=e3b0c442..., sig verified by edge function
+1. Edge delivery log (Hearst controls):
+   - url_hash=9f2c7a4e... fetched at 15:25:00, 200 OK, 45KB
+   - agent_id=e3b0c442..., signature and agent binding verified by the edge
 
 2. Exchange transaction log (SSP-Alpha controls):
-   - txn-alpha-001: subscription SUB-ANTHROPIC-HEARST-2026, amount=$0
+   - txn-alpha-001: signed_url_hash=9f2c7a4e... (the join key to the log above)
+   - subscription SUB-ANTHROPIC-HEARST-2026, amount=$0
    - subscription_unit_value: $0.05 (value of the access for accounting)
    - offer_snapshot: article "AI Regulation...", 3300 est tokens
    - offer_snapshot includes exchange_signature (Ed25519, non-repudiable)

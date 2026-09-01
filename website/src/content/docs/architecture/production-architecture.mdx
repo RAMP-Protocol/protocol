@@ -126,7 +126,7 @@ The `TransactionResponse` carries a `DeliveryMethod` hint and a `retrieval_endpo
 
 - The Exchange may populate `retrieval_endpoint` with a signed URL, an access token, or any other retrieval mechanism
 - The agent fetches content from the provider's CDN using whatever credentials the Exchange provided
-- The CDN verifies access independently (e.g., HMAC signature check, token validation)
+- The CDN verifies access independently (e.g., an Ed25519 or RSA signature check, token validation)
 
 The protocol does not specify signed URL formats, CDN verification logic, or content transfer mechanisms. These are defined by each Exchange and Edge Function implementation.
 
