@@ -2548,6 +2548,9 @@ func (x *SubscriptionQuotaInfo) GetUnit() string {
 type Offer struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique identifier for this offer, assigned by the Exchange.
+	// Opaque to the caller: not derived from the resource, its URL, or any
+	// other field, and carries no meaning beyond identifying this offer.
+	// Two offers for the same resource have different offer_ids.
 	OfferId string `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
 	// Resource title (human-readable, for display/logging).
 	Title *string `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
