@@ -251,7 +251,7 @@ A denied single transaction is **not** a 200 success body — it travels as a no
 ```bash
 curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ExecuteTransaction \
   -H "Content-Type: application/json" \
-  -d '{"ver":"1.0","idempotency_key":"deny-001","items":[{"offer":{"offer_id":"fake"}}]}' | jq
+  -d '{"ver":"1.0","idempotency_key":"deny-001","items":[{"offer":{"offer_id":"d17ac02a-db4d-487b-83a8-27c26b6fbb8b"}}]}' | jq
 ```
 The Exchange returns a non-OK status (Connect maps this to HTTP 400 / `failed_precondition`) with an `ErrorDetail`:
 ```json
