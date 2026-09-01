@@ -63,7 +63,7 @@ func (cfg serverConfig) reject(w http.ResponseWriter, r *http.Request, err error
 	if cfg.onReject != nil {
 		cfg.onReject(r, err)
 	}
-	writeReject(w, err)
+	WriteReject(w, RejectCode(err), err)
 }
 
 // verify runs signature verification then the replay check, returning the

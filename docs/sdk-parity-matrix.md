@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 130 symbols at cross-language parity · 16 documented divergences · 176 Go-idiomatic exclusions · 34 conformance corpora, each tri-replayed.
+**At a glance:** 130 symbols at cross-language parity · 16 documented divergences · 179 Go-idiomatic exclusions · 34 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -249,11 +249,13 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `connectserver.DefaultMaxRequestBytes` | Go-only per-request read cap on the Connect handler binding; py/ts expose no server binding, so there is no cap to name (see the connectserver-handler DECISION). |
 | `connectserver.EmitUnpopulatedJSONCodec` | Go connect-go codec; n/a for TS/Python (no Connect binding) per the matrix Codec row. |
 | `connectserver.ErrReplayed` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `connectserver.IsBodyTooLarge` | Go-only predicate over net/http's *http.MaxBytesError; py/ts expose no server binding, so there is no read-cap refusal to classify (see the connectserver-handler DECISION). |
 | `connectserver.NewErrorDetail` | Go-only Connect ErrorDetail envelope build (the build half of AttachErrorDetail, exposed for callers that set a typed reason before attaching); TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row). |
 | `connectserver.ReasonBrokenChain` | Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export. |
 | `connectserver.ReasonHopBudget` | Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export. |
 | `connectserver.ReasonReplay` | Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export. |
 | `connectserver.ReasonSignature` | Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export. |
+| `connectserver.RejectCode` | Go-only reject-to-connect.Code mapping; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row). |
 | `connectserver.ServerOption` | Part of the Go-only Connect handler binding; see the connectserver-handler DECISION in docs/sdk-parity-matrix.md. |
 | `connectserver.WithEmitUnpopulated` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithHandlerOptions` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
@@ -269,6 +271,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `connectserver.WithValidation` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithVerifyGate` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithoutReplayStore` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WriteReject` | Go-only Connect-over-HTTP reject responder; TS/Python emit reject-reason tokens and write no response of their own (matrix SERVER-role reject-mapping row). |
 | `core.DefaultRequestID` | Go default request-id minter; py/ts mint request-ids inline. |
 | `core.ErrOfferExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `core.Off` | Member of the mapped core.Mode enum. Python spells it Mode.STRICT / Mode.OFF and TypeScript as the literal "strict" / "off". |

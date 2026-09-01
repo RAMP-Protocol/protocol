@@ -2,10 +2,24 @@
 // transport-neutral sdk/go/core L2 substance: the verify http-seam handlers
 // (NewExchangeServiceHandler, NewBrokerServiceHandler and NewCatalogServiceHandler
 // — request-id outermost · verify · validate · error-detail), the
-// reject→connect.Code mapping, and the EMIT direction of the
+// reject→connect.Code mapping (RejectCode · IsBodyTooLarge · WriteReject), and the
+// EMIT direction of the
 // ADR-019 ErrorDetail↔Connect bridge (AsConnectError — a server emits a typed error
 // detail). KeyResolver and ReplayStore are injected by the application (ADR-020
 // §2/§3; the server interceptor order is deliberate — see NewExchangeServiceHandler).
+//
+// # One authority for how a refusal is answered
+//
+// The three reject functions are exported, not internal, because the answer they
+// produce is not the canonical one: the Connect specification maps ResourceExhausted
+// to 429 for every cause, and this binding answers 413 for a body past the read cap,
+// since that is the one refusal a caller fixes by sending less. A consumer that
+// re-derives the split lands on the canonical answer and its mount then disagrees
+// with a mount built here — silently, and only for the case a cap exists to handle.
+// So the split and the error-envelope body live in WriteReject alone, and it takes
+// the Connect code as a PARAMETER: a gate carrying a resource-limit sentinel this
+// package cannot know about answers that one case itself and defers the rest to
+// RejectCode, rather than keeping a second copy of the mapping.
 //
 // # Validation is opt-in, on every one of the three handlers
 //
