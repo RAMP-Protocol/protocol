@@ -52,6 +52,39 @@ func TestDocReflectedOfferHasExpiresAt(t *testing.T) {
 	}
 }
 
+// TestDocOfferIDExamplesUseUUIDv4: as a documentation convention, every
+// concrete offer_id value shown in the docs uses UUID v4 so examples never
+// suggest deriving meaning from the id. The wire contract remains an opaque
+// string and does not require UUIDs. The value regex covers quoted and
+// unquoted key forms, so curl-embedded JSON and pseudocode fences are covered
+// as well as pure ```json fences.
+func TestDocOfferIDExamplesUseUUIDv4(t *testing.T) {
+	offerIDRe := regexp.MustCompile(`"?offer_id"?\s*:\s*"([^"]*)"`)
+	uuidV4Re := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	checked, skipped := 0, 0
+	var bad []string
+	walkDocs(t, func(path, content string) {
+		for _, m := range offerIDRe.FindAllStringSubmatch(content, -1) {
+			val := m[1]
+			if isPlaceholder(val) {
+				skipped++
+				continue
+			}
+			checked++
+			if !uuidV4Re.MatchString(val) {
+				bad = append(bad, filepath.Base(path)+": offer_id \""+val+"\" does not follow the documentation's UUID v4 convention")
+			}
+		}
+	})
+	if checked < 10 {
+		t.Fatalf("only %d offer_id value(s) checked — the scan drifted (expected >=10)", checked)
+	}
+	t.Logf("offer_id values checked=%d skipped(placeholder)=%d", checked, skipped)
+	for _, b := range bad {
+		t.Error(b)
+	}
+}
+
 // markedFenceRe captures every ```json fence together with an OPTIONAL
 // `{/* ramp-validate: MessageName */}` MDX comment on the line above it. A
 // marked fence is validated as a real instance of that message; an unmarked one

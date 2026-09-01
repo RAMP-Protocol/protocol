@@ -108,7 +108,7 @@ The response contains **OfferGroups** — one per requested URI — each with Ed
       "uri": "https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding",
       "offers": [
         {
-          "offer_id": "offer-cdn.ramp-protocol.org-1773682699693224366",
+          "offer_id": "46fedecb-5eaf-46f3-8f25-60db769c4205",
           "exchange": "exchange.ramp-protocol.org",
           "ext": {
             "comp.package_id": "pkg-cdn.ramp-protocol.org/2024/01/15/ai-startups-funding"
@@ -155,7 +155,7 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Execu
     "items": [
       {
         "offer": {
-          "offer_id": "offer-cdn.ramp-protocol.org-1773682699693224366",
+          "offer_id": "46fedecb-5eaf-46f3-8f25-60db769c4205",
           "exchange": "exchange.ramp-protocol.org",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -251,7 +251,7 @@ A denied single transaction is **not** a 200 success body — it travels as a no
 ```bash
 curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ExecuteTransaction \
   -H "Content-Type: application/json" \
-  -d '{"ver":"1.0","idempotency_key":"deny-001","items":[{"offer":{"offer_id":"fake"}}]}' | jq
+  -d '{"ver":"1.0","idempotency_key":"deny-001","items":[{"offer":{"offer_id":"d17ac02a-db4d-487b-83a8-27c26b6fbb8b"}}]}' | jq
 ```
 The Exchange returns a non-OK status (Connect maps this to HTTP 400 / `failed_precondition`) with an `ErrorDetail`:
 ```json

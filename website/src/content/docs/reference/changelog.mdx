@@ -8,6 +8,14 @@ and protocol history, see [`proto/CHANGELOG.md`](https://github.com/RAMP-Protoco
 
 ## Unreleased
 
+**`Offer.offer_id` is documented as an opaque unique identifier, not a resource
+key (comment clarification; no wire change).** The comment already said the id is
+assigned by the Exchange, but an implementation historically derived it from the
+resource, which made two offers for the same resource collide. The comment now
+states the id is opaque — not derived from the resource, its URL, or any other
+field — and that two offers for the same resource have different offer_ids. The
+wire type stays `string`.
+
 **The offer-signature comments now state the implemented scheme: hex-encoded
 detached Ed25519, not a JWS (documentation correction; no wire change).** Since the
 initial public snapshot, the comments on `Offer.signature` and

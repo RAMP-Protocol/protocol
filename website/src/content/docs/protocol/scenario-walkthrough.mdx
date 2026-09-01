@@ -283,7 +283,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
 6. Build TWO offers:
 
    Offer A (per-request):
-     offer_id: "offer-tc-reg-001"
+     offer_id: "2325749d-50d3-431a-ac34-900d443ee88e"
      pricing: { model: PRICING_MODEL_PER_UNIT, rate: "0.05", currency: "USD",
                 unit: "accesses", unit_cost: "0.00001515", estimated_quantity: 3300 }
      identity: { canonical_url: "https://techcrunch.com/premium/ai-regulation-2026.html",
@@ -308,7 +308,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
      signature_algorithm: "EdDSA"
 
    Offer B (subscription):
-     offer_id: "sub-offer-tc-reg-001"
+     offer_id: "4f155204-a53e-42aa-8471-154f87d7d3d5"
      pricing: { model: PRICING_MODEL_FREE, rate: "0", currency: "USD",
                 unit_cost: "0", estimated_quantity: 3300 }
      subscription_id: "SUB-ANTHROPIC-HEARST-2026"
@@ -335,7 +335,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
   "exchange": "exchange.ssp-alpha.com",
   "offers": [
     {
-      "offer_id": "offer-tc-reg-001",
+      "offer_id": "2325749d-50d3-431a-ac34-900d443ee88e",
       "exchange": "exchange.ssp-alpha.com",
       "title": "AI Regulation: What Providers Need to Know",
       "pricing": {
@@ -379,7 +379,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
       "signature_algorithm": "EdDSA"
     },
     {
-      "offer_id": "sub-offer-tc-reg-001",
+      "offer_id": "4f155204-a53e-42aa-8471-154f87d7d3d5",
       "exchange": "exchange.ssp-alpha.com",
       "title": "AI Regulation: What Providers Need to Know",
       "pricing": {
@@ -508,7 +508,7 @@ SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
       "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
       "offers": [
         {
-          "offer_id": "offer-tc-reg-001",
+          "offer_id": "2325749d-50d3-431a-ac34-900d443ee88e",
           "exchange": "exchange.ssp-alpha.com",
           "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit": "accesses", "unit_cost": "0.00001515", "estimated_quantity": 3300 },
           "identity": { "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html", "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001", "content_hash": "a1b2c3d4e5f6...", "hash_method": "simhash-v1" },
@@ -517,7 +517,7 @@ SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
           "signature_algorithm": "EdDSA"
         },
         {
-          "offer_id": "sub-offer-tc-reg-001",
+          "offer_id": "4f155204-a53e-42aa-8471-154f87d7d3d5",
           "exchange": "exchange.ssp-alpha.com",
           "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD", "unit_cost": "0", "estimated_quantity": 3300 },
           "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
@@ -547,7 +547,7 @@ Note: SSP-Alpha returns an empty `offers` array for the `theverge.com` URI with 
   "exchange": "exchange.ssp-beta.com",
   "offers": [
     {
-      "offer_id": "offer-verge-reg-001",
+      "offer_id": "ecb6fef4-1d83-4751-ab92-b3bc7c2fee39",
       "exchange": "exchange.ssp-beta.com",
       "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.07", "currency": "USD", "unit": "accesses", "unit_cost": "0.00002258", "estimated_quantity": 3100 },
       "identity": {
@@ -589,19 +589,19 @@ Step 2: SimHash cross-check (for non-news content without IPTC guids)
 Step 3: Rank within content group
   Priority order:
   a) Subscription from preferred exchange
-     -> sub-offer-tc-reg-001 ($0, SSP-Alpha, attested by gumgum.com) <- WINNER
+     -> 4f155204-a53e-42aa-8471-154f87d7d3d5 ($0, SSP-Alpha, attested by gumgum.com) <- WINNER
   b) Subscription from any exchange
      -> none
   c) Per-request from preferred exchange (rank by attestation trust, then unit_cost)
-     -> offer-tc-reg-001 ($0.05, SSP-Alpha, attested by gumgum.com)
+     -> 2325749d-50d3-431a-ac34-900d443ee88e ($0.05, SSP-Alpha, attested by gumgum.com)
   d) Per-request by unit_cost (all exchanges)
-     -> offer-verge-reg-001 ($0.07, SSP-Beta, attested by gumgum.com)
+     -> ecb6fef4-1d83-4751-ab92-b3bc7c2fee39 ($0.07, SSP-Beta, attested by gumgum.com)
 
   Note: attestation claims enable selection beyond cheapest price.
   Offers with third-party attestations (Level 2) are preferred over
   self-attested (Level 1) or unattested (Level 0) content.
 
-  Selected: sub-offer-tc-reg-001 (subscription, zero marginal cost, third-party attested)
+  Selected: 4f155204-a53e-42aa-8471-154f87d7d3d5 (subscription, zero marginal cost, third-party attested)
 
 Step 4: Budget check
   - Subscription offer: cost = $0 -> always within budget
@@ -633,7 +633,7 @@ SDK or Broker commits to the subscription offer.
   "items": [
     {
       "offer": {
-        "offer_id": "sub-offer-tc-reg-001",
+        "offer_id": "4f155204-a53e-42aa-8471-154f87d7d3d5",
         "exchange": "exchange.ssp-alpha.com",
         "title": "AI Regulation: What Providers Need to Know",
         "pricing": {
@@ -683,7 +683,7 @@ SDK or Broker commits to the subscription offer.
   "items": [
     {
       "offer": {
-        "offer_id": "sub-offer-tc-reg-001",
+        "offer_id": "4f155204-a53e-42aa-8471-154f87d7d3d5",
         "exchange": "exchange.ssp-alpha.com",
         "title": "AI Regulation: What Providers Need to Know",
         "pricing": {
@@ -748,7 +748,7 @@ The request body is identical to the direct case; the forwarding chain lives in 
    {
      transaction_id: "txn-alpha-001",
      billing_id: "bill-sub-alpha-001",
-     offer_id: "sub-offer-tc-reg-001",
+     offer_id: "4f155204-a53e-42aa-8471-154f87d7d3d5",
      subscription_id: "SUB-ANTHROPIC-HEARST-2026",
      amount: "0",
      agent_identity_hash: "e3b0c442...",
@@ -944,7 +944,7 @@ Response includes signed Offer snapshots for every transaction:
       "transaction_id": "txn-alpha-001",
       "billing_id": "bill-sub-alpha-001",
       "offer_snapshot": {
-        "offer_id": "sub-offer-tc-reg-001",
+        "offer_id": "4f155204-a53e-42aa-8471-154f87d7d3d5",
         "exchange": "exchange.ssp-alpha.com",
         "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" },
         "subscription_id": "SUB-ANTHROPIC-HEARST-2026",

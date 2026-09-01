@@ -551,6 +551,9 @@ message SubscriptionQuotaInfo {
 // CoMP-specific metadata (Package, Function) available via ramp-comp-v1 extension profile.
 message Offer {
   // Unique identifier for this offer, assigned by the Exchange.
+  // Opaque to the caller: not derived from the resource, its URL, or any
+  // other field, and carries no meaning beyond identifying this offer.
+  // Two offers for the same resource have different offer_ids.
   string offer_id = 1;
 
   // Resource title (human-readable, for display/logging).

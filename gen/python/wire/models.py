@@ -1868,7 +1868,8 @@ class Offer(WireModel):
         description='Resource identity for cross-exchange deduplication.\n Enables Brokers to recognize the same resource offered by\n different Exchanges and compare pricing.',
     )
     offer_id: str | None = Field(
-        '', description='Unique identifier for this offer, assigned by the Exchange.'
+        '',
+        description='Unique identifier for this offer, assigned by the Exchange.\n Opaque to the caller: not derived from the resource, its URL, or any\n other field, and carries no meaning beyond identifying this offer.\n Two offers for the same resource have different offer_ids.',
     )
     previews: list[Preview] | None = Field(
         None,
