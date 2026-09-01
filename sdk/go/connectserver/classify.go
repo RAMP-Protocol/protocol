@@ -50,6 +50,13 @@ func (r RejectReason) String() string {
 // ErrBrokenSignatureChain in helpers). It is the classifier a WithOnReject
 // observer uses to audit-log the outcome without re-deriving the mapping. An
 // error carrying no known sentinel classifies as ReasonSignature.
+//
+// One refusal the server binding answers is not an authentication outcome and has
+// no value in this enum: a body past the read cap, which RejectCode answers
+// resource_exhausted and this classifier reports as ReasonSignature, its default.
+// A consumer auditing that refusal names it itself — reporting it as a signature
+// failure would send an operator after a key rotation for a caller that sent too
+// much.
 func ClassifyReject(err error) RejectReason {
 	switch {
 	case errors.Is(err, helpers.ErrTooManyHops):

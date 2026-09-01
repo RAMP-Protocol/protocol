@@ -21,9 +21,9 @@ import (
 // refusal a caller fixes by sending less. It is a pure, stateless error→code
 // mapping — the budget and cap VALUES stay injected.
 //
-// It answers the TRANSPORT question. ClassifyReject answers the AUDIT question over
-// the same errors, returning a RejectReason token for a log rather than a code for
-// the wire; a consumer that needs both calls both.
+// It answers the TRANSPORT question; ClassifyReject answers the AUDIT question over
+// the same errors. The two do not agree on every input, and the doc on ClassifyReject
+// says where: RejectReason has no value for a body past the read cap.
 //
 // It is exported so a mount whose gate carries its OWN resource-limit sentinel — one
 // this package cannot know about — answers that case itself and defers every other
@@ -42,9 +42,10 @@ func RejectCode(err error) connectrpc.Code {
 //
 // It is exported because the classification has callers outside the response path: a
 // middleware that must decide, before it can answer, whether the read it just failed
-// was a size refusal or a malformed request. Those two answer differently, so the
-// caller branches — and the predicate it branches on has to be the one this package
-// answers with, not a second copy that can drift from it.
+// was a size refusal or a malformed request. Only the size refusal is this package's
+// to answer — WriteReject writes it; a malformed read is the caller's own verdict and
+// its own response. What must not fork is the predicate the branch turns on, which is
+// why it lives here rather than in a copy.
 func IsBodyTooLarge(err error) bool {
 	var maxBytes *http.MaxBytesError
 	return errors.As(err, &maxBytes)
@@ -53,7 +54,8 @@ func IsBodyTooLarge(err error) bool {
 // httpStatus maps a rejection to its canonical Connect-over-HTTP status. The two
 // ResourceExhausted causes separate here because they ask the caller for different
 // things: a body past the cap is 413 (send less), a hop budget is 429 (send fewer,
-// or slower). Unauthenticated is 401.
+// or slower). Unauthenticated is 401, and so is every other code — the domain this
+// writer accepts is stated on WriteReject.
 //
 // The 413 is a deliberate departure from the Connect specification, which maps
 // ResourceExhausted to 429 for every cause. That is exactly why the split lives in
@@ -85,6 +87,15 @@ func httpStatus(code connectrpc.Code, err error) int {
 // resource-limit sentinel this package cannot know about supplies its own verdict
 // and still gets this status split and this body. A caller with no such sentinel
 // passes RejectCode(err), which is what this package's own handlers do.
+//
+// It answers the verify seam's two verdicts. ResourceExhausted is a resource or
+// policy limit — 413 for a body past the read cap, 429 otherwise; Unauthenticated is
+// 401. Any other Connect code is answered 401 as well, and the body still reports the
+// code the caller passed: this is a REJECTION writer, not a code→status table, and it
+// refuses rather than translating a verdict it does not model. connect-go keeps the
+// canonical table unexported, so a copy of it here would be the second authority this
+// function exists to remove; a caller holding a verdict outside those two — a
+// malformed request, say — writes that response itself.
 func WriteReject(w http.ResponseWriter, code connectrpc.Code, err error) {
 	ce := connectrpc.NewError(code, err)
 	w.Header().Set("Content-Type", "application/json")

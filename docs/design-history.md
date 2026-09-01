@@ -1308,6 +1308,22 @@ something other than a resource limit cannot be answered 413 over a body that na
 different verdict. On the path that existed before, the guard is always true — `RejectCode`
 already returns `ResourceExhausted` for every over-cap error — so nothing on the wire moved.
 
+The same reasoning bounds what the parameter accepts. A rejection writer's input domain is
+the seam's verdicts, not the whole Connect code space: `ResourceExhausted` and
+`Unauthenticated` are what the gate produces, and both consumers' classifiers return only
+those two. A code outside them is refused 401 rather than translated, because translating
+means a hand-written copy of connect-go's canonical table — unexported there, and the second
+authority this entry is about. The body still reports the code it was given, so a caller
+that passes a verdict the writer does not model can see that it did.
+
+The audit face does not follow the transport face all the way. `RejectReason` names the four
+outcomes an RFC 9421 gate produces and has no value for a body past the read cap, so
+`ClassifyReject` reports that refusal as its default, a signature failure — the misreport the
+response side was changed to stop making, still standing on the logging side. Adding a value
+is a cross-language change to a mapped symbol whose tokens are stable values a consumer's
+dashboards key on, so the two faces are documented as disagreeing on that one input rather
+than quietly assumed to agree, and a consumer auditing an over-cap refusal names it itself.
+
 ## The wire tier's rule ids are language-local, and the corpus says only what they share
 
 The ingest-tier rule ids share one namespace, as recorded above. The tier ABOVE them does

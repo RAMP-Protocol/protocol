@@ -103,15 +103,50 @@ func TestWriteReject_StatusAgreesWithTheCodeItIsGiven(t *testing.T) {
 			rec := httptest.NewRecorder()
 			rampserver.WriteReject(rec, tc.code, tc.err)
 			if rec.Code != tc.want {
-				t.Errorf("status = %d, want %d", rec.Code, tc.want)
+				t.Errorf("status = %d, want %d — the status and the body must name one verdict",
+					rec.Code, tc.want)
 			}
 			var body map[string]string
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 				t.Fatalf("body is not the Connect error envelope: %v", err)
 			}
 			if body["code"] != tc.code.String() {
-				t.Errorf("body code = %q, want %q — the status and the body must name one verdict",
+				t.Errorf("body code = %q, want %q — the body reports the verdict the caller passed",
 					body["code"], tc.code.String())
+			}
+		})
+	}
+}
+
+// TestWriteReject_CodeOutsideTheSeamIsRefusedNotTranslated pins the accepted domain.
+// The writer answers the seam's two verdicts; a code it does not model is NOT run
+// through Connect's canonical code→status table — connect-go keeps that unexported,
+// and a copy of it here would be the second authority this function exists to remove.
+// It is refused 401, with the body still reporting what the caller passed so a misuse
+// is visible in the response rather than translated away.
+func TestWriteReject_CodeOutsideTheSeamIsRefusedNotTranslated(t *testing.T) {
+	t.Parallel()
+	for _, code := range []connectrpc.Code{
+		connectrpc.CodeInvalidArgument,
+		connectrpc.CodeNotFound,
+		connectrpc.CodePermissionDenied,
+		connectrpc.CodeInternal,
+		connectrpc.CodeUnavailable,
+	} {
+		t.Run(code.String(), func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			rampserver.WriteReject(rec, code, errors.New("refused"))
+			if rec.Code != http.StatusUnauthorized {
+				t.Errorf("code %v answered %d, want 401 — a verdict the seam does not model is refused, never translated",
+					code, rec.Code)
+			}
+			var body map[string]string
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("body is not the Connect error envelope: %v", err)
+			}
+			if body["code"] != code.String() {
+				t.Errorf("body code = %q, want %q — the writer reports the verdict it was given, so a misuse stays visible",
+					body["code"], code.String())
 			}
 		})
 	}
