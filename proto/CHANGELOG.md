@@ -297,6 +297,22 @@ size a representative batch, not a ceiling on a conformant one: the contract's c
 how many entries and terms a push carries, never how many bytes, so a conformant push can
 exceed this cap and be refused.
 
+**The server binding's refusal answer is exported, so a consumer stops re-deriving it
+(SDK only; no wire change).** `connectserver` now exports `RejectCode`, `IsBodyTooLarge`
+and `WriteReject` — the classification, the over-cap predicate and the writer that pairs
+the Connect error body with its HTTP status. They were unexported, so a third-party
+Exchange, or any mount composed by hand rather than through `NewCatalogServiceHandler`,
+had to write its own. That copy does not stay level: Connect maps `ResourceExhausted` to
+429 for every cause, and this binding answers 413 for a body past the read cap because
+that is the one refusal a caller fixes by sending less. A re-derivation lands on the
+specification's answer and diverges silently. `WriteReject` takes the Connect code as a
+parameter rather than deriving it, so a gate carrying its own resource-limit sentinel
+answers that case itself and defers every other to `RejectCode` — a delegation, not a
+fork. The over-cap arm is now gated on the code as well as the error, so a rejection
+classified as something other than a resource limit cannot be answered 413 over a body
+that names a different verdict; on the path that existed before, that guard is always
+true, so no response changed.
+
 **The contract states that a push is all-or-nothing, and the prose follows it (docs).**
 `CatalogService` described both validation tiers in full — folding, alias resolution, which
 checks reject and which warn — and never said whether a rejection costs the entry or the

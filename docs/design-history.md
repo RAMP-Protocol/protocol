@@ -1269,6 +1269,45 @@ exact bytes and therefore runs before the caller is known — an unauthenticated
 reaches only that read. And it is composed inside request-id, so a refusal still carries
 the correlation id the reject-path logs are read by.
 
+## An answer that is not the canonical one needs a single author
+
+The cap above answers a body past it with 413, and a hop budget with 429. Both are the
+same Connect code — `ResourceExhausted` — and the Connect specification maps that code to
+429 for every cause; the function that does it, `connectCodeToHTTP`, is unexported in
+connect-go. So 413 is a departure. It is the right one, because the two refusals ask the
+caller for different things and only one of them is fixed by sending less, but it is not
+the answer a second implementation arrives at. A second implementation reads the
+specification and returns 429.
+
+That is what makes this classification different from the ones around it. A consumer can
+re-derive an obvious rule and stay level with the SDK by accident. It cannot re-derive a
+deliberate departure, and it will not notice when the departure moves. The reference
+implementation had already grown its own copy of the mapping — the same predicate over
+`*http.MaxBytesError`, the same three-way status split, the same error body — for the one
+mount it composes by hand rather than through this binding, so two mounts in one process
+answered a refusal from two authorities, agreeing only because both files had been written
+to match.
+
+So the split and the error-envelope body are exported and live in one function.
+`RejectCode` classifies, `IsBodyTooLarge` is the predicate a caller branches on before it
+can answer at all, and `WriteReject` writes the pair. The status stays unexported: nothing
+needs it without the body that goes with it, and pairing them is the point.
+
+`WriteReject` takes the Connect code as a parameter rather than deriving it, which is the
+one design choice here worth explaining. A gate that is not this one may carry a
+resource-limit sentinel this package has never heard of — the reference implementation's
+own hop-budget error is a distinct value from the SDK's, and `errors.Is` between the two
+is false. A writer that classified for itself would answer that caller's hop-budget
+rejection 401 instead of 429, so delegating would be a regression and the copy would stay.
+Taking the code lets the caller answer the one case it owns and defer every other to
+`RejectCode`, which is the whole difference between a delegation and a fork.
+
+Making the code a parameter opened one hole, closed in the same change: the over-cap arm
+now tests the code as well as the error, so a caller that classifies a rejection as
+something other than a resource limit cannot be answered 413 over a body that names a
+different verdict. On the path that existed before, the guard is always true — `RejectCode`
+already returns `ResourceExhausted` for every over-cap error — so nothing on the wire moved.
+
 ## The wire tier's rule ids are language-local, and the corpus says only what they share
 
 The ingest-tier rule ids share one namespace, as recorded above. The tier ABOVE them does
