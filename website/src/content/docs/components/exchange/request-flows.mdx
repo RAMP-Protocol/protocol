@@ -153,7 +153,9 @@ func (h *ExchangeHandler) DiscoverResources(
         var subOffers []*rampv1.Offer
         for _, offer := range offers {
             subOffer := proto.Clone(offer).(*rampv1.Offer)
-            subOffer.OfferId = "sub-" + offer.OfferId
+            // A subscription variant is a distinct offer, so it gets a fresh
+            // opaque offer_id — never one derived from the base offer's id.
+            subOffer.OfferId = "offer-" + ulid.Make().String()
             subOffer.SubscriptionId = proto.String(subStatus.SubscriptionID)
             subOffer.Pricing = &rampv1.Pricing{
                 Model:           offer.Pricing.Model,
