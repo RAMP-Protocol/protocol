@@ -115,7 +115,7 @@ def carry_title(node, type_name):
     protoschema splits a multi-paragraph proto comment: paragraph one becomes `title`
     and the remainder becomes `description`. Dropping every title therefore deleted the
     FIRST paragraph of any comment carrying a blank line — `Offer.signature` lost
-    "REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE Offer",
+    "REQUIRED. Hex-encoded detached Ed25519 signature over the canonical serialization of the ENTIRE Offer",
     so the generated types stated the canonical-signing rules without ever saying the
     field is the signature or that it is required. Go was unaffected (ramp.pb.go carries
     the whole comment), so the loss showed only in the Pydantic and Zod export.

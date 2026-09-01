@@ -42,9 +42,9 @@ import "ramp/v1/vocab.proto";
 // spend caps, expiry, delegation chain). The HOW (authorization flow,
 // token format, signature envelope) is pluggable.
 //
-// Signatures: JWS (RFC 7515) with alg=EdDSA for content signatures
-// (offers, attestations). RFC 9421 HTTP Message Signatures for request
-// authentication. Same Ed25519 crypto, standard tooling everywhere.
+// Offer content signatures: hex-encoded detached Ed25519 over RFC 8785
+// JCS of canonical proto-JSON. RFC 9421 HTTP Message Signatures for
+// request authentication.
 //
 // Authorization flows: GNAP (RFC 9635) recommended, OAuth 2.0 + DPoP
 // as enterprise adoption path. Exchange advertises supported methods.
@@ -65,7 +65,6 @@ import "ramp/v1/vocab.proto";
 // Request authentication via RFC 9421 HTTP Message Signatures:
 //   Agent → Exchange:  Signature header (alg=ed25519)
 //   Agent → Broker → Exchange:  multiple Signature headers (one per hop)
-//   Exchange → Agent:  JWS Compact Serialization on Offer (alg=EdDSA)
 //
 // Signed URLs use HMAC-SHA256 (Exchange↔CDN shared secret, separate concern).
 //
@@ -602,13 +601,13 @@ message Offer {
     }
   ];
 
-  // REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
-  // Offer — every field, including `pricing`, `terms` (the full licensing
-  // payload), `expires_at`, and `exchange`. Only `signature` and
-  // `signature_algorithm` are excluded from the signed bytes. `expires_at` is
-  // signed so the offer's validity window is integrity-protected: a relaying
-  // Broker cannot extend (or shorten) the TTL of a signed offer to replay it
-  // outside the window the Exchange intended.
+  // REQUIRED. Hex-encoded detached Ed25519 signature over the canonical
+  // serialization of the ENTIRE Offer — every field, including `pricing`,
+  // `terms` (the full licensing payload), `expires_at`, and `exchange`. Only
+  // `signature` and `signature_algorithm` are excluded from the signed bytes.
+  // `expires_at` is signed so the offer's validity window is
+  // integrity-protected: a relaying Broker cannot extend (or shorten) the TTL
+  // of a signed offer to replay it outside the window the Exchange intended.
   //
   // CANONICAL SIGNING (RFC 8785 JCS over canonical proto-JSON). The signed bytes
   // are:
@@ -670,7 +669,9 @@ message Offer {
   // key, and MUST reject an offer whose `expires_at` is in the past.
   string signature = 9;
 
-  // JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.
+  // JOSE/JWA algorithm identifier (RFC 8037 §3.1). Always 'EdDSA' for
+  // Ed25519. Advisory only: this field is cleared before the canonical
+  // payload is signed, so it is not covered by the signature.
   string signature_algorithm = 10;
 
   // If set, this offer is available under an existing subscription/deal.

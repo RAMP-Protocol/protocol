@@ -22,8 +22,9 @@ expected common case, not an exception. RFC 9421 lets each hop add its own
 hop against the key it fetches from that hop's `/.well-known/ramp.json` — there is
 no nested in-message co-signing scheme to define or version. Content that must
 outlive a single HTTP exchange — offers, attestations — keeps its signature as
-JWS (RFC 7515, `alg=EdDSA`), because those objects are stored, forwarded, and
-re-verified out of band.
+an in-message field: a detached Ed25519 signature over the RFC 8785 JCS
+canonical form (hex-encoded on offers), because those objects are stored,
+forwarded, and re-verified out of band.
 
 Multi-hop forwarding rides on the same primitive rather than an in-message hop
 list. A forwarded request carries a stack of RFC 9421 signatures — one per party
