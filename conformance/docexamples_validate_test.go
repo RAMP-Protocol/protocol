@@ -52,14 +52,13 @@ func TestDocReflectedOfferHasExpiresAt(t *testing.T) {
 	}
 }
 
-// TestDocOfferIDsAreOpaque: every offer_id value shown in the docs must be an
-// opaque UUID v4, matching the Offer.offer_id contract: assigned by the
-// Exchange, not derived from the resource, its URL, or any other field. A
-// structured example id (offer-<domain>-<timestamp>, offer-001) teaches
-// readers to mint or parse ids the protocol declares meaningless. The value
-// regex covers quoted and unquoted key forms, so curl-embedded JSON and
-// pseudocode fences are covered as well as pure ```json fences.
-func TestDocOfferIDsAreOpaque(t *testing.T) {
+// TestDocOfferIDExamplesUseUUIDv4: as a documentation convention, every
+// concrete offer_id value shown in the docs uses UUID v4 so examples never
+// suggest deriving meaning from the id. The wire contract remains an opaque
+// string and does not require UUIDs. The value regex covers quoted and
+// unquoted key forms, so curl-embedded JSON and pseudocode fences are covered
+// as well as pure ```json fences.
+func TestDocOfferIDExamplesUseUUIDv4(t *testing.T) {
 	offerIDRe := regexp.MustCompile(`"?offer_id"?\s*:\s*"([^"]*)"`)
 	uuidV4Re := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 	checked, skipped := 0, 0
@@ -73,7 +72,7 @@ func TestDocOfferIDsAreOpaque(t *testing.T) {
 			}
 			checked++
 			if !uuidV4Re.MatchString(val) {
-				bad = append(bad, filepath.Base(path)+": offer_id \""+val+"\" is not an opaque UUID v4 — offer_ids are Exchange-assigned and carry no structure, so examples must not suggest one")
+				bad = append(bad, filepath.Base(path)+": offer_id \""+val+"\" does not follow the documentation's UUID v4 convention")
 			}
 		}
 	})
