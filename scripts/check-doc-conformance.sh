@@ -102,6 +102,22 @@ patterns=(
   'JWS \(alg=EdDSA\)' 'JWS \(EdDSA\)' 'JWS / Ed25519' 'EdDSA via JWS'
   'JWS EdDSA signature' 'JWS Compact Serialization on Offer'
   'JWS for content signatures' 'Offer JWS' 'JWS alg'
+  # Delivery URLs are signed with Ed25519 by the Exchange -- a base64url-no-pad
+  # signature over "GET\n<canonical URL>" -- and verified with its published
+  # PUBLIC key; the CloudFront-native path uses RSA, verified by the CDN. No
+  # implementation ever used HMAC and no secret ever reaches a delivery endpoint.
+  # These are the retired phrasings of that claim. The bare token "HMAC" stays
+  # legal: report tokens are genuinely HMAC-hashed, and a doc may cite HMAC as a
+  # rejected alternative.
+  'HMAC-SHA256 signed URL' 'HMAC signed URL' 'HMAC-signed URL' 'URL HMAC'
+  'HMAC canonicalization' 'HMAC [Cc]anonicalization' 'hmac-sha256-'
+  'HMAC secret' 'hmacSecret' 'HMAC_SECRET' 'CDNGenericHMAC' 'Generic HMAC'
+  'Exchange.CDN shared secret' 'shared secret between Exchange and CDN'
+  # The signed URL carries no transaction-id parameter and no `expires`; the
+  # parameters are agent_id, exp, kid and sig, and reconciliation joins on
+  # signed_url_hash. Anchored to the URL forms so the patterns do NOT collide
+  # with the legitimate slog field name `txn_id` in Go samples.
+  '&txn_id=' '?txn_id=' 'txn_id=txn-' 'baseURL.nexpires'
 )
 
 # Files where naming a removed identifier is legitimate (they record history).
