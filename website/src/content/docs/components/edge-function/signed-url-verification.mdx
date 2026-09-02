@@ -66,7 +66,7 @@ sequenceDiagram
 
     Agent->>Edge: GET /premium/article.html?agent_id=<thumbprint>&exp=1773451434&kid=<thumbprint>&sig=...
 
-    Note over Edge: 1. No sig parameter? bot gate, then origin<br/>2. Resolve kid to a public key<br/>3. Rebuild "GET\n&lt;canonical URL&gt;"<br/>4. Ed25519 verify, then check exp<br/>5. Method gate<br/>6. Proof of possession, if agent_id is present
+    Note over Edge: 1. No sig parameter? bot gate, then origin<br/>2. Resolve kid to a public key<br/>3. Rebuild "GET\n&lt;canonical URL&gt;"<br/>4. Ed25519 verify and exp check<br/>5. Method gate<br/>6. Proof of possession, if agent_id is present
 
     Edge->>Dir: fetch public keys (cached; skipped when keys are pinned in config)
     Dir-->>Edge: JWK Set
@@ -88,7 +88,7 @@ Two behaviours here are deliberate and neither is obvious.
 
 **Verification fails closed.** If the key-resolution leg throws — the directory is unreachable, the response is malformed — the edge answers `503 verify_unavailable`. It never falls through to the origin.
 
-**The signature is checked before the expiry.** Both `exp` and `sig` come from the same untrusted URL. Reading `exp` first would mean acting on attacker-supplied bytes before anything had proven they were Exchange-issued.
+**The order of the signature and expiry checks differs by language, and the reason a caller sees follows from it.** The Go verifier verifies the signature first, so it reports `expired` only for a URL whose signature was good. The TypeScript and Python verifiers read `exp` first, so an expired URL is reported as `expired` whether or not its signature would have verified. Both orders refuse exactly the same URLs. The refusal reason is a diagnostic, not a wire contract -- do not branch on which one comes back.
 
 Refusals from the URL check:
 
@@ -213,6 +213,13 @@ Because verification needs no secret, compromising an edge does not let an attac
 The edge resolves `kid` to a key from the Exchange's key directory at `/.well-known/http-message-signatures-directory`, cached with a one-hour TTL and a single in-flight fetch. Keys may instead be pinned in configuration, in which case a covering `kid` skips the fetch entirely.
 
 **Directory keys carry no key identifier of their own.** The edge computes the map key locally as the RFC 7638 thumbprint of the key material. That is why `kid` on the URL is a thumbprint rather than an operator-chosen label: there is nothing a publisher could assert that the edge would have to trust.
+
+**The directory is not tenant-scoped, so pin the keys if you need it to be.** An
+Exchange publishes one directory for all its tenants, and the edge accepts any
+`kid` that resolves in it. A URL signed with another tenant's key therefore
+verifies on your edge, which matters when one Exchange serves publishers who do
+not trust each other. Pinning the keys you expect in `verifyKeys` closes it: a
+`kid` outside that set never resolves, and the fetch never happens.
 
 ```mermaid
 graph LR

@@ -32,9 +32,11 @@ Ed25519 verifier. Akamai is no longer documented as a supported delivery target,
 because EdgeAuth verifies with a secret shared with the CDN.
 
 The signed-URL verification page is rewritten against the shipped verifier, and
-now documents what it always did but never said: verification fails closed, the
-signature is checked before the expiry, agent binding is enforced by default, and
-the delivery endpoint holds public keys only.
+now documents what it always did but never said: verification fails closed,
+agent binding is enforced by default, and the delivery endpoint holds public keys
+only. It also records that the three SDK verifiers order the signature and expiry
+checks differently, so the refusal reason for an expired URL is a diagnostic and
+not a contract.
 
 **`Offer.offer_id` is documented as an opaque unique identifier, not a resource
 key (comment clarification; no wire change).** The comment already said the id is
