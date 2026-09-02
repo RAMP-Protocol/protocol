@@ -8315,12 +8315,25 @@ type DomainVerificationConfirmation struct {
 	Domain string `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
 	// The challenge token (echoed from DomainVerificationChallenge).
 	Token string `protobuf:"bytes,3,opt,name=token,proto3" json:"token,omitempty"`
-	// Optional: signing key to register upon successful verification.
-	// If present, the key is registered atomically with verification.
-	// Key format depends on CDN type (PEM for CloudFront, hex for HMAC).
+	// Optional: the delivery endpoint's verification key, registered atomically
+	// with the domain on successful verification. PUBLIC key material only.
+	// The Exchange signs delivery URLs with a private key it holds and never
+	// publishes; a delivery endpoint verifies with the public half and holds
+	// nothing secret. Where the Exchange has to sign with a key the provider
+	// generated -- a CloudFront trusted key group is the provider's own AWS
+	// resource -- the private half is provisioned to the Exchange out of band
+	// and never travels in this field.
+	//
+	// Format follows cdn_type: a PEM-encoded RSA public key for "cloudfront", or
+	// the base64url-encoded raw Ed25519 public key (the JWK "x" value) for
+	// "edge-ed25519".
 	SigningKey *string `protobuf:"bytes,4,opt,name=signing_key,json=signingKey,proto3,oneof" json:"signing_key,omitempty"`
-	// CDN type this key is for.
-	CdnType *string `protobuf:"bytes,5,opt,name=cdn_type,json=cdnType,proto3,oneof" json:"cdn_type,omitempty"` // "cloudfront", "akamai", "fastly", "hmac"
+	// Which delivery-URL verification scheme this key is for: "edge-ed25519" (a
+	// code-capable edge that verifies the Ed25519 URL signature itself) or
+	// "cloudfront" (AWS CloudFront trusted key groups, RSA, verified natively by
+	// the CDN). One value per Exchange-side tenant signing scheme:
+	// "edge-ed25519" is ED25519, "cloudfront" is AWS_CLOUDFRONT_RSA.
+	CdnType *string `protobuf:"bytes,5,opt,name=cdn_type,json=cdnType,proto3,oneof" json:"cdn_type,omitempty"`
 	// REQUIRED. Bare host of the recipient this request is addressed to (e.g.
 	// "exchange.example" or "exchange.example:8081"). See "Request recipient" in
 	// the file header. Distinct from `domain` above, which is the provider domain

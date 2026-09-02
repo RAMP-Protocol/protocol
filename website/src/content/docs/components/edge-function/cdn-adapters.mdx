@@ -1,6 +1,6 @@
 ---
 title: "CDN Adapters"
-description: "Platform-specific adapters for Cloudflare Workers, CloudFront, Akamai EdgeWorkers, Fastly Compute, and the generic adapter interface"
+description: "Platform-specific adapters for Cloudflare Workers, CloudFront, Fastly Compute, and the generic adapter interface"
 ---
 
 The Edge Function is defined as a platform-agnostic interface. Each CDN platform gets a thin adapter that maps platform primitives to the interface. The core decision logic is CDN-agnostic -- every adapter calls the same core function.
@@ -76,20 +76,17 @@ interface EdgeConfig {
   /** Bot User-Agent patterns to detect (regexes). */
   botPatterns: RegExp[];
 
-  /** Signing verification mode: "cdn-native" | "hmac" */
-  signingMode: "cdn-native" | "hmac";
+  /** Exchange key directory the edge resolves `kid` against. */
+  exchangeWbaUrl: string;
 
-  /** HMAC secret (only when signingMode is "hmac"). */
-  hmacSecret?: string;
-
-  /** Maximum signed URL TTL in seconds (enforced independently). */
-  maxUrlTtlSeconds: number;
+  /** Optional pinned public keys; a covering `kid` skips the directory fetch. */
+  verifyKeys?: JsonWebKey[];
 
   /** Whether to enforce single-use URLs (best-effort). Requires kv. */
   singleUseEnabled: boolean;
 
-  /** Whether to enforce agent identity binding. */
-  agentBindingEnabled: boolean;
+  /** Whether to enforce agent identity binding. Defaults to true. */
+  enforceBinding: boolean;
 }
 ```
 
@@ -223,14 +220,14 @@ function handler(event) {
 | Package size | 10 MB |
 | Languages | JavaScript, TypeScript, Rust (WASM) |
 
-**Key difference from CloudFront**: Cloudflare has no native signed URL verification. The Worker must implement HMAC or RSA verification in code. This means the Worker holds the signing secret or public key.
+**Key difference from CloudFront**: Cloudflare has no native signed URL verification. The Worker verifies the Ed25519 signature in code, using **only** the Exchange's public key. Nothing secret is deployed to the edge.
 
 **Recommended approach**: Single Worker with optional Durable Objects.
 
 ```mermaid
 graph LR
     subgraph "Cloudflare Edge"
-        WORKER["Cloudflare Worker<br/>Bot detection<br/>ramp.json + rsl.txt serving<br/>HMAC signature verification<br/>Agent identity binding"]
+        WORKER["Cloudflare Worker<br/>Bot detection<br/>ramp.json + rsl.txt serving<br/>Ed25519 signature verification<br/>Agent identity binding"]
         KV["Workers KV<br/>Config cache<br/>Bot pattern updates"]
         DO["Durable Object<br/>(optional)<br/>Single-use enforcement<br/>Atomic check-and-consume"]
     end
@@ -239,47 +236,17 @@ graph LR
     WORKER --> DO
 ```
 
-- **Signature verification**: Must be done in Worker code. Use Web Crypto API for HMAC-SHA256. For RSA, use `crypto.subtle.verify` with imported public key.
+- **Signature verification**: Must be done in Worker code. Use `crypto.subtle.verify` with the `Ed25519` algorithm and the imported public key. Workers support Ed25519 natively; Fastly does not, which is why the SDK's verifier accepts an injected implementation.
 - **Single-use enforcement**: Workers KV is eventually consistent (up to 60 seconds propagation). For strict single-use, use Durable Objects which provide transactional consistency. For soft single-use (acceptable eventual consistency), Workers KV with a short TTL is cheaper.
 - **Config**: Store `EdgeConfig` in Workers KV. Refresh on a timer or via Cron Trigger.
 
-## Akamai EdgeWorkers
+## Akamai
 
-**Runtime**: Akamai EdgeWorkers (JavaScript, V8-based).
-
-**Capabilities and limitations**:
-
-| Capability | EdgeWorker |
-|---|---|
-| Execution time limit | 4ms (onClientRequest), 4ms (onClientResponse) |
-| Memory | 2 MB per event handler |
-| Network access | Yes (httpRequest -- limited, async) |
-| KV access | EdgeKV (eventually consistent, ~5-10s in-region) |
-| Native signed URL verification | Akamai EdgeAuth tokens (property-level config) |
-| Package size | 1 MB |
-| Languages | JavaScript (ES6+), limited stdlib |
-
-**Key considerations**:
-- Akamai's EdgeAuth token system can verify signed URLs at the property level (similar to CloudFront `trusted_key_groups`). Configure EdgeAuth on the property manager for protected paths.
-- EdgeKV provides edge-local key-value storage for single-use enforcement, but with eventual consistency (~5-10 seconds within a region).
-- The 4ms execution limit is tight. Bot detection (string matching) and ramp.json serving fit. HMAC verification with Web Crypto fits. HTTP subrequests do not fit in 4ms.
-- Complex logic (agent identity binding with HTTP subrequests) should be moved to the `onOriginRequest` handler (longer timeout, up to 120s).
-
-**Recommended approach**:
-
-```mermaid
-graph LR
-    subgraph "Akamai Edge"
-        EW_CLIENT["EdgeWorker: onClientRequest<br/>Bot detection<br/>ramp.json + rsl.txt serving<br/>EdgeAuth passthrough"]
-        EW_ORIGIN["EdgeWorker: onOriginRequest<br/>Agent identity binding<br/>Single-use enforcement"]
-        EKV["EdgeKV<br/>Config + single-use tracking"]
-        EDGEAUTH["Property Manager<br/>EdgeAuth token validation<br/>on /premium/* paths"]
-    end
-
-    EW_CLIENT --> EDGEAUTH
-    EDGEAUTH --> EW_ORIGIN
-    EW_ORIGIN --> EKV
-```
+Akamai is not a supported target. Its EdgeAuth token scheme verifies with a secret shared
+with the CDN, which is the model RAMP deliberately does not use: every RAMP delivery
+endpoint verifies with a public key and holds nothing secret. Running RAMP on Akamai would
+mean writing the Ed25519 verifier as an EdgeWorker, which the platform's 4 ms budget and
+2 MB handler memory make an open question rather than a supported path.
 
 ## Fastly Compute@Edge
 
@@ -307,7 +274,7 @@ graph LR
 ```mermaid
 graph LR
     subgraph "Fastly Edge"
-        COMPUTE["Compute Service (WASM)<br/>Bot detection<br/>ramp.json + rsl.txt serving<br/>HMAC/RSA verification<br/>Agent identity binding<br/>Single-use enforcement"]
+        COMPUTE["Compute Service (WASM)<br/>Bot detection<br/>ramp.json + rsl.txt serving<br/>Ed25519 signature verification<br/>Agent identity binding<br/>Single-use enforcement"]
         KV_STORE["KV Store<br/>Config + single-use tracking<br/>(strongly consistent in-POP)"]
         CONFIG_STORE["Config Store<br/>Signing keys, bot patterns"]
     end
@@ -318,14 +285,14 @@ graph LR
 
 ## Platform Comparison Matrix
 
-| Feature | CloudFront Function | CloudFront + Lambda@Edge | Cloudflare Worker | Akamai EdgeWorker | Fastly Compute |
-|---|---|---|---|---|---|
-| Bot detection | Yes | Yes | Yes | Yes | Yes |
-| ramp.json + rsl.txt serving | Yes | Yes | Yes | Yes | Yes |
-| Native signed URL verification | Yes (trusted_key_groups) | Yes (trusted_key_groups) | No (must implement) | Yes (EdgeAuth) | No (must implement) |
-| Custom HMAC verification | No (1ms limit) | Yes | Yes | Tight (4ms limit) | Yes |
-| Agent identity binding | No (no network) | Yes (DynamoDB lookup) | Yes | Yes (onOriginRequest) | Yes |
-| Single-use enforcement | No (no KV write) | Yes (DynamoDB) | Yes (Durable Objects) | Yes (EdgeKV, eventual) | Yes (KV Store, strong) |
-| Consistency model | N/A | Strong (DynamoDB) | Strong (Durable Objects) | Eventual (~5-10s) | Strong (in-POP) |
-| Latency overhead | &lt;0.1ms | 1-5ms | &lt;1ms | &lt;1ms | &lt;1ms |
-| Cost at 1M req/day | $0.10 | $0.70 + DDB | $0.50 | Tier-based | Usage-based |
+| Feature | CloudFront Function | CloudFront + Lambda@Edge | Cloudflare Worker | Fastly Compute |
+|---|---|---|---|---|
+| Bot detection | Yes | Yes | Yes | Yes |
+| ramp.json + rsl.txt serving | Yes | Yes | Yes | Yes |
+| Native signed URL verification | Yes (trusted_key_groups) | Yes (trusted_key_groups) | No (must implement) | No (must implement) |
+| Ed25519 signed-URL verification | No (1ms limit, no Ed25519) | Yes | Yes (native Web Crypto) | Yes (injected verifier) |
+| Agent identity binding | No (no network) | Yes | Yes | Yes |
+| Single-use enforcement | No (no KV write) | Yes (DynamoDB) | Yes (Durable Objects) | Yes (KV Store, strong) |
+| Consistency model | N/A | Strong (DynamoDB) | Strong (Durable Objects) | Strong (in-POP) |
+| Latency overhead | &lt;0.1ms | 1-5ms | &lt;1ms | &lt;1ms |
+| Cost at 1M req/day | $0.10 | $0.70 + DDB | $0.50 | Usage-based |

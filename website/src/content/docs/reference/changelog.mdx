@@ -8,6 +8,45 @@ and protocol history, see [`proto/CHANGELOG.md`](https://github.com/RAMP-Protoco
 
 ## Unreleased
 
+**Signed delivery URLs are documented as Ed25519 signed by the Exchange and
+verified with its published public key, not HMAC-SHA256 over a shared secret
+(documentation correction; no wire change).** Since the initial public snapshot
+the proto comments and twenty website pages described a symmetric scheme with a
+secret shared between the Exchange and the CDN. No implementation ever produced
+one, and the SDK published from this repository has never contained an HMAC.
+
+An implementer following the documentation got four things wrong at once. The
+signed message is `"GET\n"` followed by the canonical URL — the whole URL with
+the `sig` parameter removed and the remaining query sorted by key — so scheme,
+host, path and every publisher query parameter are covered, not four selected
+fields joined by newlines. The signature is base64url with no padding, not a hex
+digest. The expiry parameter is `exp`, documented as `expires`. There is a `kid`
+parameter the pages never mentioned, and no `txn_id` parameter at all;
+reconciliation joins on the signed-URL hash, which both the Exchange and the
+delivery endpoint record.
+
+`DomainVerificationConfirmation.cdn_type` now documents the value set
+`"edge-ed25519"` | `"cloudfront"`. The retired values named vendors rather than
+schemes, which made `"fastly"` actively wrong — a Fastly deployment runs the
+Ed25519 verifier. Each value now names the tenant signing scheme it mirrors.
+`signing_key` states its custody model: it carries public key material, and the
+Exchange signs with a private key it holds and never publishes. Akamai is no
+longer documented as a supported delivery target, because EdgeAuth verifies with
+a secret shared with the CDN.
+
+Who fetches the content is now written down. An agent embedding the SDK holds
+its own key and fetches for itself; a custodial agent never fetches, because its
+key lives in its identity service, which fetches on its behalf. Both present the
+same key to the delivery endpoint, which is what makes the binding check work
+either way. The pages said "the agent is the fetcher", which covered one case.
+
+The signed-URL verification page is rewritten against the shipped verifier, and
+now documents what it always did but never said: verification fails closed,
+agent binding is enforced by default, and the delivery endpoint holds public keys
+only. It also records that the three SDK verifiers order the signature and expiry
+checks differently, so the refusal reason for an expired URL is a diagnostic and
+not a contract.
+
 **`Offer.offer_id` is documented as an opaque unique identifier, not a resource
 key (comment clarification; no wire change).** The comment already said the id is
 assigned by the Exchange, but an implementation historically derived it from the

@@ -30,9 +30,9 @@ type TenantConfig struct {
     PricingOverrides map[string]*rampv1.Pricing // path pattern -> pricing
 
     // Content delivery
-    ContentBaseURL string  // CDN base URL (e.g., "https://cdn.techcrunch.com")
-    CDNType        CDNType // CloudFront, Akamai, Fastly, GenericHMAC
-    SigningKeyRef  string  // Reference to key in secrets manager
+    ContentBaseURL string        // CDN base URL (e.g., "https://cdn.techcrunch.com")
+    Scheme         SigningScheme // ED25519 or AWS_CLOUDFRONT_RSA
+    SigningKeyRef  string        // Reference to key in secrets manager
 
     // Signed URL configuration
     URLTTLSeconds  int  // Default: 300 (5 minutes)

@@ -18,7 +18,7 @@ The Exchange implements the RAMP v1.0 `ExchangeService` (4 RPCs: `DiscoverResour
 | **Catalog Management** | Maintains an in-memory resource catalog (radix trie) per provider tenant, built from RSL, sitemaps, CMS APIs, and third-party intelligence providers. Scope-based catalog filtering ensures requesters only see resources matching their declared scopes |
 | **Pricing** | Computes offer pricing from Exchange config overrides, RSL-derived pricing, and tenant defaults. Includes unit_cost normalization for cross-provider comparison |
 | **Transaction Execution** | Stateless offer verification (Ed25519), billing authorization via pluggable adapter, durable transaction logging (write-before-sign invariant). Subscription offers include `SubscriptionQuotaInfo` for proactive quota signaling |
-| **Signed URL Generation** | Per-tenant HMAC-SHA256 signed URLs for CDN-verified resource delivery, with configurable TTL and requester identity binding |
+| **Signed URL Generation** | Per-tenant Ed25519 signed URLs, or CloudFront RSA where the CDN verifies natively, with configurable TTL and requester identity binding |
 | **Usage Reporting** | Tracks reporting obligations per transaction, enforces compliance rates, blocks non-compliant agents. Returns `report_id` for dispute chain linkage (v1.0) |
 | **Attestation Verification (v1.0)** | Verifies `ResourceAttestation` signatures at catalog push time using keys from the verifier's WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`). Propagates valid attestations to offers |
 | **Dispute Resolution (v1.0)** | Accepts `DisputeTransaction` RPCs, auto-resolves disputes using CDN logs and cryptographic evidence (Tier 1), applies rule-based review (Tier 2), and escalates patterns (Tier 3) |
@@ -78,7 +78,7 @@ The Exchange Node has five internal modules. Each module owns a distinct respons
 2. **Transaction Engine** verifies the offer's signature (Ed25519 for offers, stateless — no catalog lookup), then calls the Billing Adapter, then writes to the Transaction Log, then calls the Signing Engine. This is a sequential pipeline — no parallelism within a single transaction. Offers are stateless: no OfferStore, no OfferCache, no ResolveOffer.
 3. **Reporting Tracker** is called by the ReportUsage RPC handler. It reads the obligation from the Transaction Log to validate the report, then updates the obligation state.
 4. **RSL Ingestion** runs on a configurable interval (default: 5 minutes). It fetches, parses, diffs, and produces a serialized catalog binary that the Exchange loads via atomic pointer swap. Source priority is defined in the Resource Ingestion Pipeline design doc.
-5. **Signing Engine** has two subsystems: (a) Ed25519 for offer signatures (asymmetric — agents and Brokers verify with the public key), and (b) HMAC-SHA256 for signed URLs (symmetric — shared secret between Exchange and CDN). Both are pure function calls — no external I/O. Keys are loaded at startup and rotated via a background goroutine watching a key store.
+5. **Signing Engine** has two subsystems, both asymmetric: (a) Ed25519 for offer signatures, verified by agents and Brokers with the published public key, and (b) delivery-URL signatures, verified by the delivery endpoint — Ed25519 at a code-capable edge, or RSA where CloudFront verifies natively. They differ in which key signs and who verifies, not in the primitive. Both are pure function calls — no external I/O. Keys are loaded at startup and rotated via a background goroutine watching a key store.
 
 ## Module Dependency Graph
 
@@ -124,14 +124,14 @@ The Exchange sits between AI agents/Brokers and provider CDN infrastructure:
 
 1. An AI agent discovers available resources by calling `DiscoverResources` — the Exchange verifies the `Requester` identity (Ed25519 signature over domain-bound key), filters the catalog by the requester's scopes, and returns signed offers. If a `Delegation` is present, the Exchange verifies the delegation JWT chain — including the **holder-binding** step (the request-signing key MUST hash to the final JWT's `cnf.jkt`; see [Verification](/protocol/authentication/#verification)) — before granting scoped access. When the request was forwarded through one or more intermediaries, each adds a labeled RFC 9421 HTTP Message Signature to the header stack (each covering the request plus the prior hop's signature); the Exchange verifies the whole stack to prove the request path and counts hops against `max_hops` / `max_intermediary_hops`
 2. The agent executes a transaction by calling `ExecuteTransaction` with a chosen offer — the Exchange verifies the offer signature, authorizes billing, logs the transaction, and returns a signed URL
-3. The agent fetches the resource using the signed URL — the CDN edge function verifies the URL signature using the same HMAC secret shared with the Exchange
+3. The agent fetches the resource using the signed URL — the delivery endpoint verifies the URL signature with the Exchange's published public key, holding nothing secret
 4. The agent reports usage by calling `ReportUsage` — the Exchange validates the report and updates the obligation state
 
 ## Key Design Decisions
 
 - **Stateless offer verification**: Offers are Ed25519-signed tokens. ExecuteTransaction verifies and decodes the offer from its signature — no offer storage, no offer cache, no re-resolution against the catalog. This eliminates a class of consistency bugs and simplifies horizontal scaling.
 - **Write-before-sign invariant**: The transaction log write MUST complete before the Signing Engine generates the signed URL. No signed URL is ever issued for an unrecorded transaction.
-- **Two signing subsystems**: Ed25519 for offer signatures (asymmetric, agents verify with public key) and HMAC-SHA256 for signed URLs (symmetric, shared secret between Exchange and CDN). Different trust models require different cryptographic primitives.
+- **Two signing subsystems, one primitive**: Ed25519 for offer signatures, verified by agents and Brokers, and Ed25519 for delivery URLs, verified by the delivery endpoint (RSA where CloudFront verifies natively). Both are asymmetric and neither shares a secret; separating them isolates the keys and their audiences, not the algorithms.
 - **Pluggable Billing Adapter**: The single point of custom integration per deployment. The open-source Exchange is billing-system-agnostic.
 - **Copy-on-write catalog**: The resource catalog uses `atomic.Pointer` for lock-free reads on the hot path. The ingestion pipeline builds a new catalog snapshot in the background and swaps it atomically.
 - **Single currency per deployment (v1)**: No cross-currency conversion. The Exchange operator sets a single operating currency. Cross-currency is a v2 feature.

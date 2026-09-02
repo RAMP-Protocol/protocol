@@ -33,10 +33,12 @@ Target: **under 10 minutes** from Exchange operator contract to live edge functi
 
 ## Signing Scope
 
-The edge function deals exclusively with **signed URL verification** (HMAC-SHA256 or CDN-native RSA). It does NOT verify offer signatures. Offer signatures use Ed25519 and are verified by agents and Brokers, not the edge function. The two signing subsystems are independent:
+The edge function deals exclusively with **signed URL verification**. It does NOT verify offer signatures. Both subsystems use Ed25519; they differ in which key signs and who verifies:
 
-- **Signed URLs** (Exchange to CDN): HMAC-SHA256 -- shared secret between Exchange and edge function
-- **Offer signatures** (Exchange to Agent/Broker): Ed25519 -- asymmetric, verified via public key
+- **Signed URLs** (Exchange to delivery endpoint): the Exchange signs with the tenant's key; the edge verifies with the published public key, or CloudFront verifies an RSA signature natively.
+- **Offer signatures** (Exchange to Agent/Broker): the Exchange signs with its offer key; agents and Brokers verify with the published public key.
+
+One primitive, two audiences. Neither carries a shared secret.
 
 ## How It Fits in the RAMP Architecture
 
@@ -95,10 +97,10 @@ handleRequest(ctx):
        -> Pass through (no edge function involvement)
 
   3. If request has signed URL parameters:
-       a. Verify signature (CDN-native or HMAC)
+       a. Verify the Ed25519 signature (or CDN-native RSA)
        b. If signature invalid -> 403 (always, regardless of bot status)
-       c. Check expiry (reject if > maxUrlTtlSeconds from issuance)
-       d. If agentBindingEnabled: validate agent_id param
+       c. Check expiry (reject if exp has passed)
+       d. Agent binding is enforced by default: validate agent_id param
        e. If singleUseEnabled: atomic check-and-consume via KV
        f. All pass -> allow request through to origin/cache
        g. Any fail -> 403 with specific error
@@ -124,14 +126,14 @@ The edge function serves `/.well-known/ramp.json` containing the `WellKnownManif
 
 ### Signed URL Passthrough with Agent Identity Validation
 
-When a request arrives with signed URL parameters, the edge function verifies the signature, checks expiry, validates agent identity binding (if enabled), and enforces single-use (if enabled). See [Signed URL Verification](/components/edge-function/signed-url-verification/) for the full verification flow.
+When a request arrives with signed URL parameters, the edge function verifies the signature, checks expiry, validates agent identity binding (on by default), and enforces single-use (off by default, and best-effort). See [Signed URL Verification](/components/edge-function/signed-url-verification/) for the full verification flow.
 
 ## Performance Budget
 
 The edge function must add **< 5ms** to request latency (p99). Per-request operations are strictly limited to:
 
 - String comparison (User-Agent matching against bot patterns)
-- Signature verification (HMAC-SHA256 or RSA via Web Crypto API)
+- Signature verification (Ed25519 via Web Crypto, or CDN-native RSA)
 - KV read (agent_id check, if agent binding is enabled)
 - URL parameter parsing
 
@@ -149,8 +151,8 @@ Single-use disabled, everything else works
 Stale config, core functionality preserved
   | ramp.json generation fails
 Bot detection + 403 redirect still work
-  | Signing secret missing
-Bot detection works, paid access broken (503)
+  | Verification key unavailable
+Bot detection works, paid access broken (503 verify_unavailable)
   | Edge function itself crashes
 CDN serves content normally (no protection)
 ```
