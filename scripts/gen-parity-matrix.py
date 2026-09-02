@@ -69,7 +69,7 @@ _SKIP_DIR_PARTS = frozenset(
 # Human-readable package headings, in the order Go layers them (L1 -> L2 -> server).
 _PKG_ORDER = ["helpers", "resolvers", "core", "connect", "connectserver"]
 _PKG_TITLE = {
-    "helpers": "helpers — L1 pure primitives (crypto, canonicalization, money, scopes)",
+    "helpers": "helpers — L1 pure primitives (crypto, canonicalization, money, scopes, license terms)",
     "resolvers": "resolvers — L2 I/O (key/endpoint resolution, active-key, SSRF-guarded fetch)",
     "core": "core — L2 composition (verifier, signing transport, windows, replay)",
     "connect": "connect — Connect client + interceptors",

@@ -195,6 +195,71 @@ func buildClientRequestVectors(t *testing.T) []clientRequestVector {
 	})
 	out = append(out, executeVector(t, baseOpts))
 	out = append(out, brokerResolveVector(t, baseOpts))
+	out = append(out, catalogVectors(t, baseOpts)...)
+	return out
+}
+
+// catalogVectors captures the publisher's three verbs, which live on their own
+// client because CatalogService is its own address — an Exchange advertises it
+// separately from the ExchangeService endpoint — and its caller is a different
+// party with a different key. They carry no idempotency key by design (the catalog
+// upsert and delete are naturally idempotent, so a key there would be ceremony)
+// and forward no requester (the caller is named by caller_id), so both columns
+// record empty: a client that minted a key or stamped the requester it was built
+// with would move them.
+func catalogVectors(t *testing.T, baseOpts []rampconnect.ClientOption) []clientRequestVector {
+	t.Helper()
+	var out []clientRequestVector
+	capture := func(name, verb string, run func(c *rampconnect.CatalogClient, exchange string) error) {
+		t.Helper()
+		var seen capturedRequest
+		srv := recordingOrigin(t, &seen)
+		defer srv.Close()
+		host := strings.TrimPrefix(srv.URL, "http://")
+		if err := run(rampconnect.NewCatalogClient(srv.URL, baseOpts...), host); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		ver, _ := seen.body["ver"].(string)
+		key, _ := seen.body["idempotency_key"].(string)
+		out = append(out, clientRequestVector{
+			Name: name, Verb: verb, Path: seen.path, Ver: ver,
+			IdempotencyKey: key, KeyMinted: false, RequesterID: requesterIDOf(seen.body),
+		})
+	}
+	entry := &rampv1.ResourceEntry{Domain: "publisher.test", Path: "/x", Terms: []*rampv1.LicenseTerm{{
+		Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED,
+		Pricing:   &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"},
+	}}}
+	capture("push_resources", "pushResources", func(c *rampconnect.CatalogClient, exchange string) error {
+		_, err := c.PushResources(context.Background(), &rampv1.PushResourcesRequest{
+			Exchange: exchange, TenantId: "tenant-1", CallerId: "publisher.test",
+			Entries: []*rampv1.ResourceEntry{entry},
+		})
+		return err
+	})
+	// `ver` is filled only when the caller left it empty, on the catalog legs as on
+	// every other. Discovery had a case for that rule and the catalog verbs did not,
+	// so a port that stamped unconditionally — overwriting a version its caller chose
+	// deliberately — stayed green here while Go's own tests caught it.
+	capture("push_resources_caller_ver_wins", "pushResources", func(c *rampconnect.CatalogClient, exchange string) error {
+		_, err := c.PushResources(context.Background(), &rampv1.PushResourcesRequest{
+			Exchange: exchange, TenantId: "tenant-1", CallerId: "publisher.test", Ver: "9.9",
+			Entries: []*rampv1.ResourceEntry{entry},
+		})
+		return err
+	})
+	capture("remove_resources", "removeResources", func(c *rampconnect.CatalogClient, exchange string) error {
+		_, err := c.RemoveResources(context.Background(), &rampv1.RemoveResourcesRequest{
+			Exchange: exchange, TenantId: "tenant-1", Paths: []string{"/x"},
+		})
+		return err
+	})
+	capture("refresh_catalog", "refreshCatalog", func(c *rampconnect.CatalogClient, exchange string) error {
+		_, err := c.RefreshCatalog(context.Background(), &rampv1.RefreshCatalogRequest{
+			Exchange: exchange, TenantId: "tenant-1",
+		})
+		return err
+	})
 	return out
 }
 

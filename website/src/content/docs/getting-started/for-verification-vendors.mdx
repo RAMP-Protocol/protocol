@@ -105,12 +105,12 @@ Profile-specific claims use a namespaced format. Any Exchange that declares conf
 
 ## How You Push Data
 
-You push signed `ResourceAttestation` entries to Exchanges via the **CatalogService API**:
+You push signed `ResourceAttestation` entries to Exchanges via the **CatalogService API**, `POST /ramp.v1.CatalogService/PushResources`:
 
-```
-POST /ramp.v1.CatalogService/PushResources
-
+{/* ramp-validate: PushResourcesRequest */}
+```json
 {
+  "exchange": "exchange.example.com",
   "tenant_id": "hearst-media",
   "entries": [
     {
@@ -143,7 +143,11 @@ POST /ramp.v1.CatalogService/PushResources
 }
 ```
 
+`exchange` is REQUIRED and names the bare host of the Exchange this push is addressed to. The SDK's catalog client refuses a request without it **before signing**, so omitting it fails locally rather than at the Exchange.
+
 The request itself is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) in the HTTP headers (not an in-message field); `caller_id` identifies the pusher.
+
+You do not hand-roll that call. The SDK's catalog client — `connect.NewCatalogClient` (Go), `createCatalogClient` (TypeScript), `ramp_sdk.client.CatalogClient` (Python) — builds, signs and sends it against the CatalogService address you have configured for that Exchange. The client itself does not inspect your entries; the Exchange's own envelope and term checks ship beside it as `validateResourceEntry` and its twins, which you call on each entry before the push. See [Source 7: CatalogService API Push](/components/content-ingestion/sources/#source-7-catalogservice-api-push) for the three-language example.
 
 The same `PushResources` API works regardless of domain. A de-identification auditor pushing HIPAA compliance attestations for medical imaging uses the same endpoint — only the `claims` content differs.
 

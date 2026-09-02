@@ -1032,9 +1032,10 @@ enum TermSemantics {
 // RestrictionKind — Which dimension a Restriction constrains.
 //
 // The token vocabulary for each open axis is authored ONLY in the
-// (ramp.v1.vocab_enum) entries on the corresponding enum value below; the
-// functiontokens / geographytokens / usertypes constants + IsRegistered derive
-// from them. GEOGRAPHY lists only the non-ISO specials (*, EU, EEA) — ISO
+// (ramp.v1.vocab_enum) entries on the corresponding enum value below, and its
+// accepted aliases ONLY in the (ramp.v1.vocab_enum_alias) entries beside them;
+// the functiontokens / geographytokens / usertypes constants, IsRegistered,
+// Aliases and Canonical derive from them. GEOGRAPHY lists only the non-ISO specials (*, EU, EEA) — ISO
 // 3166-1 alpha-2 codes are validated structurally (two-letter uppercase),
 // not enumerated.
 enum RestrictionKind {
@@ -1066,7 +1067,15 @@ enum RestrictionKind {
     (ramp.v1.vocab_enum) = "stream",
     (ramp.v1.vocab_enum) = "print",
     (ramp.v1.vocab_enum) = "manufacture",
-    (ramp.v1.vocab_enum) = "sell"
+    (ramp.v1.vocab_enum) = "sell",
+    // Accepted aliases, canonicalised at ingest (see vocab.proto).
+    (ramp.v1.vocab_enum_alias) = "train-ai=ai-train",
+    (ramp.v1.vocab_enum_alias) = "generative-ai=ai-input",
+    (ramp.v1.vocab_enum_alias) = "scrape=crawl",
+    (ramp.v1.vocab_enum_alias) = "tdm=text-and-data-mining",
+    (ramp.v1.vocab_enum_alias) = "copy=reproduce",
+    (ramp.v1.vocab_enum_alias) = "adapt=modify",
+    (ramp.v1.vocab_enum_alias) = "derivative=modify"
   ];
 
   // Where the agent may use the content. ISO 3166-1 alpha-2 codes (US, DE, GB)
@@ -1086,7 +1095,11 @@ enum RestrictionKind {
     (ramp.v1.vocab_enum) = "non_profit",
     (ramp.v1.vocab_enum) = "news_publisher",
     (ramp.v1.vocab_enum) = "broadcaster",
-    (ramp.v1.vocab_enum) = "commercial_entity"
+    (ramp.v1.vocab_enum) = "commercial_entity",
+    // Accepted aliases, canonicalised at ingest (see vocab.proto).
+    (ramp.v1.vocab_enum_alias) = "personal=individual",
+    (ramp.v1.vocab_enum_alias) = "business=commercial_entity",
+    (ramp.v1.vocab_enum_alias) = "enterprise=commercial_entity"
   ];
 
   RESTRICTION_KIND_OTHER = 4;  // Custom axis; values carried in permitted/prohibited
@@ -1219,8 +1232,18 @@ message Restriction {
     expression: "this.permitted.all(p, !(p in this.prohibited))"
   };
 
-  // Which dimension this restriction applies to.
-  RestrictionKind kind = 1 [(buf.validate.field).enum = {not_in: [0]}];
+  // Which dimension this restriction applies to. Defined-only: the axis set is
+  // CLOSED, and a number outside it is refused rather than ignored. A custom
+  // axis is RESTRICTION_KIND_OTHER, whose meaning rides in permitted/prohibited,
+  // so a new number was never the extension mechanism — accepting one would
+  // admit a restriction no consumer can evaluate onto a term whose default is
+  // BINDING (see advisory below), which fails open on the axis a publisher most
+  // needs enforced. Closing the axis does NOT bound the cost of the one-per-kind
+  // rule below, and must not be read as doing so: a number this rule refuses is
+  // still distinct from every other, so that rule's all() finds no duplicate to
+  // stop on and walks the list in full anyway. Its cost is bounded by the size
+  // test the rule itself carries.
+  RestrictionKind kind = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
 
   // Tokens allowed on this axis. Empty = all permitted.
   // For FUNCTION: "ai-input", "ai-train", "search", "editorial", "commercial", …
@@ -1368,10 +1391,27 @@ message LicenseTerm {
   };
   // At most one Restriction per axis — restrictions on the same kind are
   // AND-combined, so duplicates are an authoring error.
+  //
+  // The leading size test is what bounds this rule, and it is load-bearing rather
+  // than an optimisation. The predicate compares the list against itself, so it is
+  // quadratic, and the max_items cap on the field does NOT stop it: protovalidate
+  // collects every violation rather than short-circuiting, so a field rule that
+  // fires still leaves the message rules to walk the whole oversized list. Nor does
+  // the enum being defined-only help — an undefined number is still distinct from
+  // every other, so all() never finds the duplicate it would stop on. Measured
+  // without the test, four thousand restrictions cost seventeen seconds to refuse
+  // from twenty kilobytes of wire, before any caller was authenticated.
+  //
+  // It short-circuits to TRUE rather than false so an over-long list reports
+  // repeated.max_items alone, which is its actual fault; failing here instead would
+  // name the wrong rule. The threshold MUST equal that cap — a list longer than the
+  // cap is refused by it, and one shorter is cheap to walk — and a conformance test
+  // holds the two numbers together, because raising the cap alone would let a
+  // duplicate-axis term through the gap.
   option (buf.validate.message).cel = {
     id: "license_term.one_restriction_per_kind"
     message: "at most one restriction is allowed per kind"
-    expression: "this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)"
+    expression: "this.restrictions.size() > 8 || this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)"
   };
 
   // Governing license document. Authoritative for REFERENCE_ONLY terms, which
@@ -1384,13 +1424,35 @@ message LicenseTerm {
 
   // Usage restrictions (function, geography, user-type).
   // Multiple restrictions are AND-combined — the agent must satisfy all of them.
-  repeated Restriction restrictions = 3;
+  // At most 8, and this list is the one of the three that does NOT carry the
+  // contract's usual 64: only one restriction per axis is valid, the axis enum
+  // is defined-only, so four is the longest conformant list and eight leaves
+  // room for an axis this version does not have. Like the caps on quotas and
+  // obligations, this one bounds the DOCUMENT — how many restrictions one term
+  // may carry — and not the work of checking it: a validator walks every element
+  // it is handed before any cardinality rule is reported, so an over-cap list is
+  // traversed in full on its way to being refused.
+  //
+  // What makes this list different is that one rule walks it against ITSELF. The
+  // one-per-kind rule below is quadratic, so it carries its own size test and
+  // stays silent above this cap; a conformance guard holds the two numbers equal,
+  // because a cap raised without the test would leave the lists in between
+  // unchecked for duplicate axes and accepted. The neighbouring disjointness rule
+  // on each element is quadratic only in that element's two token lists, both
+  // capped at 64, so its cost is bounded per restriction and linear across the
+  // list — it needs no such test.
+  repeated Restriction restrictions = 3 [(buf.validate.field).repeated.max_items = 8];
 
   // Usage caps. The agent must not exceed any individual Quota.
-  repeated Quota quotas = 4;
+  // At most 64, the bound every per-message list in this contract carries when
+  // no rule walks it more than once. It bounds what one term may carry, not the
+  // work of checking one — a validator walks every element it is handed before
+  // the cap is reported, so the cost of checking is bounded at the transport.
+  repeated Quota quotas = 4 [(buf.validate.field).repeated.max_items = 64];
 
   // Post-use behavioral requirements.
-  repeated Obligation obligations = 5;
+  // At most 64, for the reason quotas carries.
+  repeated Obligation obligations = 5 [(buf.validate.field).repeated.max_items = 64];
 
   // Pricing for this term. REQUIRED for every term regardless of semantics —
   // an agent cannot act on a priceless term, so absent Pricing is a validation
@@ -2120,6 +2182,29 @@ enum IngestionSource {
 
 // CatalogService — Optional RPC for providers/CMS/third-party intelligence
 // providers to push resource metadata to an Exchange.
+//
+// Every pushed entry is checked in two tiers, and both are stated here so a
+// publisher can run them before sending. The wire tier is protovalidate: the
+// ResourceEntry envelope rules and the LicenseTerm structural and cross-field
+// rules, applied to the request exactly as received. The ingest tier runs over
+// the canonicalised terms: restriction tokens are trimmed of RFC 8259
+// whitespace, ASCII-case-folded (lower for FUNCTION and USER_TYPE, upper for
+// GEOGRAPHY; a non-ASCII byte is never folded) and alias-resolved to their
+// registered form — the aliases are authored beside the tokens, on the
+// RestrictionKind values — after which a bare (non-namespaced) Pricing.unit or
+// Quota.metric that is not a registered token is rejected, while an
+// unregistered restriction token and an OBLIGATION_KIND_OTHER obligation
+// without detail are accepted and reported in PushResourcesResponse.warnings.
+// The SDK ships both tiers as a publisher-side pre-check; the Exchange's own
+// run of them is the deciding one.
+//
+// A push is ALL-OR-NOTHING, at both tiers. A hard rejection anywhere in the
+// submission — an envelope or term rule at the wire tier, an unregistered bare
+// unit or metric at the ingest tier — refuses the entire submission and persists
+// nothing; the publisher fixes and resubmits the whole set. The refusal names
+// the entries that failed and why, and that per-entry detail is REPORTING, never
+// partial acceptance: no entry of a refused submission is stored. Warnings do
+// not refuse anything.
 service CatalogService {
   // Push or update resource entries in the Exchange catalog.
   rpc PushResources(PushResourcesRequest) returns (PushResourcesResponse);
@@ -2158,8 +2243,17 @@ message PushResourcesRequest {
   string ver = 1;
   // Tenant identifier
   string tenant_id = 2;
-  // Content entries to push
-  repeated ResourceEntry entries = 3;
+  // Content entries to push. At least one: an empty push asks for nothing and
+  // is refused rather than answered with zero counts. At most 256, the bound a
+  // caller-chosen batch carries elsewhere in this contract (see ResourceQuery.uris)
+  // — it bounds one submission, so a larger feed is pushed in several. The cap is
+  // over entries because a submission is stored or refused whole, and a refusal
+  // names each entry that failed; it does not bound the work of checking a
+  // submission, which the recipient bounds at the transport.
+  repeated ResourceEntry entries = 3 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 256
+  ];
 
   // Identity of the caller (who is pushing this data).
   // The Exchange verifies this matches a registered CatalogService client.
@@ -2186,29 +2280,67 @@ message PushResourcesRequest {
   repeated string ext_critical = 90;
 }
 
+// ResourceEntry — one catalog row as a publisher (or an authorised contributor)
+// pushes it. The envelope fields carry their own wire rules, so an entry that
+// cannot become a catalog URI is refused at the boundary rather than after
+// ingestion; the licensing terms inside carry the LicenseTerm rules. See
+// CatalogService for the second, ingest-time tier (token canonicalisation and
+// registry membership).
+//
+// The list caps here and on LicenseTerm bound HOW MANY, never how large: how many
+// terms one entry may carry, how many entries a push can store, and how many paths
+// a rejection has to name back. They do not bound the entry's SIZE either — several
+// members inside one carry no length rule — and they do NOT bound the work of
+// checking a push, and must not be read as doing so — a
+// validator walks every element it is handed and reports every violation before
+// any cardinality rule is applied, so an over-cap list is fully traversed on its
+// way to being refused. The work is bounded one layer down, by the maximum
+// request size the recipient will read; a deployment that exposes CatalogService
+// sets that cap, and the SDK's server binding sets a default.
 message ResourceEntry {
-  // Provider domain
-  string domain = 1;
-  // Content path
-  string path = 2;
+  // Provider domain — the bare host the resource lives on, in the shape
+  // "Request recipient" defines in the file header: a port is allowed, a
+  // scheme, path, query or userinfo is not. With path it forms the catalog URI
+  // by concatenation, so a value carrying anything but a host would choose the
+  // URI rather than merely name the host.
+  string domain = 1 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
+  // Content path — an absolute URL path such as "/premium/article-42.html":
+  // starts with "/", carries no query or fragment delimiter, no whitespace and
+  // no control character, and is at most 2048 characters. Characters, not bytes:
+  // protovalidate's max_len counts Unicode code points, and the pattern admits
+  // non-ASCII, so a conformant path can exceed 2048 bytes.
+  string path = 2 [
+    (buf.validate.field).string = {
+      min_len: 1,
+      max_len: 2048,
+      pattern: "^/[^?#\\x00-\\x20\\x7f]*$"
+    }
+  ];
   // Content identifier
-  optional string content_id = 3;
+  optional string content_id = 3 [(buf.validate.field).string.max_len = 255];
   // Content title
-  optional string title = 4;
+  optional string title = 4 [(buf.validate.field).string.max_len = 512];
   // Word count
-  optional int32 word_count = 5;
+  optional int32 word_count = 5 [(buf.validate.field).int32.gte = 0];
   // Estimated quantity in the metering unit
-  optional int32 estimated_quantity = 6;
-  // Content hash
-  optional string content_hash = 7;
+  optional int32 estimated_quantity = 6 [(buf.validate.field).int32.gte = 0];
+  // Content hash, carried as the publisher computed it — a bare hex digest or a
+  // "method:hexdigest" form; bounded in length, never format-checked, because
+  // hash_method names the algorithm.
+  optional string content_hash = 7 [(buf.validate.field).string.max_len = 255];
   // Hash algorithm
-  optional string hash_method = 8;
+  optional string hash_method = 8 [(buf.validate.field).string.max_len = 64];
   // How the entry was discovered
   optional IngestionSource source = 9;
 
   // Who provided this resource metadata. Creates audit trail for
   // "where did this catalog entry come from?"
-  optional string provenance_source = 10;  // e.g., "gumgum.com", "ssp-alpha.com", "wordpress-plugin"
+  optional string provenance_source = 10 [(buf.validate.field).string.max_len = 260];  // e.g., "gumgum.com", "ssp-alpha.com", "wordpress-plugin"
 
   // When this metadata was collected/generated.
   optional google.protobuf.Timestamp provenance_timestamp = 11;
@@ -2223,14 +2355,19 @@ message ResourceEntry {
   // directory (the JWK Set at /.well-known/http-message-signatures-directory;
   // the keyid is the key's RFC 7638 thumbprint). The verifier's ramp.json
   // carries only its role, determined by the verifier's operator.
-  repeated ResourceAttestation attestations = 12;
+  repeated ResourceAttestation attestations = 12 [(buf.validate.field).repeated.max_items = 64];
 
   // Publisher-declared licensing terms for this resource.
   // See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST
   // be present. For REFERENCE_ONLY terms, License.uri is authoritative.
   // The Exchange validates ENUMERATED terms at push time and surfaces them
-  // in Offer.terms on discovery.
-  repeated LicenseTerm terms = 13;
+  // in Offer.terms on discovery. At most 32 terms per entry, stated on the wire
+  // so every implementation refuses the same size. An over-cap entry refuses the
+  // whole submission, as every catalog rejection does; what being a wire rule
+  // changes is WHEN — the refusal now happens at the boundary, before any
+  // per-entry classification runs, which is why the rejection reason that named
+  // this cap can no longer be produced for a push.
+  repeated LicenseTerm terms = 13 [(buf.validate.field).repeated.max_items = 32];
 
   // Optional mutability hint. When omitted, the Exchange applies the `STATIC`
   // default at Offer build; an explicit `UNSPECIFIED` is rejected. A value in
@@ -2253,16 +2390,26 @@ message PushResourcesResponse {
   // RAMP protocol version — "1.0". Stamped by the sender from a single
   // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
-  // Number of entries accepted
+  // Number of entries accepted. A push is all-or-nothing, so a successful push
+  // stored every entry it carried and this is the submission's own size. A push
+  // that could not be applied is not a response at all: it travels as a non-OK
+  // transport error carrying ErrorDetail.catalog_rejection.
   int32 accepted = 2;
-  // Number of entries rejected
+  // Number of entries rejected. Structurally always 0 on this path, and kept for
+  // the same reason CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED is kept: a
+  // rejection returns an error rather than a response, so there is no successful
+  // answer in which this can be non-zero. It remains meaningful only for a
+  // deployment that applies catalog rules somewhere the all-or-nothing rule above
+  // does not front. Do NOT read a zero here as "nothing failed" — read `accepted`.
   int32 rejected = 3;
 
-  // Non-fatal issues encountered during ingestion.
-  // Examples: unrecognized vocab token in a Restriction (term accepted but flagged),
-  //           REFERENCE_ONLY term missing License.uri (informational).
-  // Warnings do not cause rejection — they are surfaced so publishers can fix
-  // their feeds without a hard failure.
+  // Non-fatal issues encountered during ingestion — the ingest tier's lint, which
+  // accepts the term and flags it. Examples: an unregistered bare restriction
+  // token on any axis, and an OBLIGATION_KIND_OTHER obligation with no detail.
+  // Warnings do not cause rejection; they are surfaced so publishers can fix their
+  // feeds without a hard failure. A condition that rejects is not a warning — a
+  // REFERENCE_ONLY term with no License.uri, for instance, is refused by
+  // license_term.reference_only.requires_uri and never reaches this list.
   repeated string warnings = 4;
 
   // Extension point
@@ -2281,8 +2428,16 @@ message RemoveResourcesRequest {
   string ver = 1;
   // Tenant identifier
   string tenant_id = 2;
-  // Paths to remove
-  repeated string paths = 3;
+  // Paths to remove — the absolute-path shape ResourceEntry.path carries, at
+  // least one and at most 256, the same batch bound PushResourcesRequest.entries
+  // carries and for the same reason.
+  repeated string paths = 3 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 256,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 2048,
+    (buf.validate.field).repeated.items.string.pattern = "^/[^?#\\x00-\\x20\\x7f]*$"
+  ];
 
   // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
   // "exchange.example" or "exchange.example:8081"). See "Request recipient" in
@@ -2992,7 +3147,15 @@ message WellKnownManifest {
   // Exchange-only. Health check endpoint URL.
   optional string health_endpoint = 13;
 
-  // Exchange-only. CatalogService endpoint URL (if exposed).
+  // Exchange-only. CatalogService endpoint URL (if exposed). It carries the
+  // same binding as endpoint: it MUST be on the same host AND PORT that serve
+  // this manifest, or on a subdomain of that host on that port, and MUST NOT
+  // carry userinfo. A consumer refuses a catalog endpoint anywhere else — a
+  // publisher's push is a signed call, and a manifest naming an unrelated host
+  // would redirect it to a party the signature never covered. The host match is
+  // on a full dot-delimited label boundary, and a port equal to the scheme's
+  // default and an omitted port are the SAME port. Absent means this Exchange
+  // does not expose CatalogService; a consumer does not fall back to endpoint.
   optional string catalog_endpoint = 14;
 
   // ext is conventional field 15 in this proto; see below.
@@ -4003,7 +4166,13 @@ enum CatalogRejectionReason {
   CATALOG_REJECTION_REASON_MALFORMED_ENTRY = 5;         // a resource entry failed schema/validation
   CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN = 6;     // an unregistered vocab token in a restriction/term
   CATALOG_REJECTION_REASON_QUOTA_EXCEEDED = 7;          // contributor push quota exceeded (per-caller)
-  CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED = 8;    // a single entry carries more license terms than allowed (per-entry cap)
+  // A single entry carries more license terms than ResourceEntry.terms allows.
+  // Retired on the PushResources path: the cap is a wire rule now, so a push
+  // carrying an over-cap entry is refused whole, before any per-entry
+  // classification runs, and no rejection naming this reason can be produced for
+  // it. Kept for a deployment that applies the cap somewhere the wire rules do
+  // not reach — an entry that arrived by some other route than PushResources.
+  CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED = 8;
   // The URI cannot be claimed by this caller's entries. Named from the caller's
   // own perspective ON PURPOSE: it MUST NOT disclose that another resource/
   // contributor already owns the URI. Within one publisher, mutually-untrusting
@@ -4022,7 +4191,9 @@ message CatalogRejection {
     (buf.validate.field).enum = {defined_only: true, not_in: [0]}
   ];
 
-  // For partial-batch failures: the entry paths that were rejected.
+  // The entry paths the refusal is about. A catalog push is all-or-nothing, so
+  // these name which entries failed inside a submission that persisted nothing —
+  // they are not a list of what was dropped from an otherwise applied batch.
   repeated string rejected_paths = 2;
 }
 

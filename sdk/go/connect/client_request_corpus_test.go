@@ -61,13 +61,30 @@ func TestClientRequestCorpusReplay(t *testing.T) {
 	}
 	// The version the client stamps has one owner. A vector that recorded a literal would
 	// keep passing after a protocol bump moved it.
+	//
+	// The exception is derived from the naming convention rather than listed, so a new
+	// verb's fill-when-empty case joins it without editing this test — and it is an
+	// exception with its own assertion, not a hole: a "caller ver wins" vector that
+	// recorded the stamped default would be proving the opposite of its name.
+	const callerVerSuffix = "_caller_ver_wins"
+	callerVer := 0
 	for _, v := range doc.Vectors {
-		if v.Name == "discover_caller_ver_wins" {
-			continue // the caller's own value, which is the point of that case
+		if strings.HasSuffix(v.Name, callerVerSuffix) {
+			callerVer++
+			if v.Ver == helpers.ProtocolVersion {
+				t.Errorf("%s: ver = %q, which is the value the client stamps — this case "+
+					"exists to show the CALLER's own value surviving, so recording the "+
+					"default makes it vacuous", v.Name, v.Ver)
+			}
+			continue
 		}
 		if v.Ver != helpers.ProtocolVersion {
 			t.Errorf("%s: ver = %q, want the SDK's ProtocolVersion %q",
 				v.Name, v.Ver, helpers.ProtocolVersion)
 		}
+	}
+	if callerVer == 0 {
+		t.Errorf("no %q vector — the fill-when-empty rule is unpinned in the ports, which "+
+			"replay this corpus and have no other case for it", callerVerSuffix)
 	}
 }

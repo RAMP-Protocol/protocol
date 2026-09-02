@@ -105,4 +105,9 @@ test('proto-service on an unknown service fails the build', () => {
 test('proto-vocab directive renders the axis tokens', () => {
   const tree = run(directive('proto-vocab', { axis: 'function' }));
   assert.ok(has(tree, (n) => n.type === 'inlineCode' && n.value === 'ai-train'), 'vocab tokens should render');
+  // Aliases come off the same descriptor option that generates the Aliases faces,
+  // so a page can never list an alias the SDKs do not canonicalise.
+  assert.ok(has(tree, (n) => n.type === 'inlineCode' && n.value === 'train-ai'), 'vocab aliases should render');
+  const noAliases = run(directive('proto-vocab', { axis: 'pricing-unit' }));
+  assert.ok(!has(noAliases, (n) => n.type === 'emphasis'), 'an axis without aliases renders no alias line');
 });

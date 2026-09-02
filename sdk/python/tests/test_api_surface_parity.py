@@ -67,8 +67,8 @@ _GO_PACKAGES = ("helpers", "resolvers", "core", "connect", "connectserver")
 # RATCHET — this baseline may only ever DECREASE. Each allowlisted symbol is a
 # deliberate, DOCUMENTED cross-language divergence, in one of two flavors:
 #   * FULL divergence (python AND ts BOTH null) — backed by a DECISION bullet in
-#     docs/sdk-parity-matrix.md reached via decision_anchor (connect.Client /
-#     connect.NewClient and the two connectserver handler bindings).
+#     docs/sdk-parity-matrix.md reached via decision_anchor (the three connectserver
+#     handler bindings).
 #   * PARTIAL gap (one language present, the other genuinely absent) — backed by an
 #     inline allowlist_reason naming the one-sided divergence. The 10 partial gaps are
 #     all language-idiom folds absorbed from the old BASELINE_PY_ONLY_GAP ratchet —
@@ -77,15 +77,20 @@ _GO_PACKAGES = ("helpers", "resolvers", "core", "connect", "connectserver")
 #     a per-entry reason; none is a symbol Python is missing. (The two former
 #     ErrUnknownKey partial gaps are RESOLVED: TS now exports the UnknownKey error
 #     class, completing the resolver error taxonomy in all three languages.)
-# A change that RAISES this number adds a new silent divergence and MUST be reviewed as
-# such: bumping the constant is the whole tell. Never raise it to make a red gate green —
-# map the symbol (fill the name) or record the divergence. Moved 6 -> 16 ONLY by
+# A change that RAISES this number adds a new divergence and MUST be reviewed as such:
+# bumping the constant is the whole tell. Never raise it to make a red gate green — map
+# the symbol (fill the name) or record the divergence. The one sanctioned growth is a NEW
+# Go symbol of an ALREADY-RECORDED divergence class, arriving with that class's reason or
+# DECISION anchor: 14 -> 16 admitted the catalog client's Go factory (the same ctor-fold
+# every other NewX carries) and the Catalog handler binding (a third symbol under the
+# existing "full Connect handler binding" decision). A bare null, or a reason written to
+# make the gate pass, is never that. Moved 6 -> 16 ONLY by
 # documenting the ten previously-OPAQUE Python-null gaps (BASELINE_PY_ONLY_GAP 19 -> 0
 # in the same change — 19 undocumented divergences became 10 documented ones and 9
 # exported Python symbols; that trade is the one sanctioned growth shape — every entry
 # must arrive with its reason, never bare), then shrunk 16 -> 14 by resolving the two
-# ErrUnknownKey gaps.
-BASELINE_ALLOWLIST = 14
+# ErrUnknownKey gaps, then grew 14 -> 16 under the sanctioned shape above.
+BASELINE_ALLOWLIST = 16
 
 # HARD ZERO (was a shrink-only ratchet at 19) — undocumented TS-present / Python-null
 # gaps. The PRESENCE check skips nulls, so absent this ceiling a NEW Python-null gap
@@ -612,4 +617,38 @@ def test_reading_the_sync_facade_is_load_bearing_or_it_is_not() -> None:
         "the blocking facade now exports names the async face does not: "
         f"{sorted(sync_only)}. They are in the parity surface — give each one a "
         "symbol-map entry, and rewrite this test to say so."
+    )
+
+
+def test_the_sync_facade_exports_every_class_it_defines() -> None:
+    """The other direction, which is where the hole was.
+
+    ``enumerate_python`` builds the blocking face's contribution from ``__all__``, and the
+    check above only ever subtracts FROM it. So a class defined in the module and left OUT
+    of ``__all__`` is invisible to both: it does not reach the aggregated surface, and it
+    cannot make the difference above non-empty. That is how the blocking CatalogClient
+    shipped defined-but-unexported while its async twin was exported — no assertion in
+    this file could have gone red.
+
+    Compared as a SUBSET rather than an equality: ``ClientConfig`` is re-exported here for
+    a caller's convenience and defined elsewhere, so requiring the two sets to match would
+    fail on a name that is legitimately not this module's. Filtering on ``__module__`` is
+    what keeps the check to the classes this file actually owns.
+    """
+    import inspect
+
+    from ramp_sdk import sync as blocking
+
+    defined = {
+        name
+        for name, obj in vars(blocking).items()
+        if inspect.isclass(obj) and obj.__module__ == blocking.__name__ and not name.startswith("_")
+    }
+    assert defined, "no public class found in ramp_sdk.sync — this check would be vacuous"
+
+    missing = defined - set(blocking.__all__)
+    assert not missing, (
+        f"the blocking facade defines {sorted(missing)} but does not export them. A public "
+        "class absent from __all__ is unreachable through `from ramp_sdk.sync import *` and "
+        "invisible to the surface gate, which reads this module through __all__."
     )

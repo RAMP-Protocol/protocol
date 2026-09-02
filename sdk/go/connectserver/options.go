@@ -17,6 +17,62 @@ import (
 // overrides it via WithReplayTTL, and owns the store itself.
 const replayTTL = 5 * time.Minute
 
+// DefaultMaxRequestBytes caps what a handler will read from one request. Connect
+// treats an unset cap as "any size" and decompresses every request, so without one
+// a caller can spend the server's memory and CPU at a ratio it chooses: a gzip
+// body inflates roughly a thousandfold, and the wire rules do NOT bound that work
+// — protovalidate walks every element it is handed and collects every violation
+// before any cardinality rule is reported, so an over-cap list is fully traversed
+// on its way to being refused. This is the bound that models that cost, which is
+// why it lives here and not on the fields.
+//
+// It bounds the decompressed message but does NOT make decompression free. When a
+// body inflates past the cap, Connect drains the rest of the stream to io.Discard
+// to report the size it would have been, so the whole thing is inflated before it
+// is refused. What keeps that finite is the RAW body bound below, not this one:
+// measured, 4 MiB of compressed input inflates to 4.32 GB in ~850ms of CPU on a
+// request that is then rejected. Memory stays flat, CPU does not. Lowering this
+// constant lowers both, roughly linearly.
+//
+// 4 MiB is chosen against both ends, measured. A FULL-CARDINALITY push — 256
+// entries each carrying the full 32 terms, one restriction per axis, every field
+// populated — is 0.81 MiB and validates in ~475ms, so a real catalog batch fits
+// with better than fourfold headroom. The most EXPENSIVE conformant shape that
+// still fits under this cap is 83 entries of 32 terms, each term carrying one
+// restriction per axis with both token lists at their 64-item caps and every token
+// a single character: 3.97 MiB and ~1.8s of validation, with one more entry
+// exceeding the cap. That is what this constant buys — not a small cost, but a
+// bounded one.
+//
+// Note WHY that shape uses the shortest legal tokens, because it is the part that
+// is easy to get backwards. Validation cost tracks the number of ELEMENTS walked,
+// while size tracks their length, so under a byte cap the worst case is the
+// shape that spends its bytes on count rather than on length. The same 83-entry
+// structure with 64-character tokens is 88 MB and never reaches the validator;
+// filled to the cap instead, it is 3 entries and ~132ms. Every point between is
+// cheaper than the shape above, which is why that one is quoted.
+//
+// This is a measurement of one shape, not a ceiling over all of them. The
+// enumeration that would be needed for a ceiling — 256 entries, 32 terms, 8
+// restrictions, 64 tokens per list — leaves out quotas, obligations, scopes and
+// attestations, which are equally capped and equally walked; and it reasons only
+// about CONFORMANT pushes, while protovalidate collects every violation rather
+// than stopping at the first, so a non-conformant one is checked just as
+// thoroughly. Raising this cap raises the worst case roughly linearly; there is no
+// value past which it stops mattering.
+//
+// Note what that figure is and is not. It sizes a representative batch, NOT a
+// ceiling on a conformant one: the caps in the contract bound how MANY entries,
+// terms and attestations a push may carry, never how many bytes. Obligation.detail,
+// the License strings and every ResourceAttestation member are length-free, so a
+// conformant push can be arbitrarily large and this cap can refuse one. That is the
+// intended trade — the bound models the cost of CHECKING a submission, and a
+// deployment that must accept larger documents raises it.
+//
+// Lower it if the deployment does not accept a 256-entry batch; raising it raises
+// the worst case roughly linearly. Override per server with WithMaxRequestBytes.
+const DefaultMaxRequestBytes = 4 << 20 // 4 MiB
+
 // serverConfig is the resolved set of injected holders the server verify face runs
 // over: the request-signing KeyResolver, the ReplayStore, the hop budget, the
 // request-id source, and any application interceptors. All are injected — the SDK
@@ -34,6 +90,7 @@ type serverConfig struct {
 	handlerOpts     []connectrpc.HandlerOption
 	verifyGate      func(*http.Request) bool
 	onReject        func(*http.Request, error)
+	maxRequestBytes int64
 }
 
 // ServerOption configures the server verify face.
@@ -85,11 +142,34 @@ func WithMaxSignatures(n int) ServerOption {
 	return func(c *serverConfig) { c.maxSignatures = n }
 }
 
+// WithMaxRequestBytes overrides the per-request read cap (default
+// DefaultMaxRequestBytes). It bounds TWO distinct quantities, because a caller can
+// exhaust the server through either: the decompressed Connect message, refused as
+// CodeResourceExhausted, and the raw HTTP body the verify face buffers before it
+// can check a signature, refused as a 413. An unsigned caller reaches only the
+// second, which is why the body bound cannot wait for authentication.
+//
+// A non-positive value restores the default rather than disabling the cap: a
+// server that reads without a bound is the state this option exists to prevent,
+// and no accident should be able to select it.
+func WithMaxRequestBytes(n int64) ServerOption {
+	return func(c *serverConfig) { c.maxRequestBytes = n }
+}
+
 // WithValidation sets protovalidate strictness for the server face. The default is
 // ValidationOff; a server opts into bidirectional wire-shape enforcement (requests
 // + responses + error details) with WithValidation(connect.ValidationStrict). The
 // Validation enum is shared with the client (sdk/go/connect) so both faces select
 // strictness with one type.
+//
+// What Off means on a SERVER is worth stating plainly, because it is not symmetric
+// with the client: the contract's own boundary rules do not run. Everything the
+// protocol describes as refused before the handler — the field and message rules
+// protovalidate carries, and the caps a rejection reason was retired against —
+// simply is not checked, and the handler implementation sees the request whatever
+// shape it arrived in. ValidationOff is also the enum's ZERO VALUE, so a mount that
+// never names this option and one that explicitly opts out are the same request.
+// A deployment that wants the wire tier passes ValidationStrict on every mount.
 func WithValidation(v rampconnect.Validation) ServerOption {
 	return func(c *serverConfig) { c.validation = v }
 }
@@ -152,6 +232,9 @@ func resolveServerConfig(opts []ServerOption) serverConfig {
 	}
 	if cfg.replayTTL <= 0 {
 		cfg.replayTTL = replayTTL
+	}
+	if cfg.maxRequestBytes <= 0 {
+		cfg.maxRequestBytes = DefaultMaxRequestBytes
 	}
 	// A server face with no replay store silently accepts a replayed signature
 	// within its window. That is a legitimate stateless-edge choice, but a

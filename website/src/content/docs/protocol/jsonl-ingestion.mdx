@@ -9,10 +9,11 @@ The [discovery paths](/protocol/discovery-paths/) (RSL, sitemap, well-known, cra
 
 ```
 publisher feed (.jsonl, one resource/line)
-  └─► ramp-ingest   parse (typed, strict) · canonicalize tokens · sign (RFC 9421)
+  └─► ramp-ingest   parse (typed, strict) · pre-check + canonicalize via the SDK · sign (RFC 9421)
         └─► CatalogService.PushResources           ── ALL-OR-NOTHING ──
               │  trust:    caller key fetched from the WBA directory (/.well-known/http-message-signatures-directory); tenant derived from the publisher domain
-              │  validate: protovalidate CEL owns term shape / presence / coherence; vocab membership is a warning
+              │  validate: wire tier (protovalidate: envelope rules + term shape / presence / coherence), then the ingest tier
+              │            (canonicalise tokens; bare unregistered unit/metric rejects; unknown restriction token warns)
               └─► catalog (per-tenant, URI-namespaced)  ─►  DiscoverResources ─► signed Offer
 ```
 
@@ -20,25 +21,27 @@ The feed is a **transport convenience**, not a third licensing model: every line
 
 ## Record schema (one line = one resource)
 
+Every length bound below is in **characters — Unicode code points, not bytes**. That is what `protovalidate`'s `max_len` counts, and several of these fields admit non-ASCII, so a conformant value can be several times its character count in bytes: a 512-character CJK `title` is roughly 1.5 KB on the wire and still legal. Size a feed against the character count.
+
 | Field | Type | Required | Maps to | Why it exists |
 |---|---|---|---|---|
-| `domain` | string | yes | `ResourceEntry.domain` | resource origin; with `path` forms the canonical URI |
-| `path` | string | yes | `ResourceEntry.path` | URL path of the resource |
-| `title` | string | no | `ResourceEntry.title` | human label |
-| `content_id` | string | no | `ResourceEntry.content_id` | publisher's stable id; keys the resource id so a re-push upserts in place |
-| `word_count` | int | no | `ResourceEntry.word_count` | content metric; informs token estimation |
-| `estimated_quantity` | int | no | `ResourceEntry.estimated_quantity` | pre-computed metering quantity (e.g. `word_count × 1.32`) |
-| `content_hash` | string | no | `ResourceEntry.content_hash` | integrity pin of the content bytes |
-| `hash_method` | string | no | `ResourceEntry.hash_method` | algorithm for `content_hash` (e.g. `sha256`) |
+| `domain` | string | yes | `ResourceEntry.domain` | resource origin; with `path` forms the canonical URI. A bare host in the recipient-addressing shape (port allowed; no scheme, path, query or userinfo; ≤ 260 characters) |
+| `path` | string | yes | `ResourceEntry.path` | URL path of the resource: starts with `/`, no `?` or `#`, no whitespace or control character, 1–2048 characters |
+| `title` | string | no | `ResourceEntry.title` | human label (≤ 512 characters) |
+| `content_id` | string | no | `ResourceEntry.content_id` | publisher's stable id; keys the resource id so a re-push upserts in place (≤ 255 characters) |
+| `word_count` | int | no | `ResourceEntry.word_count` | content metric; informs token estimation (≥ 0) |
+| `estimated_quantity` | int | no | `ResourceEntry.estimated_quantity` | pre-computed metering quantity (e.g. `word_count × 1.32`; ≥ 0) |
+| `content_hash` | string | no | `ResourceEntry.content_hash` | integrity pin of the content bytes (≤ 255 characters; bare hex or `method:hexdigest`, not format-checked) |
+| `hash_method` | string | no | `ResourceEntry.hash_method` | algorithm for `content_hash` (e.g. `sha256`; ≤ 64 characters) |
 | `source` | string | no | `ResourceEntry.source` (`IngestionSource`) | provenance of the metadata (`INGESTION_SOURCE_CMS_API`, …) |
 | `resource_mutability` | string (enum) | no | `ResourceEntry.resource_mutability` (`ResourceMutability`) | `RESOURCE_MUTABILITY_STATIC`/`RESOURCE_MUTABILITY_DYNAMIC`/`RESOURCE_MUTABILITY_LIVE`; drives delivery-time hash-verification behavior. Omitting the field defaults the Offer to `RESOURCE_MUTABILITY_STATIC`; explicit `RESOURCE_MUTABILITY_UNSPECIFIED` is rejected |
-| `provenance_source` | string | no | `ResourceEntry.provenance_source` | who supplied the metadata (audit trail) |
+| `provenance_source` | string | no | `ResourceEntry.provenance_source` | who supplied the metadata (audit trail; ≤ 260 characters) |
 | `provenance_timestamp` | RFC3339 | no | `ResourceEntry.provenance_timestamp` | when it was collected / generated |
 | `license` | object | no (yes for any REFERENCE_ONLY term) | `LicenseTerm.license` | governing license document `{id, uri, uri_digest, name}` |
-| `terms` | array (≥1) | yes | `ResourceEntry.terms[]` | the licensing offers on this resource (see below) |
+| `terms` | array (≤ 32) | no | `ResourceEntry.terms[]` | the licensing offers on this resource (see below); at most 32 per entry on the wire. An entry with no terms is conformant — the Exchange simply makes no offer from it |
 | `ext` | object | no | `ResourceEntry.ext` | free-form extension metadata; carries fields with no typed slot (e.g. `previews[]`) and domain-profile data |
 | `ext_critical` | string[] | no | `ResourceEntry.ext_critical` | keys in `ext` a consumer MUST understand (COSE `crit` pattern) |
-| `attestations` | array | no | `ResourceEntry.attestations[]` | signed attestations `{verifier, keyid, attested_at, uri, claims, signature}` |
+| `attestations` | array (≤ 64) | no | `ResourceEntry.attestations[]` | signed attestations `{verifier, keyid, attested_at, uri, claims, signature}` |
 
 `resource_mutability` is a typed `ResourceEntry` field. When present it is carried through to `Offer.identity.resource_mutability`; when **omitted** the Exchange defaults the Offer to `RESOURCE_MUTABILITY_STATIC` at Offer-build time (there is nothing to carry). An explicit `RESOURCE_MUTABILITY_UNSPECIFIED` is rejected (`not_in:[0]`); the Exchange reads the typed field, not `ext`. `previews[]` still has no typed field on `ResourceEntry` — it rides inside `ext` and is promoted to `Offer.previews[]` at discovery.
 
@@ -52,20 +55,38 @@ The feed is a **transport convenience**, not a third licensing model: every line
 | `user_types` | string[] | `Restriction{kind=USER_TYPE}.permitted[]` |
 | `geos` | string[] | `Restriction{kind=GEOGRAPHY}.permitted[]` |
 | `pricing` | `{model, unit, rate, currency}` | `LicenseTerm.pricing` (`model` ∈ `free` \| `per_unit` \| `flat`) |
-| `quotas` | `[{metric, limit, window}]` | `LicenseTerm.Quota[]` |
-| `obligations` | `[{kind, trigger, scope_license, detail}]` | `LicenseTerm.Obligation[]` |
-| `scopes` | string[] | `LicenseTerm.scopes` (entitlement-gated, e.g. `subscription:premium`) |
+| `quotas` | `[{metric, limit, window}]` (≤ 64) | `LicenseTerm.Quota[]` |
+| `obligations` | `[{kind, trigger, scope_license, detail}]` (≤ 64) | `LicenseTerm.Obligation[]` |
+| `scopes` | string[] (≤ 64) | `LicenseTerm.scopes` (entitlement-gated, e.g. `subscription:premium`) |
 
 Rules (enforced by protovalidate at the RPC boundary):
 
 - Every term MUST carry `pricing` — absence is not "free", it is rejected. Use `model: "free"` explicitly (`rate` 0).
 - `per_unit` REQUIRES `pricing.unit`; `flat` / `free` carry none.
 - A `reference_only` term MUST carry `license.uri`; any `license.uri` REQUIRES `license.uri_digest`.
-- Tokens are canonical registry values or `vendor:namespaced`; unregistered bare tokens are a **warning**, not a reject.
+- Tokens are canonical registry values or `vendor:namespaced`. Restriction tokens are canonicalised at ingest (whitespace trimmed, ASCII case folded, aliases such as `generative-ai` → `ai-input` resolved) and an unregistered bare token is a **warning**, not a reject; a bare unregistered `pricing.unit` or `quotas[].metric` IS a reject.
+
+## Pre-validate with the SDK
+
+Both tiers the Exchange applies ship in the SDK, so a feed can be checked before anything is signed — `ramp-ingest` runs them for you, and a program that builds its own entries calls them itself; the catalog client does not. `validate_resource_entry` (Python), `validateResourceEntry` (TypeScript) and `helpers.ValidateResourceEntry` (Go) run the wire rules over the entry as given, then canonicalise a copy of its terms and run registry membership and the coherence lints; the verdict lists every violation with its rule id and field path, and the warnings the accepted terms would carry — the exact strings the Exchange puts in `PushResourcesResponse.warnings`. The normalising faces produce the canonical form the Exchange will store — `Generative-AI` becomes `ai-input`, `de` becomes `DE` — and they differ by language on purpose. `normalize_resource_entry` (Python) and `normalizeResourceEntry` (TypeScript) take a proto-JSON object and **return a new one**, leaving the input untouched. `helpers.NormalizeResourceEntry` (Go) takes a `*rampv1.ResourceEntry` and **rewrites it in place**, returning nothing: the Exchange normalises the entry it is about to persist, and an in-place face is what lets the canonical tokens reach the stored row and the offer projection without a second copy. Each is its language's idiom; the shared conformance corpus pins the output, which is the part that must agree.
+
+```python
+from ramp_sdk import validate_resource_entry, normalize_resource_entry
+
+verdict = validate_resource_entry(entry)          # entry: the proto-JSON dict a line maps to
+if not verdict.ok:
+    for v in verdict.violations:
+        print(v.rule, v.path, v.message)          # e.g. pricing.unit.registered terms[0].pricing.unit ...
+for w in verdict.warnings:
+    print(w.message)                              # what warnings[] will say
+entry = normalize_resource_entry(entry)           # what the Exchange will store
+```
+
+The check is advice about what the Exchange will say, not a substitute for it: the Exchange re-runs both tiers on every push, and its verdict decides. Pushing goes through the catalog client — `ramp_sdk.client.CatalogClient` (async; `ramp_sdk.sync.CatalogClient` blocking), `createCatalogClient`, `connect.NewCatalogClient` — which signs the request with the contributor key, stamps `ver`, and refuses before signing a request whose `exchange` is not a bare domain. See [Source 7: CatalogService API Push](/components/content-ingestion/sources/#source-7-catalogservice-api-push).
 
 ## All-or-nothing
 
-`PushResources` is atomic: if any entry fails a hard validation rule, the **whole submission is rejected** (`InvalidArgument`, naming the offending entry) and **nothing is persisted**. The publisher fixes and resubmits the full set. Membership / lint issues are returned in `PushResourcesResponse.warnings[]` and do not block.
+`PushResources` is atomic, at **both** tiers: if any entry fails a hard rule — the envelope rules above, a term's shape or cross-field rule, or a bare unregistered `pricing.unit` or `quotas[].metric` — the **whole submission is rejected** (`InvalidArgument`, naming the offending entries) and **nothing is persisted**. The publisher fixes and resubmits the full set. What the two tiers change is *when* the refusal happens, not what survives it: the wire tier refuses at the RPC boundary, before any entry is classified, while the ingest tier refuses after canonicalising the terms. Either way no entry of a refused submission is stored — naming the entries that failed is how the refusal tells you what to fix, not a sign that the rest went through. Membership / lint issues are returned in `PushResourcesResponse.warnings[]` and do not block.
 
 ## Extension profiles in the feed
 

@@ -23,6 +23,7 @@
     "./hashurl": "./sdk/ts/src/hashurl.ts",
     "./hosts": "./sdk/ts/src/hosts.ts",
     "./regschema": "./sdk/ts/src/regschema.ts",
+    "./licenseterm": "./sdk/ts/src/licenseterm.ts",
     "./wire": "./sdk/ts/src/wire.ts",
     "./core": "./sdk/ts/core/verifier.ts",
     "./core/wire-canon": "./sdk/ts/core/wire-canon.ts",

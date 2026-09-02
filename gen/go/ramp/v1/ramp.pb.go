@@ -258,9 +258,10 @@ func (TermSemantics) EnumDescriptor() ([]byte, []int) {
 // RestrictionKind — Which dimension a Restriction constrains.
 //
 // The token vocabulary for each open axis is authored ONLY in the
-// (ramp.v1.vocab_enum) entries on the corresponding enum value below; the
-// functiontokens / geographytokens / usertypes constants + IsRegistered derive
-// from them. GEOGRAPHY lists only the non-ISO specials (*, EU, EEA) — ISO
+// (ramp.v1.vocab_enum) entries on the corresponding enum value below, and its
+// accepted aliases ONLY in the (ramp.v1.vocab_enum_alias) entries beside them;
+// the functiontokens / geographytokens / usertypes constants, IsRegistered,
+// Aliases and Canonical derive from them. GEOGRAPHY lists only the non-ISO specials (*, EU, EEA) — ISO
 // 3166-1 alpha-2 codes are validated structurally (two-letter uppercase),
 // not enumerated.
 type RestrictionKind int32
@@ -1520,7 +1521,13 @@ const (
 	CatalogRejectionReason_CATALOG_REJECTION_REASON_MALFORMED_ENTRY         CatalogRejectionReason = 5 // a resource entry failed schema/validation
 	CatalogRejectionReason_CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN     CatalogRejectionReason = 6 // an unregistered vocab token in a restriction/term
 	CatalogRejectionReason_CATALOG_REJECTION_REASON_QUOTA_EXCEEDED          CatalogRejectionReason = 7 // contributor push quota exceeded (per-caller)
-	CatalogRejectionReason_CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED    CatalogRejectionReason = 8 // a single entry carries more license terms than allowed (per-entry cap)
+	// A single entry carries more license terms than ResourceEntry.terms allows.
+	// Retired on the PushResources path: the cap is a wire rule now, so a push
+	// carrying an over-cap entry is refused whole, before any per-entry
+	// classification runs, and no rejection naming this reason can be produced for
+	// it. Kept for a deployment that applies the cap somewhere the wire rules do
+	// not reach — an entry that arrived by some other route than PushResources.
+	CatalogRejectionReason_CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED CatalogRejectionReason = 8
 	// The URI cannot be claimed by this caller's entries. Named from the caller's
 	// own perspective ON PURPOSE: it MUST NOT disclose that another resource/
 	// contributor already owns the URI. Within one publisher, mutually-untrusting
@@ -3442,7 +3449,17 @@ func (x *License) GetUriDigest() string {
 //	USER_TYPE — RAMP user/organization categories
 type Restriction struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Which dimension this restriction applies to.
+	// Which dimension this restriction applies to. Defined-only: the axis set is
+	// CLOSED, and a number outside it is refused rather than ignored. A custom
+	// axis is RESTRICTION_KIND_OTHER, whose meaning rides in permitted/prohibited,
+	// so a new number was never the extension mechanism — accepting one would
+	// admit a restriction no consumer can evaluate onto a term whose default is
+	// BINDING (see advisory below), which fails open on the axis a publisher most
+	// needs enforced. Closing the axis does NOT bound the cost of the one-per-kind
+	// rule below, and must not be read as doing so: a number this rule refuses is
+	// still distinct from every other, so that rule's all() finds no duplicate to
+	// stop on and walks the list in full anyway. Its cost is bounded by the size
+	// test the rule itself carries.
 	Kind RestrictionKind `protobuf:"varint,1,opt,name=kind,proto3,enum=ramp.v1.RestrictionKind" json:"kind,omitempty"`
 	// Tokens allowed on this axis. Empty = all permitted.
 	// For FUNCTION: "ai-input", "ai-train", "search", "editorial", "commercial", …
@@ -3730,10 +3747,32 @@ type LicenseTerm struct {
 	Semantics TermSemantics `protobuf:"varint,2,opt,name=semantics,proto3,enum=ramp.v1.TermSemantics" json:"semantics,omitempty"`
 	// Usage restrictions (function, geography, user-type).
 	// Multiple restrictions are AND-combined — the agent must satisfy all of them.
+	// At most 8, and this list is the one of the three that does NOT carry the
+	// contract's usual 64: only one restriction per axis is valid, the axis enum
+	// is defined-only, so four is the longest conformant list and eight leaves
+	// room for an axis this version does not have. Like the caps on quotas and
+	// obligations, this one bounds the DOCUMENT — how many restrictions one term
+	// may carry — and not the work of checking it: a validator walks every element
+	// it is handed before any cardinality rule is reported, so an over-cap list is
+	// traversed in full on its way to being refused.
+	//
+	// What makes this list different is that one rule walks it against ITSELF. The
+	// one-per-kind rule below is quadratic, so it carries its own size test and
+	// stays silent above this cap; a conformance guard holds the two numbers equal,
+	// because a cap raised without the test would leave the lists in between
+	// unchecked for duplicate axes and accepted. The neighbouring disjointness rule
+	// on each element is quadratic only in that element's two token lists, both
+	// capped at 64, so its cost is bounded per restriction and linear across the
+	// list — it needs no such test.
 	Restrictions []*Restriction `protobuf:"bytes,3,rep,name=restrictions,proto3" json:"restrictions,omitempty"`
 	// Usage caps. The agent must not exceed any individual Quota.
+	// At most 64, the bound every per-message list in this contract carries when
+	// no rule walks it more than once. It bounds what one term may carry, not the
+	// work of checking one — a validator walks every element it is handed before
+	// the cap is reported, so the cost of checking is bounded at the transport.
 	Quotas []*Quota `protobuf:"bytes,4,rep,name=quotas,proto3" json:"quotas,omitempty"`
 	// Post-use behavioral requirements.
+	// At most 64, for the reason quotas carries.
 	Obligations []*Obligation `protobuf:"bytes,5,rep,name=obligations,proto3" json:"obligations,omitempty"`
 	// Pricing for this term. REQUIRED for every term regardless of semantics —
 	// an agent cannot act on a priceless term, so absent Pricing is a validation
@@ -5134,7 +5173,13 @@ type PushResourcesRequest struct {
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Tenant identifier
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Content entries to push
+	// Content entries to push. At least one: an empty push asks for nothing and
+	// is refused rather than answered with zero counts. At most 256, the bound a
+	// caller-chosen batch carries elsewhere in this contract (see ResourceQuery.uris)
+	// — it bounds one submission, so a larger feed is pushed in several. The cap is
+	// over entries because a submission is stored or refused whole, and a refusal
+	// names each entry that failed; it does not bound the work of checking a
+	// submission, which the recipient bounds at the transport.
 	Entries []*ResourceEntry `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
 	// Identity of the caller (who is pushing this data).
 	// The Exchange verifies this matches a registered CatalogService client.
@@ -5234,11 +5279,36 @@ func (x *PushResourcesRequest) GetExtCritical() []string {
 	return nil
 }
 
+// ResourceEntry — one catalog row as a publisher (or an authorised contributor)
+// pushes it. The envelope fields carry their own wire rules, so an entry that
+// cannot become a catalog URI is refused at the boundary rather than after
+// ingestion; the licensing terms inside carry the LicenseTerm rules. See
+// CatalogService for the second, ingest-time tier (token canonicalisation and
+// registry membership).
+//
+// The list caps here and on LicenseTerm bound HOW MANY, never how large: how many
+// terms one entry may carry, how many entries a push can store, and how many paths
+// a rejection has to name back. They do not bound the entry's SIZE either — several
+// members inside one carry no length rule — and they do NOT bound the work of
+// checking a push, and must not be read as doing so — a
+// validator walks every element it is handed and reports every violation before
+// any cardinality rule is applied, so an over-cap list is fully traversed on its
+// way to being refused. The work is bounded one layer down, by the maximum
+// request size the recipient will read; a deployment that exposes CatalogService
+// sets that cap, and the SDK's server binding sets a default.
 type ResourceEntry struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Provider domain
+	// Provider domain — the bare host the resource lives on, in the shape
+	// "Request recipient" defines in the file header: a port is allowed, a
+	// scheme, path, query or userinfo is not. With path it forms the catalog URI
+	// by concatenation, so a value carrying anything but a host would choose the
+	// URI rather than merely name the host.
 	Domain string `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
-	// Content path
+	// Content path — an absolute URL path such as "/premium/article-42.html":
+	// starts with "/", carries no query or fragment delimiter, no whitespace and
+	// no control character, and is at most 2048 characters. Characters, not bytes:
+	// protovalidate's max_len counts Unicode code points, and the pattern admits
+	// non-ASCII, so a conformant path can exceed 2048 bytes.
 	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	// Content identifier
 	ContentId *string `protobuf:"bytes,3,opt,name=content_id,json=contentId,proto3,oneof" json:"content_id,omitempty"`
@@ -5248,7 +5318,9 @@ type ResourceEntry struct {
 	WordCount *int32 `protobuf:"varint,5,opt,name=word_count,json=wordCount,proto3,oneof" json:"word_count,omitempty"`
 	// Estimated quantity in the metering unit
 	EstimatedQuantity *int32 `protobuf:"varint,6,opt,name=estimated_quantity,json=estimatedQuantity,proto3,oneof" json:"estimated_quantity,omitempty"`
-	// Content hash
+	// Content hash, carried as the publisher computed it — a bare hex digest or a
+	// "method:hexdigest" form; bounded in length, never format-checked, because
+	// hash_method names the algorithm.
 	ContentHash *string `protobuf:"bytes,7,opt,name=content_hash,json=contentHash,proto3,oneof" json:"content_hash,omitempty"`
 	// Hash algorithm
 	HashMethod *string `protobuf:"bytes,8,opt,name=hash_method,json=hashMethod,proto3,oneof" json:"hash_method,omitempty"`
@@ -5274,7 +5346,12 @@ type ResourceEntry struct {
 	// See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST
 	// be present. For REFERENCE_ONLY terms, License.uri is authoritative.
 	// The Exchange validates ENUMERATED terms at push time and surfaces them
-	// in Offer.terms on discovery.
+	// in Offer.terms on discovery. At most 32 terms per entry, stated on the wire
+	// so every implementation refuses the same size. An over-cap entry refuses the
+	// whole submission, as every catalog rejection does; what being a wire rule
+	// changes is WHEN — the refusal now happens at the boundary, before any
+	// per-entry classification runs, which is why the rejection reason that named
+	// this cap can no longer be produced for a push.
 	Terms []*LicenseTerm `protobuf:"bytes,13,rep,name=terms,proto3" json:"terms,omitempty"`
 	// Optional mutability hint. When omitted, the Exchange applies the `STATIC`
 	// default at Offer build; an explicit `UNSPECIFIED` is rejected. A value in
@@ -5440,17 +5517,25 @@ type PushResourcesResponse struct {
 	// RAMP protocol version — "1.0". Stamped by the sender from a single
 	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	// Number of entries accepted
+	// Number of entries accepted. A push is all-or-nothing, so a successful push
+	// stored every entry it carried and this is the submission's own size. A push
+	// that could not be applied is not a response at all: it travels as a non-OK
+	// transport error carrying ErrorDetail.catalog_rejection.
 	Accepted int32 `protobuf:"varint,2,opt,name=accepted,proto3" json:"accepted,omitempty"`
-	// Number of entries rejected
+	// Number of entries rejected. Structurally always 0 on this path, and kept for
+	// the same reason CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED is kept: a
+	// rejection returns an error rather than a response, so there is no successful
+	// answer in which this can be non-zero. It remains meaningful only for a
+	// deployment that applies catalog rules somewhere the all-or-nothing rule above
+	// does not front. Do NOT read a zero here as "nothing failed" — read `accepted`.
 	Rejected int32 `protobuf:"varint,3,opt,name=rejected,proto3" json:"rejected,omitempty"`
-	// Non-fatal issues encountered during ingestion.
-	// Examples: unrecognized vocab token in a Restriction (term accepted but flagged),
-	//
-	//	REFERENCE_ONLY term missing License.uri (informational).
-	//
-	// Warnings do not cause rejection — they are surfaced so publishers can fix
-	// their feeds without a hard failure.
+	// Non-fatal issues encountered during ingestion — the ingest tier's lint, which
+	// accepts the term and flags it. Examples: an unregistered bare restriction
+	// token on any axis, and an OBLIGATION_KIND_OTHER obligation with no detail.
+	// Warnings do not cause rejection; they are surfaced so publishers can fix their
+	// feeds without a hard failure. A condition that rejects is not a warning — a
+	// REFERENCE_ONLY term with no License.uri, for instance, is refused by
+	// license_term.reference_only.requires_uri and never reaches this list.
 	Warnings []string `protobuf:"bytes,4,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	// Extension point
 	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
@@ -5542,7 +5627,9 @@ type RemoveResourcesRequest struct {
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Tenant identifier
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Paths to remove
+	// Paths to remove — the absolute-path shape ResourceEntry.path carries, at
+	// least one and at most 256, the same batch bound PushResourcesRequest.entries
+	// carries and for the same reason.
 	Paths []string `protobuf:"bytes,3,rep,name=paths,proto3" json:"paths,omitempty"`
 	// REQUIRED. Bare host of the recipient this request is addressed to (e.g.
 	// "exchange.example" or "exchange.example:8081"). See "Request recipient" in
@@ -7053,7 +7140,15 @@ type WellKnownManifest struct {
 	Endpoint *string `protobuf:"bytes,12,opt,name=endpoint,proto3,oneof" json:"endpoint,omitempty"`
 	// Exchange-only. Health check endpoint URL.
 	HealthEndpoint *string `protobuf:"bytes,13,opt,name=health_endpoint,json=healthEndpoint,proto3,oneof" json:"health_endpoint,omitempty"`
-	// Exchange-only. CatalogService endpoint URL (if exposed).
+	// Exchange-only. CatalogService endpoint URL (if exposed). It carries the
+	// same binding as endpoint: it MUST be on the same host AND PORT that serve
+	// this manifest, or on a subdomain of that host on that port, and MUST NOT
+	// carry userinfo. A consumer refuses a catalog endpoint anywhere else — a
+	// publisher's push is a signed call, and a manifest naming an unrelated host
+	// would redirect it to a party the signature never covered. The host match is
+	// on a full dot-delimited label boundary, and a port equal to the scheme's
+	// default and an omitted port are the SAME port. Absent means this Exchange
+	// does not expose CatalogService; a consumer does not fall back to endpoint.
 	CatalogEndpoint *string `protobuf:"bytes,14,opt,name=catalog_endpoint,json=catalogEndpoint,proto3,oneof" json:"catalog_endpoint,omitempty"`
 	// Exchange-only. Supported RAMP protocol versions (e.g. ["1.0"]).
 	ProtocolVersionsSupported []string `protobuf:"bytes,16,rep,name=protocol_versions_supported,json=protocolVersionsSupported,proto3" json:"protocol_versions_supported,omitempty"`
@@ -9233,7 +9328,9 @@ type CatalogRejection struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The rejection reason (defined-only, non-zero)
 	Reason CatalogRejectionReason `protobuf:"varint,1,opt,name=reason,proto3,enum=ramp.v1.CatalogRejectionReason" json:"reason,omitempty"`
-	// For partial-batch failures: the entry paths that were rejected.
+	// The entry paths the refusal is about. A catalog push is all-or-nothing, so
+	// these name which entries failed inside a submission that persisted nothing —
+	// they are not a list of what was dropped from an otherwise applied batch.
 	RejectedPaths []string `protobuf:"bytes,2,rep,name=rejected_paths,json=rejectedPaths,proto3" json:"rejected_paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -9723,9 +9820,10 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05_nameB\f\n" +
 	"\n" +
 	"_immutableB\r\n" +
-	"\v_uri_digest\"\x8a\x03\n" +
-	"\vRestriction\x126\n" +
-	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindB\b\xbaH\x05\x82\x01\x02 \x00R\x04kind\x12C\n" +
+	"\v_uri_digest\"\x8c\x03\n" +
+	"\vRestriction\x128\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12C\n" +
 	"\tpermitted\x18\x02 \x03(\tB%\xbaH\"\x92\x01\x1f\x10@\"\x1br\x19\x10\x01\x18@2\x13^[A-Za-z0-9._:*-]+$R\tpermitted\x12E\n" +
 	"\n" +
 	"prohibited\x18\x03 \x03(\tB%\xbaH\"\x92\x01\x1f\x10@\"\x1br\x19\x10\x01\x18@2\x13^[A-Za-z0-9._:*-]+$R\n" +
@@ -9744,19 +9842,19 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01:\x9c\x02\xbaH\x98\x02\x1a\x95\x02\n" +
 	"-obligation.share_alike.requires_scope_license\x12DSHARE_ALIKE requires scope_license to identify a license (id or uri)\x1a\x9d\x01this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))B\x10\n" +
 	"\x0e_scope_licenseB\t\n" +
-	"\a_detail\"\xd5\x06\n" +
+	"\a_detail\"\x93\a\n" +
 	"\vLicenseTerm\x12/\n" +
 	"\alicense\x18\x01 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x12>\n" +
-	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsB\b\xbaH\x05\x82\x01\x02 \x00R\tsemantics\x128\n" +
-	"\frestrictions\x18\x03 \x03(\v2\x14.ramp.v1.RestrictionR\frestrictions\x12&\n" +
-	"\x06quotas\x18\x04 \x03(\v2\x0e.ramp.v1.QuotaR\x06quotas\x125\n" +
-	"\vobligations\x18\x05 \x03(\v2\x13.ramp.v1.ObligationR\vobligations\x127\n" +
+	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsB\b\xbaH\x05\x82\x01\x02 \x00R\tsemantics\x12B\n" +
+	"\frestrictions\x18\x03 \x03(\v2\x14.ramp.v1.RestrictionB\b\xbaH\x05\x92\x01\x02\x10\bR\frestrictions\x120\n" +
+	"\x06quotas\x18\x04 \x03(\v2\x0e.ramp.v1.QuotaB\b\xbaH\x05\x92\x01\x02\x10@R\x06quotas\x12?\n" +
+	"\vobligations\x18\x05 \x03(\v2\x13.ramp.v1.ObligationB\b\xbaH\x05\x92\x01\x02\x10@R\vobligations\x127\n" +
 	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingB\x06\xbaH\x03\xc8\x01\x01H\x01R\apricing\x88\x01\x01\x12 \n" +
 	"\x06scopes\x18\a \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x12\"\n" +
 	"\n" +
-	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01:\x95\x03\xbaH\x91\x03\x1a\xe2\x01\n" +
-	"(license_term.reference_only.requires_uri\x12>REFERENCE_ONLY terms must carry a license with a non-empty uri\x1avthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')\x1a\xa9\x01\n" +
-	"%license_term.one_restriction_per_kind\x12+at most one restriction is allowed per kind\x1aSthis.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)B\n" +
+	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01:\xb5\x03\xbaH\xb1\x03\x1a\xe2\x01\n" +
+	"(license_term.reference_only.requires_uri\x12>REFERENCE_ONLY terms must carry a license with a non-empty uri\x1avthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')\x1a\xc9\x01\n" +
+	"%license_term.one_restriction_per_kind\x12+at most one restriction is allowed per kind\x1asthis.restrictions.size() > 8 || this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)B\n" +
 	"\n" +
 	"\b_licenseB\n" +
 	"\n" +
@@ -9887,33 +9985,33 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\bcurrency\x18\x02 \x01(\tR\bcurrency\x12B\n" +
 	"\tunit_cost\x18\x03 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$H\x00R\bunitCost\x88\x01\x01B\f\n" +
 	"\n" +
-	"_unit_cost\"\xbc\x03\n" +
+	"_unit_cost\"\xc9\x03\n" +
 	"\x14PushResourcesRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
-	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x120\n" +
-	"\aentries\x18\x03 \x03(\v2\x16.ramp.v1.ResourceEntryR\aentries\x12\x1b\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12=\n" +
+	"\aentries\x18\x03 \x03(\v2\x16.ramp.v1.ResourceEntryB\v\xbaH\b\x92\x01\x05\b\x01\x10\x80\x02R\aentries\x12\x1b\n" +
 	"\tcaller_id\x18\x04 \x01(\tR\bcallerId\x12\xd7\x01\n" +
 	"\bexchange\x18\x05 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xa8\a\n" +
-	"\rResourceEntry\x12\x16\n" +
-	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\x12\"\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xe1\t\n" +
+	"\rResourceEntry\x12\xd3\x01\n" +
+	"\x06domain\x18\x01 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\x06domain\x126\n" +
+	"\x04path\x18\x02 \x01(\tB\"\xbaH\x1fr\x1d\x10\x01\x18\x80\x102\x16^/[^?#\\x00-\\x20\\x7f]*$R\x04path\x12,\n" +
 	"\n" +
-	"content_id\x18\x03 \x01(\tH\x00R\tcontentId\x88\x01\x01\x12\x19\n" +
-	"\x05title\x18\x04 \x01(\tH\x01R\x05title\x88\x01\x01\x12\"\n" +
+	"content_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\xff\x01H\x00R\tcontentId\x88\x01\x01\x12#\n" +
+	"\x05title\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04H\x01R\x05title\x88\x01\x01\x12+\n" +
 	"\n" +
-	"word_count\x18\x05 \x01(\x05H\x02R\twordCount\x88\x01\x01\x122\n" +
-	"\x12estimated_quantity\x18\x06 \x01(\x05H\x03R\x11estimatedQuantity\x88\x01\x01\x12&\n" +
-	"\fcontent_hash\x18\a \x01(\tH\x04R\vcontentHash\x88\x01\x01\x12$\n" +
-	"\vhash_method\x18\b \x01(\tH\x05R\n" +
+	"word_count\x18\x05 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\x02R\twordCount\x88\x01\x01\x12;\n" +
+	"\x12estimated_quantity\x18\x06 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\x03R\x11estimatedQuantity\x88\x01\x01\x120\n" +
+	"\fcontent_hash\x18\a \x01(\tB\b\xbaH\x05r\x03\x18\xff\x01H\x04R\vcontentHash\x88\x01\x01\x12-\n" +
+	"\vhash_method\x18\b \x01(\tB\a\xbaH\x04r\x02\x18@H\x05R\n" +
 	"hashMethod\x88\x01\x01\x125\n" +
-	"\x06source\x18\t \x01(\x0e2\x18.ramp.v1.IngestionSourceH\x06R\x06source\x88\x01\x01\x120\n" +
+	"\x06source\x18\t \x01(\x0e2\x18.ramp.v1.IngestionSourceH\x06R\x06source\x88\x01\x01\x12:\n" +
 	"\x11provenance_source\x18\n" +
-	" \x01(\tH\aR\x10provenanceSource\x88\x01\x01\x12R\n" +
-	"\x14provenance_timestamp\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\bR\x13provenanceTimestamp\x88\x01\x01\x12@\n" +
-	"\fattestations\x18\f \x03(\v2\x1c.ramp.v1.ResourceAttestationR\fattestations\x12*\n" +
-	"\x05terms\x18\r \x03(\v2\x14.ramp.v1.LicenseTermR\x05terms\x12[\n" +
+	" \x01(\tB\b\xbaH\x05r\x03\x18\x84\x02H\aR\x10provenanceSource\x88\x01\x01\x12R\n" +
+	"\x14provenance_timestamp\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\bR\x13provenanceTimestamp\x88\x01\x01\x12J\n" +
+	"\fattestations\x18\f \x03(\v2\x1c.ramp.v1.ResourceAttestationB\b\xbaH\x05\x92\x01\x02\x10@R\fattestations\x124\n" +
+	"\x05terms\x18\r \x03(\v2\x14.ramp.v1.LicenseTermB\b\xbaH\x05\x92\x01\x02\x10 R\x05terms\x12[\n" +
 	"\x13resource_mutability\x18\x0e \x01(\x0e2\x1b.ramp.v1.ResourceMutabilityB\b\xbaH\x05\x82\x01\x02 \x00H\tR\x12resourceMutability\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\r\n" +
@@ -9933,11 +10031,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\brejected\x18\x03 \x01(\x05R\brejected\x12\x1a\n" +
 	"\bwarnings\x18\x04 \x03(\tR\bwarnings\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xb7\x02\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xe5\x02\n" +
 	"\x16RemoveResourcesRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
-	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x14\n" +
-	"\x05paths\x18\x03 \x03(\tR\x05paths\x12\xd7\x01\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12B\n" +
+	"\x05paths\x18\x03 \x03(\tB,\xbaH)\x92\x01&\b\x01\x10\x80\x02\"\x1fr\x1d\x10\x01\x18\x80\x102\x16^/[^?#\\x00-\\x20\\x7f]*$R\x05paths\x12\xd7\x01\n" +
 	"\bexchange\x18\x04 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\"E\n" +
 	"\x17RemoveResourcesResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x18\n" +
@@ -10296,16 +10394,16 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\rTermSemantics\x12\x1e\n" +
 	"\x1aTERM_SEMANTICS_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19TERM_SEMANTICS_ENUMERATED\x10\x01\x12!\n" +
-	"\x1dTERM_SEMANTICS_REFERENCE_ONLY\x10\x02*\xe5\x04\n" +
+	"\x1dTERM_SEMANTICS_REFERENCE_ONLY\x10\x02*\xcd\x06\n" +
 	"\x0fRestrictionKind\x12 \n" +
-	"\x1cRESTRICTION_KIND_UNSPECIFIED\x10\x00\x12\xbe\x02\n" +
-	"\x19RESTRICTION_KIND_FUNCTION\x10\x01\x1a\x9e\x02\x92\xb5\x18\x03all\x92\xb5\x18\x06ai-all\x92\xb5\x18\bai-train\x92\xb5\x18\bai-input\x92\xb5\x18\bai-index\x92\xb5\x18\x06search\x92\xb5\x18\x05crawl\x92\xb5\x18\x14text-and-data-mining\x92\xb5\x18\x03tts\x92\xb5\x18\n" +
+	"\x1cRESTRICTION_KIND_UNSPECIFIED\x10\x00\x12\xd0\x03\n" +
+	"\x19RESTRICTION_KIND_FUNCTION\x10\x01\x1a\xb0\x03\x92\xb5\x18\x03all\x92\xb5\x18\x06ai-all\x92\xb5\x18\bai-train\x92\xb5\x18\bai-input\x92\xb5\x18\bai-index\x92\xb5\x18\x06search\x92\xb5\x18\x05crawl\x92\xb5\x18\x14text-and-data-mining\x92\xb5\x18\x03tts\x92\xb5\x18\n" +
 	"commercial\x92\xb5\x18\vadvertising\x92\xb5\x18\teditorial\x92\xb5\x18\bresearch\x92\xb5\x18\treproduce\x92\xb5\x18\n" +
-	"distribute\x92\xb5\x18\x06modify\x92\xb5\x18\adisplay\x92\xb5\x18\x04sync\x92\xb5\x18\tbroadcast\x92\xb5\x18\x06stream\x92\xb5\x18\x05print\x92\xb5\x18\vmanufacture\x92\xb5\x18\x04sell\xa2\xb5\x18\x0efunctiontokens\x12E\n" +
-	"\x1aRESTRICTION_KIND_GEOGRAPHY\x10\x02\x1a%\x92\xb5\x18\x01*\x92\xb5\x18\x02EU\x92\xb5\x18\x03EEA\xa2\xb5\x18\x0fgeographytokens\x12\x8b\x01\n" +
-	"\x1aRESTRICTION_KIND_USER_TYPE\x10\x03\x1ak\x92\xb5\x18\n" +
+	"distribute\x92\xb5\x18\x06modify\x92\xb5\x18\adisplay\x92\xb5\x18\x04sync\x92\xb5\x18\tbroadcast\x92\xb5\x18\x06stream\x92\xb5\x18\x05print\x92\xb5\x18\vmanufacture\x92\xb5\x18\x04sell\xa2\xb5\x18\x0efunctiontokens\xaa\xb5\x18\x11train-ai=ai-train\xaa\xb5\x18\x16generative-ai=ai-input\xaa\xb5\x18\fscrape=crawl\xaa\xb5\x18\x18tdm=text-and-data-mining\xaa\xb5\x18\x0ecopy=reproduce\xaa\xb5\x18\fadapt=modify\xaa\xb5\x18\x11derivative=modify\x12E\n" +
+	"\x1aRESTRICTION_KIND_GEOGRAPHY\x10\x02\x1a%\x92\xb5\x18\x01*\x92\xb5\x18\x02EU\x92\xb5\x18\x03EEA\xa2\xb5\x18\x0fgeographytokens\x12\xe1\x01\n" +
+	"\x1aRESTRICTION_KIND_USER_TYPE\x10\x03\x1a\xc0\x01\x92\xb5\x18\n" +
 	"individual\x92\xb5\x18\bacademic\x92\xb5\x18\n" +
-	"non_profit\x92\xb5\x18\x0enews_publisher\x92\xb5\x18\vbroadcaster\x92\xb5\x18\x11commercial_entity\xa2\xb5\x18\tusertypes\x12\x1a\n" +
+	"non_profit\x92\xb5\x18\x0enews_publisher\x92\xb5\x18\vbroadcaster\x92\xb5\x18\x11commercial_entity\xa2\xb5\x18\tusertypes\xaa\xb5\x18\x13personal=individual\xaa\xb5\x18\x1abusiness=commercial_entity\xaa\xb5\x18\x1centerprise=commercial_entity\x12\x1a\n" +
 	"\x16RESTRICTION_KIND_OTHER\x10\x04*\x8e\x01\n" +
 	"\vQuotaWindow\x12\x1c\n" +
 	"\x18QUOTA_WINDOW_UNSPECIFIED\x10\x00\x12\x17\n" +

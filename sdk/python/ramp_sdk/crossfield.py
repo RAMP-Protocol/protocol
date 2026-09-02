@@ -41,6 +41,9 @@ _TERM_SEMANTICS_REFERENCE_ONLY = "TERM_SEMANTICS_REFERENCE_ONLY"
 _REGISTRATION_FAILURE_INVALID_DATA = "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA"
 _PRICING_MODEL_FREE = "PRICING_MODEL_FREE"
 _PRICING_MODEL_PER_UNIT = "PRICING_MODEL_PER_UNIT"
+# LicenseTerm.restrictions max_items. The one-per-kind rule stays silent above
+# it, matching the contract — see _license_term_rules.
+_MAX_RESTRICTIONS = 8
 
 _ZERO_RATE_RE = re.compile(r"^0+([.]0+)?$")
 
@@ -79,7 +82,14 @@ def _license_rules(o: dict[str, Any]) -> list[str]:
 
 
 def _license_term_rules(o: dict[str, Any]) -> list[str]:
-    """LicenseTerm reference_only.requires_uri + one_restriction_per_kind."""
+    """LicenseTerm reference_only.requires_uri + one_restriction_per_kind.
+
+    The size test in the second rule is part of its meaning, not a detail of how
+    the contract evaluates it: a list longer than the cap is refused by the cap,
+    and this rule stays silent about it so the reported fault is the length.
+    Mirroring it here is what keeps this face's verdict equal to the wire's on
+    such a list.
+    """
     out: list[str] = []
     semantics = _str(_field(o, "semantics"))
     if semantics == _TERM_SEMANTICS_REFERENCE_ONLY:
@@ -87,7 +97,7 @@ def _license_term_rules(o: dict[str, Any]) -> list[str]:
         if license_ is None or _str(_field(license_, "uri")) == "":
             out.append("license_term.reference_only.requires_uri")
     restrictions = _field(o, "restrictions")
-    if isinstance(restrictions, list):
+    if isinstance(restrictions, list) and len(restrictions) <= _MAX_RESTRICTIONS:
         kinds = [_str(_field(_as_obj(r) or {}, "kind")) for r in restrictions]
         if len(set(kinds)) != len(kinds):
             out.append("license_term.one_restriction_per_kind")

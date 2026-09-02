@@ -81,6 +81,52 @@ entries below are left as written; they record what that release said.
 The attestation signature envelope remains an open decision, and the file header no
 longer asserts one.
 
+**The restriction axis set is closed, and the rule that walks the restriction list
+against itself is bounded (breaking, pre-1.0).** Two changes; the second is what bounds
+the cost, and the first does not.
+
+`Restriction.kind` carries `defined_only` beside its existing `not_in: [0]`, so a number
+outside the four defined axes is refused rather than ignored.
+A custom axis was never a new number — it is `RESTRICTION_KIND_OTHER`, whose meaning
+rides in `permitted`/`prohibited` — and accepting an undefined one admitted a restriction
+no consumer can evaluate onto a term whose default is BINDING, which fails open on the
+axis a publisher most needs enforced.
+
+Closing the axis does NOT bound the one-per-kind rule, and an earlier draft of this
+entry said it did. That rule compares the list against itself, and `defined_only` does
+not make the numbers it refuses EQUAL — each stays distinct, so `all()` still finds no
+duplicate to stop on. Nor does the cap on the list help: protovalidate collects every
+violation rather than short-circuiting, so a field rule that fires still leaves the
+message rules to walk the whole oversized list. Measured, before the fix below: four
+thousand restrictions cost 17s to refuse from 20 KB of wire, and the reference Exchange
+reaches that rule before the caller is authenticated.
+
+So the rule now leads with a size test —
+`this.restrictions.size() > 8 || this.restrictions.all(r, …)` — and refuses the same
+input in 26ms. It short-circuits to TRUE, so a list longer than the cap reports
+`repeated.max_items` alone, which is its actual fault. A conformance guard holds the
+threshold equal to that cap, since raising the cap alone would let a list in between
+skip the duplicate check and pass. The TypeScript and Python cross-field faces evaluate
+this rule themselves and carry the same test, so all three agree on the silence.
+
+Measured on this contract, with the restrictions cap above: the most EXPENSIVE conformant
+push that fits under the SDK's 4 MiB default read cap is 83 entries of 32 terms, each term
+carrying one restriction per axis with both token lists at their 64-item caps and every
+token a single character — 3.97 MiB, ~1.8s to validate; one more entry exceeds the cap.
+The shortest legal tokens are what make it the worst case: validation cost tracks the
+number of ELEMENTS walked while size tracks their length, so under a byte cap the
+expensive shape is the one that spends its bytes on count. The same structure with
+64-character tokens is 88 MB and never reaches the validator. A full-cardinality REAL
+batch — 256 entries, 32 terms each, one restriction per axis and every field populated —
+is 0.81 MiB and 475ms.
+
+An earlier draft of this entry put that figure at 4.15 MiB and 7.4s and called it a
+ceiling on conformant work. It was neither: the size was measured in MB and labelled MiB
+(and so read as larger than the cap it fits under), the seconds came from a different
+token length than the bytes did, and no ceiling follows from the caps — the enumeration
+behind it omits quotas, obligations, scopes and attestations, and protovalidate checks a
+non-conformant push as thoroughly as a conformant one.
+
 **A cross-field refinement turned off the wire policy for the whole message (TypeScript
 SDK fix; no wire change).** The composed cross-field schemas are the surface a TypeScript
 consumer is told to parse with, and each one is a Zod refinement wrapped AROUND the
@@ -239,6 +285,211 @@ account it already holds, which a repeat `Register` will no longer tell it. A me
 (`get_account_status_response.terms_digest_requires_billing_ref`) joins the digest to the
 account handle it hangs on, so a reader can never take an acceptance from a response that
 carries no account.
+
+**The catalog lists are bounded, and the bound names the quantity it controls
+(breaking, pre-1.0).** `LicenseTerm.quotas` and `.obligations` carry at most 64 items
+each — the bound every per-message list in this contract carries when no rule walks it
+more than once — and `PushResourcesRequest.entries` and `RemoveResourcesRequest.paths` at
+most 256, the bound a caller-chosen batch carries at `ResourceQuery.uris`. Every committed
+feed is under ten entries, so the batch cap sits far above real traffic and a larger feed
+is pushed in several submissions.
+
+`LicenseTerm.restrictions` carries at most 8, and like the others this bounds the
+DOCUMENT rather than the rule — an earlier draft claimed otherwise. Only one restriction
+per axis is valid and `Restriction.kind` is now defined-only, so four is the longest
+conformant list and eight leaves room for an axis this version does not have. The largest
+downstream feed carries three.
+
+The tighter bound still earns its place, for a different reason: this is the one list a
+message rule walks against ITSELF, so the number is also the threshold of the size test
+that rule carries, and a conformance guard holds the two equal. The disjointness rule on
+each element is quadratic only in that element's two token lists, both capped at 64, so
+its cost is bounded per restriction and linear across the list.
+
+What these caps bound is the DOCUMENT: how large one entry may be, what a push can store,
+and how much a rejection has to name back. They do NOT bound the work of checking a push,
+and the `ResourceEntry` comment no longer says they do. A validator walks every element it
+is handed and reports every violation before any cardinality rule is applied — measured on
+this contract, an entry with 100,000 terms costs 393ms and allocates 100,001 violations
+even though `terms` was already capped at 32. A bound belongs on the phase whose cost it
+models, so the work is bounded one layer down, by the maximum request size the recipient
+will read.
+
+`CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED` is recorded as retired on the
+`PushResources` path. An over-cap entry always refused the whole submission — a catalog
+push is all-or-nothing — so moving the cap onto the wire changed WHEN it is refused, not
+what survives: the refusal now happens at the boundary, before any per-entry classification
+runs, and no rejection naming that reason can be produced for a push. The value stays for a
+deployment that applies the cap somewhere the wire rules do not reach.
+
+*Tooling:* the corpus grows from 602 to 607 cases — one `too_many` mutant per newly bounded
+field; `LicenseTerm` goes from 4 to 7, `PushResourcesRequest` from 20 to 21 and
+`RemoveResourcesRequest` from 28 to 29. The `entries` mutant carries 257 full
+`ResourceEntry` instances and is the reason `cases.json` roughly doubles; that cost is
+accepted rather than paid for with a smaller cap. The catalog-path pattern gains the
+descriptor-derived membership guard the domain and digest patterns already have
+(`wantResourcePathFields = 2`) — it was the one shared pattern without one, and the
+generator keys its killer table by the pattern string, so a drift would have silently
+emitted no mutants at all.
+
+**The SDK's server binding bounds what a handler reads (no wire change;
+conformance-affecting).** `connectserver` sets a per-request read cap on all three handler
+bindings, defaulting to 4 MiB and overridable with `WithMaxRequestBytes`. It bounds two
+quantities, because a caller can exhaust a server through either: the decompressed Connect
+message, refused as `resource_exhausted`, and the raw HTTP body the verify face must buffer
+whole to check an RFC 9421 signature over the exact bytes — which it does before it knows
+who the caller is, so an unauthenticated caller reaches that one. The body bound is
+composed inside request-id and outside verify, so a refusal still carries its
+`X-Request-ID`, and a body past the cap is now classified `resource_exhausted` rather than
+told its credentials were wrong. Measured: a full-cardinality push — 256 entries each
+carrying the full 32 terms, one restriction per axis, every field populated — is 0.81 MiB
+and validates in ~475ms, while the most expensive conformant shape that still fits under
+the cap is 83 entries with both token lists at their caps and single-character tokens,
+3.97 MiB and ~1.8s. That is what the default buys: not a small worst case, but a bounded
+one. It is a measurement of one shape rather than a ceiling over all of them — raising the
+cap raises the worst case roughly linearly, with no value past which it stops mattering.
+
+The decompressed bound is not a bound on decompression WORK. Connect drains the remainder
+of an over-cap stream to size the error it returns, so the body is fully inflated before it
+is refused; what keeps that finite is the raw-body bound, and at 4 MiB of compressed input
+it is 4.32 GB inflated in ~850ms of CPU on a request that is then rejected. The byte figures
+size a representative batch, not a ceiling on a conformant one: the contract's caps bound
+how many entries and terms a push carries, never how many bytes, so a conformant push can
+exceed this cap and be refused.
+
+**The server binding's refusal answer is exported, so a consumer stops re-deriving it
+(SDK only; no wire change).** `connectserver` now exports `RejectCode`, `IsBodyTooLarge`
+and `WriteReject` — the classification, the over-cap predicate and the writer that pairs
+the Connect error body with its HTTP status. They were unexported, so a third-party
+Exchange, or any mount composed by hand rather than through `NewCatalogServiceHandler`,
+had to write its own. That copy does not stay level: Connect maps `ResourceExhausted` to
+429 for every cause, and this binding answers 413 for a body past the read cap because
+that is the one refusal a caller fixes by sending less. A re-derivation lands on the
+specification's answer and diverges silently. `WriteReject` takes the Connect code as a
+parameter rather than deriving it, so a gate carrying its own resource-limit sentinel
+answers that case itself and defers every other to `RejectCode` — a delegation, not a
+fork. The over-cap arm is now gated on the code as well as the error, so a rejection
+classified as something other than a resource limit cannot be answered 413 over a body
+that names a different verdict; on the path that existed before, that guard is always
+true, so no response changed.
+
+**The contract states that a push is all-or-nothing, and the prose follows it (docs).**
+`CatalogService` described both validation tiers in full — folding, alias resolution, which
+checks reject and which warn — and never said whether a rejection costs the entry or the
+submission. Readers therefore inferred it from an implementation, and inferred wrong. The
+rule is now in the contract: a hard rejection at either tier refuses the entire submission
+and persists nothing, and the per-entry detail a refusal carries is reporting, never partial
+acceptance. `CatalogRejection.rejected_paths` says which entries a refusal is about rather
+than calling itself a partial-batch failure, and the JSONL ingestion page states the rule
+once, for both tiers. The publisher-onboarding and
+verification-vendor pages had told a reader to build the catalog client against the
+Exchange's advertised `catalog_endpoint`; the address is configuration, and a deployment
+that does read it from a manifest MUST itself check the host binding that field states —
+no SDK reads the field, so nothing else will. The one TypeScript SDK import sample on the
+site named a package that does not export those symbols.
+
+**`ResourceEntry` carries envelope rules, and the catalog request lists are bounded
+(breaking, pre-1.0).** The terms inside an entry were guarded by the `LicenseTerm` rules;
+the envelope around them was not, so an entry with an empty `domain`, a `path` without a
+leading slash, or a `domain` carrying a scheme or a path reached the Exchange and was
+refused — or quietly synthesised into a wrong catalog URI — only after ingestion had
+started. `domain` now carries the shared bare-host rule every addressed `exchange` field
+carries (a port is allowed; a scheme, path, query or userinfo is not; 260 characters);
+`path` is an absolute URL path (`^/[^?#\x00-\x20\x7f]*$`, 1–2048 characters); `title` (512),
+`content_id` and `content_hash` (255), `hash_method` (64) and `provenance_source` (260)
+are length-bounded — every one of these counts CHARACTERS (Unicode code points), which
+is what protovalidate's `max_len` counts, so a conformant value can exceed its character
+count in bytes; `word_count` and `estimated_quantity` are non-negative;
+`attestations` carries at most 64 entries and `terms` at most 32 — the cap
+`CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED` named, stated on the wire so every
+implementation refuses the same size. `content_hash` is deliberately not format-checked:
+a bare hex digest and a `method:hexdigest` form both travel today, and `hash_method`
+names the algorithm. `PushResourcesRequest.entries` and `RemoveResourcesRequest.paths`
+require at least one item, and each removed path carries the same absolute-path shape.
+Adding a rule changes no signed bytes — a protovalidate rule is a field option, not a
+field — and `buf breaking` cannot see it. Every committed fixture and the reference e2e
+catalog (ports on `domain`, single-label hosts, bare-hex hashes) passes the new rules;
+what changes is that a malformed push is refused at the boundary rather than after
+ingestion, and a path without a leading slash — accepted before, and synthesised into a
+URI that named the wrong resource — is now refused.
+
+`WellKnownManifest.catalog_endpoint` states the same host binding as `endpoint`: on the
+host and port that serve the manifest or a subdomain of it, no userinfo, and a consumer
+refuses anything else and does not fall back to `endpoint` when the field is absent. A
+publisher's push is a signed call to that address; without the rule a manifest could
+redirect it to a host the signature never covered. `CatalogService` and `ResourceEntry`
+also document the two validation tiers a push passes — the wire rules, then
+canonicalisation and registry membership over the terms — so a publisher can run both
+before sending.
+
+*Tooling:* the corpus grows from 549 to 602 cases; `ResourceEntry` goes from 3 to 48 and
+`RemoveResourcesRequest` from 20 to 28. The generator's sample list gains `"/x"`
+(append-only, so no existing field re-values) and the path pattern gains its own killer
+table — no leading slash, `?`, `#`, whitespace, a control byte. The guard counting the
+shared domain rule's fields moves from 17 to 18, and the manifest endpoint-comment guard
+now reads `catalog_endpoint` too.
+
+**Restriction-token aliases are authored in the proto and generated into every SDK
+(additive, no wire break).** The licensing core's vocabulary table always recorded that
+`train-ai` is AIPREF's spelling of `ai-train`, `generative-ai` the industry's spelling of
+`ai-input`, `scrape` of `crawl`, `tdm` of `text-and-data-mining`, `copy` of `reproduce`,
+and `adapt` and `derivative` of `modify`; the reference Exchange resolved them from a
+private map, and the user-type aliases (`personal` → `individual`, `business` and
+`enterprise` → `commercial_entity`) existed only in that code. They are now
+`(ramp.v1.vocab_enum_alias)` entries beside the tokens they resolve to, in the form
+`alias=canonical`, and `protoc-gen-rampvocab` emits an `Aliases` map and a `Canonical`
+lookup (`canonical` in TypeScript and Python) per axis in all three languages — an axis
+without aliases carries an empty map so every axis has the same face. Codegen refuses an
+alias that is itself a token, a canonical that is not one, a duplicate, and a spelling
+that is not already trimmed and lowercase: the SDK folds a token before it looks it up,
+so any other spelling could never match. The generated lookup does no folding of its
+own. The docs' vocabulary tables render the aliases from the same descriptor option.
+
+*Tooling:* the three generated alias maps are held to one answer per axis, and to the
+registry, the way the token sets already are.
+
+**The SDK serves the publisher role, in all three languages (no wire change;
+conformance-affecting).** Three additions, one per gap. A catalog client —
+`connect.NewCatalogClient` in Go, `createCatalogClient` in TypeScript, `CatalogClient`
+(async, with a blocking twin under `ramp_sdk.sync`) in Python — issues `PushResources`,
+`RemoveResources` and `RefreshCatalog` under the same names in each language, over the
+same signing transport, redirect refusal, request-id and validate interceptors and read
+cap as the agent verbs. It is a separate constructor because CatalogService is a separate
+address (`WellKnownManifest.catalog_endpoint`) and its caller holds a contributor key
+named by `caller_id`; the publisher chose the Exchange, so the leg runs on the plain
+transport. The messages carry no idempotency key and the client mints none; `ver` is
+stamped when empty; a request that names no bare-domain recipient is refused before it is
+signed. The client-request corpus gains the three verbs, replayed in all three languages.
+
+The ingest-tier license-term checks moved out of the reference Exchange into the L1
+helpers — `NormalizeLicenseTerm`, `NormalizeResourceEntry`, `ValidateLicenseTerm`,
+`ValidateResourceEntry`, `CanonicalRestrictionToken`, `KnownRestrictionToken` in Go, the
+same faces in snake and camel case in Python and TypeScript — so a publisher runs the
+checks the Exchange will run before sending: RFC 8259 trim, ASCII-only case fold, alias
+resolution through the generated vocabulary, a hard reject for a bare unregistered
+`Pricing.unit` or `Quota.metric`, a warning for an unregistered restriction token or an
+`OBLIGATION_KIND_OTHER` obligation without detail, and a per-entry verdict composing the
+wire tier and the ingest tier in the Exchange's order. Warning messages are the exact
+wire strings. A new Go-emitted corpus (`licenseterm-vectors.json`: fold, normalize, known,
+validate, entry) is replayed by both ports, and a conformance guard holds the SDK rule
+ids to the descriptor's CEL-id namespace without collisions.
+
+`connectserver.NewCatalogServiceHandler` composes the same request-id · verify · validate
+· error-detail stack over the generated CatalogService handler, so an Exchange
+implementer has a server-side starting point for the publisher-facing RPCs; contributor
+authorisation, tenant binding and per-entry verdicts stay the handler's job. The validate
+step is opt-in on all three bindings and always has been — `ValidationOff` is the enum's
+zero value — so a deployment that wants the contract's boundary rules passes
+`WithValidation(ValidationStrict)` on the mount. The handler docs now say so rather than
+leaving it to be inferred from a stack diagram, and a handler asked for strict validation
+that cannot build the validator now fails at construction instead of serving without it.
+
+*Parity record:* thirteen L1 exports and the catalog client are mapped at
+three-language parity (130 symbols, 34 corpora). Two documented divergences join the
+record — the catalog client's Go factory folds into the Python constructor as every other
+`NewX` does, and the Catalog handler binding is a third symbol under the recorded
+full-Connect-handler decision — so the shrink-only allowlist baseline moves 14 → 16 as a
+reviewed bump, and the gate now names that one sanctioned growth shape.
 
 **The TypeScript and Python SDKs gained a client, and it changed what they accept
 from a peer (no wire change; conformance-affecting).** Neither could SEND a RAMP

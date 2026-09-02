@@ -124,6 +124,8 @@ RSL permits and prohibits map directly to RAMP `Restriction` entries carried on 
 | `<prohibits type="usage">ai-train</prohibits>` | `terms[].restrictions: [{ kind: RESTRICTION_KIND_FUNCTION, prohibited: ["ai-train"] }]` |
 | `<payment type="crawl" amount="0.05"/>` | `pricing.model: PRICING_MODEL_PER_UNIT, pricing.unit: "fetches", pricing.rate: 0.05` |
 
+Spellings other vocabularies use for the same tokens are accepted aliases, authored beside the tokens in the proto and canonicalised at ingest: AIPREF's `train-ai` is RAMP's `ai-train`, `scrape` is `crawl`, the industry's `generative-ai` is `ai-input`, and `tdm` is `text-and-data-mining`. A feed may carry either spelling; the catalog stores the registered token.
+
 ## CoMP Integration
 
 IAB CoMP is **not** nested in RAMP's core messages. It is an **extension profile** (`ramp-comp-v1`) whose objects are carried as flat `comp.*` keys in `Offer.ext`. The RAMP core does not embed CoMP types: the core carries `Offer.title` plus `LicenseTerm` (on `Offer.terms[]`) for licensing, and the requester states `acceptable_restrictions` rather than a CoMP intended-use object.

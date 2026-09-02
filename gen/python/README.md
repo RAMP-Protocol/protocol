@@ -18,7 +18,8 @@ Contents:
   (`LicenseTerm.license` is a `License`), so the whole tree hydrates as typed models.
   **Cross-field rules are NOT here** — enforced server-side by the Exchange/Broker.
 - `vocab/` — registered vocabulary constants per axis (`pricingunits`, …) with
-  `is_registered()`.
+  `is_registered()`, plus the accepted aliases authored beside the tokens (`ALIASES`,
+  `canonical()` — an exact lookup; the SDK folds case before it looks up).
 
 ```python
 from wire.models import LicenseTerm, License
