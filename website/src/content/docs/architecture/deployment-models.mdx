@@ -89,7 +89,7 @@ The provider deploys the edge function themselves using tooling provided by RAMP
 | CloudFront | Lambda@Edge via Terraform/CLI | DynamoDB or S3 | Yes |
 | Cloudflare | Workers via Wrangler | Workers KV | Yes |
 | Fastly | Compute@Edge via CLI | KV Store | Yes |
-| Akamai | EdgeWorkers via CLI | EdgeKV | Yes |
+| Akamai | Not supported | EdgeKV | No |
 | Vercel | Edge Functions via CLI | KV | Yes |
 | Generic | Reverse proxy config | External KV | Partial |
 
@@ -145,7 +145,7 @@ Content published in WordPress
 
 For CDNs with limited compute capabilities, the edge function can be reduced to a minimal feature set:
 
-1. **Signed URL verification**: Check signed URL query parameters -- valid? pass through : return 403
+1. **Signed URL verification**: verify the Ed25519 signature over the canonical URL -- valid? pass through : return 403. A CloudFront distribution verifies its RSA signed URLs natively, so there the function skips this step.
 2. **Bot detection**: Check `User-Agent` for known AI crawler strings -- match? return 403 with `X-Content-Rules` header
 3. **Serve `ramp.json`**: Return `/.well-known/ramp.json` inline or proxied from the Exchange
 
@@ -157,7 +157,7 @@ Request arrives at edge:
 1. Path = /.well-known/ramp.json?
    YES -> Return inline ramp.json (or proxy from Exchange)
 
-2. Has signed URL params (Signature, Expires)?
+2. Has signed URL params (sig, exp)?
    YES -> Verify signature
           Valid + not expired? -> Pass through to origin
           Invalid or expired? -> 403 Forbidden
@@ -168,4 +168,4 @@ Request arrives at edge:
 4. Default -> Pass through to origin (non-bot, non-protected)
 ```
 
-This minimum viable feature set works on all major CDN platforms including CloudFront Functions (free tier), Cloudflare Workers, Fastly VCL, and Akamai Property Manager rules.
+Step 1 needs a runtime that can run code: Cloudflare Workers and Fastly Compute verify the signature themselves, and a CloudFront distribution verifies its own RSA signed URLs without any function at all. A declarative rule language -- Fastly VCL, Akamai Property Manager -- cannot verify a signature, so it can serve `ramp.json` and refuse known crawlers but cannot admit a paid request.

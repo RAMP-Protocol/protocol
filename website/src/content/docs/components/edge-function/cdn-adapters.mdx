@@ -1,6 +1,6 @@
 ---
 title: "CDN Adapters"
-description: "Platform-specific adapters for Cloudflare Workers, CloudFront, Akamai EdgeWorkers, Fastly Compute, and the generic adapter interface"
+description: "Platform-specific adapters for Cloudflare Workers, CloudFront, Fastly Compute, and the generic adapter interface"
 ---
 
 The Edge Function is defined as a platform-agnostic interface. Each CDN platform gets a thin adapter that maps platform primitives to the interface. The core decision logic is CDN-agnostic -- every adapter calls the same core function.
