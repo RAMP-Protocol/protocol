@@ -1974,9 +1974,16 @@ message AgentRequestAcceptanceItem {
 // JCS(protojson(AgentRequestAcceptancePayload)) using the canonical-signing
 // rules defined on Offer.signature.
 message AgentRequestAcceptancePayload {
-  // Complete original request order, before Broker fan-out.
+  // Complete original request order, before Broker fan-out. Capped at 256 —
+  // the same ceiling a discovery query's uris list carries, so one request
+  // can reference at most one offer per queried URI at the query cap. The Go
+  // verification helper enforces the same bound itself before doing any
+  // canonicalization work, because a verifier may run with wire validation
+  // off and the canonical rendering of an unbounded list is the expensive
+  // step an unauthenticated caller could otherwise buy for free.
   repeated AgentRequestAcceptanceItem items = 1 [
-    (buf.validate.field).repeated.min_items = 1
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 256
   ];
 
   string requester_id = 2;

@@ -54,7 +54,8 @@ class AgentRequestAcceptancePayload(WireModel):
     idempotency_key: str | None = ''
     items: list[AgentRequestAcceptanceItem] | None = Field(
         None,
-        description='Complete original request order, before Broker fan-out.',
+        description="Complete original request order, before Broker fan-out. Capped at 256 —\n the same ceiling a discovery query's uris list carries, so one request\n can reference at most one offer per queried URI at the query cap. The Go\n verification helper enforces the same bound itself before doing any\n canonicalization work, because a verifier may run with wire validation\n off and the canonical rendering of an unbounded list is the expensive\n step an unauthenticated caller could otherwise buy for free.",
+        max_length=256,
         min_length=1,
     )
     requester_domain: str | None = ''

@@ -16,6 +16,17 @@ The field is optional for wire compatibility. The Go, Python, and TypeScript
 SDK clients emit it for valid routed offers, and all three signing/verifying
 faces are pinned to shared cross-language canonicalization and ordering vectors.
 
+The payload's item list is capped at 256 entries (`repeated.max_items`, the
+same ceiling a discovery query's `uris` list carries). The Go verification
+helper enforces the same bound itself and decodes and size-checks the Ed25519
+signature before rendering the payload to canonical JSON, because a verifier
+may run with wire validation off and the canonical rendering of an unbounded
+caller-controlled list is the expensive step. A test pins the helper's bound to
+the wire rule so the two cannot drift. The projection check also refuses an
+empty subrequest outright: without that, a request carrying zero items for an
+Exchange the signed set never names would compare zero against zero and report
+a verified projection.
+
 **Signed delivery URLs are documented as Ed25519 signed by the Exchange and
 verified with its published public key, not HMAC-SHA256 over a shared secret
 (documentation correction; no wire change).** Since the initial public snapshot

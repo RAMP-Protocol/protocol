@@ -232,6 +232,1048 @@
     }
   },
   {
+    "id": "AgentRequestAcceptancePayload/items/too_many",
+    "message": "AgentRequestAcceptancePayload",
+    "valid": false,
+    "rules": [
+      "repeated.max_items"
+    ],
+    "json": {
+      "idempotency_key": "idem-tx",
+      "items": [
+        {
+          "exchange": "exchange.example",
+          "offer_sig": "offer-signature"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        },
+        {
+          "exchange": "x",
+          "offer_sig": "x"
+        }
+      ],
+      "requester_id": "agent-seed"
+    }
+  },
+  {
     "id": "AgentRequestAcceptancePayload/valid",
     "message": "AgentRequestAcceptancePayload",
     "valid": true,

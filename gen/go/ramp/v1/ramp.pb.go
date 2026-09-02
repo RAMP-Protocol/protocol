@@ -4699,7 +4699,13 @@ func (x *AgentRequestAcceptanceItem) GetExchange() string {
 // rules defined on Offer.signature.
 type AgentRequestAcceptancePayload struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Complete original request order, before Broker fan-out.
+	// Complete original request order, before Broker fan-out. Capped at 256 —
+	// the same ceiling a discovery query's uris list carries, so one request
+	// can reference at most one offer per queried URI at the query cap. The Go
+	// verification helper enforces the same bound itself before doing any
+	// canonicalization work, because a verifier may run with wire validation
+	// off and the canonical rendering of an unbounded list is the expensive
+	// step an unauthenticated caller could otherwise buy for free.
 	Items           []*AgentRequestAcceptanceItem `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
 	RequesterId     string                        `protobuf:"bytes,2,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
 	RequesterDomain string                        `protobuf:"bytes,3,opt,name=requester_domain,json=requesterDomain,proto3" json:"requester_domain,omitempty"`
@@ -10156,9 +10162,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x13signature_algorithm\x18\x03 \x01(\tR\x12signatureAlgorithm\"g\n" +
 	"\x1aAgentRequestAcceptanceItem\x12$\n" +
 	"\toffer_sig\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bofferSig\x12#\n" +
-	"\bexchange\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bexchange\"\xdb\x01\n" +
-	"\x1dAgentRequestAcceptancePayload\x12C\n" +
-	"\x05items\x18\x01 \x03(\v2#.ramp.v1.AgentRequestAcceptanceItemB\b\xbaH\x05\x92\x01\x02\b\x01R\x05items\x12!\n" +
+	"\bexchange\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bexchange\"\xde\x01\n" +
+	"\x1dAgentRequestAcceptancePayload\x12F\n" +
+	"\x05items\x18\x01 \x03(\v2#.ramp.v1.AgentRequestAcceptanceItemB\v\xbaH\b\x92\x01\x05\b\x01\x10\x80\x02R\x05items\x12!\n" +
 	"\frequester_id\x18\x02 \x01(\tR\vrequesterId\x12)\n" +
 	"\x10requester_domain\x18\x03 \x01(\tR\x0frequesterDomain\x12'\n" +
 	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\"\xac\x01\n" +
