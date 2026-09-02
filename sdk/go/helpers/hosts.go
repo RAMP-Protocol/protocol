@@ -142,13 +142,20 @@ func IsBareHost(ref string) (bool, error) {
 // carrying a scheme, a path, userinfo, or a query never does.
 //
 // One rule, three copies, all gated. These bytes are the protovalidate pattern
-// carried by the contract's recipient-addressing fields — the `exchange` field on
-// each addressed request, Offer.exchange and their neighbours, NOT every field in
-// ramp.proto that happens to hold a domain — so the check a client makes before
-// sending and the check the wire makes on arrival cannot answer differently. The
-// shared conformance vectors record the pattern beside the cases, and a guard in
-// the conformance tier holds it against the descriptor; which fields belong to
-// the family is pinned there too.
+// carried by every field in the contract whose value is a bare host: the
+// recipient-addressing fields — the `exchange` field on each addressed request,
+// Offer.exchange and their neighbours — and ResourceEntry.domain, the host half of
+// a catalog URI, which is not addressing anything but needs the same shape for the
+// same reason, since a value carrying a scheme or a path would choose the URI
+// rather than name the host. So the check a client makes before sending and the
+// check the wire makes on arrival cannot answer differently.
+//
+// It is a shape rule and not a routing one, which is the line worth keeping: it
+// says what a host looks like, never that this host is one worth dialling. A field
+// that holds a domain for some other purpose does not join by resemblance — the
+// family is enumerated from the descriptor. The shared conformance vectors record
+// the pattern beside the cases, and a guard in the conformance tier holds it
+// against the descriptor and counts the fields that carry it.
 //
 // The port is a real 1-65535 range rather than "one to five digits", which is
 // why it is spelled out at this length. That distinction is load-bearing on

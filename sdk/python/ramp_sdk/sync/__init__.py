@@ -39,11 +39,18 @@ from ramp_sdk.client.errors import CallError, CallErrorKind
 from ramp_sdk.resolvers import _ssrf, guarded_client
 
 if TYPE_CHECKING:
-    from wire.models import DisputeResponse, TransactionResponse, UsageReportResponse
+    from wire.models import (
+        DisputeResponse,
+        PushResourcesResponse,
+        RefreshCatalogResponse,
+        RemoveResourcesResponse,
+        TransactionResponse,
+        UsageReportResponse,
+    )
 
     from ramp_sdk.core import DiscoveryResult, VerifiedOffer
 
-__all__ = ["BrokerClient", "Client", "ClientConfig"]
+__all__ = ["BrokerClient", "CatalogClient", "Client", "ClientConfig"]
 
 
 class _Face:
@@ -222,3 +229,25 @@ class BrokerClient(_Face):
         plan = _verbs.plan_resolve(self._config, request)
         status, body = self._send(plan)
         return _verbs.finish_resolve(self._config, plan, status, body)
+
+
+class CatalogClient(_Face):
+    """The blocking Catalog client. See :class:`ramp_sdk.client.CatalogClient`."""
+
+    def __init__(self, config: ClientConfig, *, http: httpx.Client | None = None) -> None:
+        super().__init__(config, http)
+
+    def push_resources(self, request: dict[str, Any]) -> PushResourcesResponse:
+        plan = _verbs.plan_push_resources(self._config, request)
+        status, body = self._send(plan)
+        return _verbs.finish_push_resources(plan, status, body)
+
+    def remove_resources(self, request: dict[str, Any]) -> RemoveResourcesResponse:
+        plan = _verbs.plan_remove_resources(self._config, request)
+        status, body = self._send(plan)
+        return _verbs.finish_remove_resources(plan, status, body)
+
+    def refresh_catalog(self, request: dict[str, Any]) -> RefreshCatalogResponse:
+        plan = _verbs.plan_refresh_catalog(self._config, request)
+        status, body = self._send(plan)
+        return _verbs.finish_refresh_catalog(plan, status, body)

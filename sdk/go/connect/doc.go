@@ -1,8 +1,10 @@
 // Package connect is the opt-in Connect-Go CLIENT binding over the transport-neutral
 // sdk/go/core L2 substance. It carries the agent verb set — Discover, Resolve,
-// Execute, ReportUsage, Dispute and the low-tier content Fetch — across two
-// constructors: NewClient for an Exchange and NewBrokerClient for a Broker, which
-// are different parties and so cannot share one base URL.
+// Execute, ReportUsage, Dispute and the low-tier content Fetch — and the publisher
+// verb set — PushResources, RemoveResources and RefreshCatalog — across three
+// constructors: NewClient for an Exchange, NewBrokerClient for a Broker, and
+// NewCatalogClient for an Exchange's CatalogService, which are different parties
+// or different addresses and so cannot share one base URL.
 //
 // Around those sit the configurable client itself (sign face as a signing
 // RoundTripper, request-id/validate interceptors, the fail-closed offer Verifier),

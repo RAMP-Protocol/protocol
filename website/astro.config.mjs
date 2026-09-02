@@ -32,6 +32,7 @@ export default defineConfig({
 						{ label: 'What is RAMP?', slug: 'getting-started/what-is-ramp' },
 						{ label: 'Live Demo', slug: 'getting-started/poc-walkthrough' },
 						{ label: 'For Providers', slug: 'getting-started/for-providers' },
+						{ label: 'Publisher Onboarding', slug: 'getting-started/publisher-onboarding' },
 						{ label: 'For AI Agents', slug: 'getting-started/for-ai-agents' },
 						{ label: 'How Money Flows', slug: 'getting-started/how-money-flows' },
 					],

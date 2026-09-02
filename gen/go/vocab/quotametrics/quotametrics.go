@@ -2,7 +2,7 @@
 //
 // Source vocabulary: on ramp.v1.Quota.metric.
 // The token list is authored solely in that option; these
-// constants and IsRegistered derive from it and cannot drift.
+// constants, IsRegistered, Aliases and Canonical derive from it and cannot drift.
 
 package quotametrics
 
@@ -45,4 +45,19 @@ var registered = map[string]struct{}{
 func IsRegistered(s string) bool {
 	_, ok := registered[s]
 	return ok
+}
+
+// Aliases maps an accepted alias spelling to the registered token it
+// canonicalises to. Authored beside the tokens; an axis without aliases
+// carries an empty map so every axis has the same face.
+var Aliases = map[string]string{}
+
+// Canonical returns the registered token s is an alias of, or s unchanged
+// when it is not an alias. It neither trims nor case-folds: the SDK folds a
+// token before it looks it up here.
+func Canonical(s string) string {
+	if c, ok := Aliases[s]; ok {
+		return c
+	}
+	return s
 }

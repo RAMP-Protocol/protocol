@@ -144,7 +144,7 @@ func seeds() map[string]proto.Message {
 // FIRST entry that matches, so appending cannot change what any existing field
 // auto-fills to, and the corpus diff stays additive. Inserting anywhere else can
 // silently re-value every field a new earlier entry happens to satisfy.
-var stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256:" + strings.Repeat("ab", 32), ""}
+var stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256:" + strings.Repeat("ab", 32), "", "/x"}
 
 // APPEND-ONLY: a badStrings entry's INDEX is baked into the emitted case IDs (see
 // stringEdges' pattern#<idx> mutants), so appending keeps existing case IDs stable and
@@ -182,7 +182,27 @@ var patternKillers = map[string][]string{
 		"exchange.example:0",        // port 0 names no listening service
 		"exchange.example:99999",    // port above 65535
 	},
+	// The catalog path family: a resource path is concatenated after the
+	// domain to form the catalog URI, so a missing leading slash, a query or
+	// fragment delimiter, whitespace or a control byte each change WHICH
+	// resource the row names rather than merely how it is spelled.
+	resourcePathPattern: {
+		"x",      // no leading slash
+		"/a?b",   // query delimiter
+		"/a#b",   // fragment delimiter
+		"/a b",   // whitespace
+		"/a\x7f", // control byte
+	},
 }
+
+// resourcePathPattern is the absolute-path shape ResourceEntry.path and
+// RemoveResourcesRequest.paths carry, quoted from the proto for the same
+// reason bareDomainPattern is — and, like it, a drift between this copy and the
+// fields is caught by conformance's own descriptor guard, not here. That matters
+// more for this one than for a plain constant: the killer table above is keyed by
+// the pattern STRING, so a stale key would emit nothing at all rather than
+// something wrong.
+const resourcePathPattern = `^/[^?#\x00-\x20\x7f]*$`
 
 // bareDomainPattern is the recipient-host shape, quoted from the proto so the
 // killer table above can be keyed by it. A drift between this copy and the

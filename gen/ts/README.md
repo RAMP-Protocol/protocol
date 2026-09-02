@@ -22,7 +22,8 @@ Contents:
   lowerCamelCase spelling of it. Shared, so the refusal above and any reader of Connect's
   `debug` projection answer alike.
 - `vocab/*.ts` — registered vocabulary constants per axis (`pricingunits`, …) with
-  `isRegistered()`.
+  `isRegistered()`, plus the accepted aliases authored beside the tokens (`Aliases`,
+  `canonical()` — an exact lookup; the SDK folds case before it looks up).
 
 ```typescript
 import { parseWire } from "@ramp-protocol/sdk/wire/base";

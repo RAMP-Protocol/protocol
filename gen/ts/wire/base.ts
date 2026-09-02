@@ -31,6 +31,12 @@ export function wire<T extends z.ZodTypeAny>(schema: T): T {
 	return schema instanceof z.ZodObject ? (schema.strip() as unknown as T) : schema;
 }
 
+/** Rule id for the refusal below, so a caller can name it without matching on a message
+ * string. The Python seam spells the same id as `wire.base.JSON_NAME_ALIAS_ERROR`, and the
+ * two must stay equal: a face that reports the refusal as a validation finding — the
+ * publisher's entry pre-check does — carries this id in both languages. */
+export const JSON_NAME_ALIAS_ERROR = "ramp_json_name_alias";
+
 /** The refusal parseWire raises. Carried as its own type so the caller above can map it to
  * a typed protocol failure without matching on a message string. */
 export class WireNamingError extends Error {

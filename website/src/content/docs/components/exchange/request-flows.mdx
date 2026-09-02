@@ -778,6 +778,8 @@ func (h *ExchangeHandler) ReportUsage(
 
 ## Attestation Verification at Catalog Push
 
+Before the handler below runs, the wire tier has already refused a malformed push: the `ResourceEntry` envelope rules (bare-host `domain`, absolute `path`, bounded fields, at most 32 terms, and at most 256 entries in the submission) and the `LicenseTerm` rules (including at most 8 restrictions, and at most 64 quotas or obligations, per term) are protovalidate rules applied at the boundary. That tier is something a deployment turns on: an Exchange built on the Go SDK mounts its handler with `connectserver.WithValidation(connect.ValidationStrict)`, which is what composes protovalidate onto it — the option is not the default, and the reference implementation passes it on every mount. The handler then canonicalises the terms and applies registry membership — the ingest tier — before the attestation checks. Both tiers ship in the SDK as a publisher pre-check, so a conforming feed rarely reaches this flow with a refusable entry.
+
 When `CatalogService.PushResources` includes attestations, the Exchange performs additional verification before accepting entries into the resource catalog.
 
 ```mermaid
@@ -799,7 +801,7 @@ sequenceDiagram
         else Third-party push
             Handler->>Manifest: Is caller_id in catalog_contributors?
             Manifest-->>Handler: Yes / No
-            Note over Handler: Reject entry if not authorized
+            Note over Handler: Record which entry failed — the submission is refused whole
         end
 
         Handler->>Verifier: Fetch verifier keys (cached, TTL-based)
@@ -807,13 +809,19 @@ sequenceDiagram
 
         Note over Handler: Look up attestation key by RFC 7638 thumbprint (keyid)
         Note over Handler: Verify attestation.signature (Ed25519)
-        Note over Handler: Check claims size <= 4KB
+        Note over Handler: Handler-applied claims-size limit (no wire rule bounds claims)
     end
 
-    Handler-->>Caller: PushResourcesResponse { accepted: N, rejected: M }
+    alt Every entry passed
+        Handler-->>Caller: PushResourcesResponse { accepted: N }
+    else Any entry failed
+        Handler-->>Caller: non-OK error + ErrorDetail.catalog_rejection { reason, rejected_paths }
+    end
 ```
 
-**Rejection reasons**: `SIGNATURE_INVALID`, `UNAUTHORIZED_CONTRIBUTOR`, `ATTESTATION_SIGNATURE_INVALID`, `UNKNOWN_VERIFIER`, `CLAIMS_TOO_LARGE`.
+The loop checks each entry, but the verdict is not per-entry: a push is all-or-nothing, so a single failing entry refuses the submission and nothing is persisted. `rejected_paths` names which entries the refusal is about — it is reporting, not a list of what was dropped from an otherwise applied batch.
+
+**Rejection reasons** come from [`CatalogRejectionReason`](/reference/proto-ramp/#catalogrejectionreason). The ones this flow can produce are `CATALOG_REJECTION_REASON_NOT_CATALOG_CONTRIBUTOR` (the caller is not authorized for the domain), `CATALOG_REJECTION_REASON_SIGNATURE_INVALID`, `CATALOG_REJECTION_REASON_DOMAIN_NOT_VERIFIED` and `CATALOG_REJECTION_REASON_MALFORMED_ENTRY`, which the envelope rules make the common one. The attestation-specific failures — a bad attestation signature, an unknown verifier, oversized claims — have no dedicated value in that enum; they travel in the refusal's human-readable message.
 
 See [Content Attestation](/protocol/content-attestation/) for the full attestation system design.
 
