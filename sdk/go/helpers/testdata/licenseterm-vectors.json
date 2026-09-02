@@ -72,6 +72,38 @@
       "warnings": []
     },
     {
+      "name": "alias_disjoint_after_fold_accepted",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "restrictions": [
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "scrape"
+                ],
+                "prohibited": [
+                  "ai-train"
+                ]
+              }
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": true,
+      "structural": false,
+      "cross_field_rules": [],
+      "term_rules": [],
+      "warnings": []
+    },
+    {
       "name": "unknown_token_warns_with_entry_path",
       "entry": {
         "domain": "publisher.example",
@@ -2448,36 +2480,6 @@
         "message": "restriction token \"crawl\" is both permitted and prohibited after canonicalisation"
       },
       "warnings": []
-    },
-    {
-      "name": "restriction_disjoint_after_fold_accepted",
-      "term": {
-        "pricing": {
-          "model": "PRICING_MODEL_FREE",
-          "rate": "0"
-        },
-        "restrictions": [
-          {
-            "kind": "RESTRICTION_KIND_FUNCTION",
-            "permitted": [
-              "scrape"
-            ],
-            "prohibited": [
-              "ai-train"
-            ]
-          }
-        ],
-        "semantics": "TERM_SEMANTICS_ENUMERATED"
-      },
-      "violation": null,
-      "warnings": [
-        {
-          "rule": "restriction.token.registered",
-          "path": "restrictions[0].permitted[0]",
-          "token": "scrape",
-          "message": "unregistered RESTRICTION_KIND_FUNCTION restriction token \"scrape\" (term accepted)"
-        }
-      ]
     },
     {
       "name": "restriction_namespaced_tokens_disjoint_accepted",

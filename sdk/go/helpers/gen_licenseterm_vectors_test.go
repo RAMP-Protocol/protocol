@@ -30,6 +30,7 @@ import (
 	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/gen/go/vocab/functiontokens"
+	"github.com/RAMP-Protocol/protocol/gen/go/vocab/geographytokens"
 	"github.com/RAMP-Protocol/protocol/gen/go/vocab/usertypes"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -523,10 +524,9 @@ func buildLTValidateVectors(t *testing.T) []ltValidateVector {
 		{"restriction_padded_token_collides_after_trim_rejected", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
 			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{" crawl "}, []string{"crawl"})}
 		})},
-		// The other side of the rule: folding must not invent a collision.
-		{"restriction_disjoint_after_fold_accepted", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
-			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"scrape"}, []string{"ai-train"})}
-		})},
+		// The other side of the rule: folding must not invent a collision. The
+		// alias-bearing form of this case is an ENTRY vector, not one of these —
+		// see alias_disjoint_after_fold_accepted for why.
 		{"restriction_namespaced_tokens_disjoint_accepted", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
 			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindOther, []string{"acme:read"}, []string{"acme:write"})}
 		})},
@@ -553,15 +553,20 @@ func buildLTValidateVectors(t *testing.T) []ltValidateVector {
 	// than listed, so an alias added to the proto brings its vector with it and the
 	// obligation to cover every alias pair cannot quietly rot. Each pairs the alias
 	// under permitted with its registered form under prohibited: two strings the
-	// wire tier reads as disjoint and the fold reads as one token. GEOGRAPHY is
-	// absent because it registers no aliases — its collisions are the case-folding
-	// ones above.
+	// wire tier reads as disjoint and the fold reads as one token.
+	//
+	// Every axis that CAN carry aliases is listed, not every axis that does today:
+	// GEOGRAPHY registers none, so it contributes nothing now and contributes a
+	// vector the day it registers one. Listing only the axes with aliases would have
+	// made the sentence above false for the axis nobody was thinking about, which is
+	// how this rule's own defect reached the catalog.
 	for _, axis := range []struct {
 		name    string
 		kind    rampv1.RestrictionKind
 		aliases map[string]string
 	}{
 		{"function", ltKindFunction, functiontokens.Aliases},
+		{"geography", ltKindGeography, geographytokens.Aliases},
 		{"user_type", ltKindUserType, usertypes.Aliases},
 	} {
 		for _, alias := range ltSortedAliases(axis.aliases) {
@@ -612,6 +617,19 @@ func buildLTEntryVectors(t *testing.T) []ltEntryVector {
 		{"domain_with_port_and_single_label_accepted", entry(func(e *rampv1.ResourceEntry) { e.Domain = "edge:8787" })},
 		{"alias_resolved_before_membership_no_warning", entry(func(e *rampv1.ResourceEntry) {
 			e.Terms[0].Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"Generative-AI"}, nil)}
+		})},
+		// Folding must not invent a collision, recorded here rather than in the
+		// per-term list because only the composed face answers what an Exchange
+		// answers. A bare alias earns an unregistered-token warning when it is read
+		// AS WRITTEN, and earns none once the fold resolves it to a registered token;
+		// the entry face folds a copy first, exactly as the Exchange does, so the
+		// warning this records is the one a publisher is really sent. Its neighbour
+		// above pins the same asymmetry for membership; this one pins it for
+		// disjointness.
+		{"alias_disjoint_after_fold_accepted", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Restrictions = []*rampv1.Restriction{
+				ltRestriction(ltKindFunction, []string{"scrape"}, []string{"ai-train"}),
+			}
 		})},
 		{"unknown_token_warns_with_entry_path", entry(func(e *rampv1.ResourceEntry) {
 			e.Terms = append(e.Terms, ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
