@@ -1,6 +1,7 @@
 package helpers_test
 
 import (
+	"context"
 	"crypto/ed25519"
 	"errors"
 	"testing"
@@ -74,6 +75,81 @@ func TestRequestAcceptance_tamperRejected(t *testing.T) {
 	acceptance.Payload.Items[0].Exchange = "evil.example"
 	if _, err := helpers.VerifyRequestAcceptance(req, acceptance, pub); !errors.Is(err, helpers.ErrRequestAcceptanceSignatureInvalid) {
 		t.Fatalf("expected invalid request acceptance, got %v", err)
+	}
+}
+
+// The envelope-binding block: a valid acceptance replayed under a request whose
+// requester or idempotency key differs is refused before the signature is even
+// checked, so an acceptance cannot be transplanted onto another request.
+func TestRequestAcceptance_envelopeMismatchRejected(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	cases := map[string]func(*rampv1.TransactionRequest){
+		"different requester id":     func(r *rampv1.TransactionRequest) { r.Requester.Id = "agent-2" },
+		"different requester domain": func(r *rampv1.TransactionRequest) { r.Requester.Domain = "other.example" },
+		"different idempotency key":  func(r *rampv1.TransactionRequest) { r.IdempotencyKey = "idem-2" },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			req := requestAcceptanceFixture()
+			acceptance, err := helpers.SignRequestAcceptance(priv, req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mutate(req)
+			if _, err := helpers.VerifyRequestAcceptance(req, acceptance, pub); !errors.Is(err, helpers.ErrRequestAcceptanceSignatureInvalid) {
+				t.Fatalf("expected invalid request acceptance, got %v", err)
+			}
+		})
+	}
+}
+
+// The algorithm field is advisory but the verifier still refuses anything that
+// does not name the one supported scheme, so a caller cannot smuggle a
+// differently-signed envelope past a verifier that assumes Ed25519.
+func TestRequestAcceptance_wrongAlgorithmRejected(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	req := requestAcceptanceFixture()
+	acceptance, err := helpers.SignRequestAcceptance(priv, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acceptance.SignatureAlgorithm = "RS256"
+	if _, err := helpers.VerifyRequestAcceptance(req, acceptance, pub); err == nil {
+		t.Fatal("expected a refusal for a non-EdDSA algorithm")
+	}
+}
+
+// notEd25519Signer satisfies helpers.Signer but reports an unsupported
+// algorithm, standing in for a KMS configured with the wrong key type.
+type notEd25519Signer struct{}
+
+func (notEd25519Signer) KeyID() string     { return "kms.v1" }
+func (notEd25519Signer) Algorithm() string { return "rsa-pss-sha512" }
+func (notEd25519Signer) Sign(context.Context, []byte) ([]byte, error) {
+	return nil, errors.New("must not be reached")
+}
+
+// SignRequestAcceptanceWith is the face the connect client calls in production:
+// it must produce an acceptance the verifier accepts, and refuse a signer whose
+// algorithm is not Ed25519 before asking it to sign anything.
+func TestSignRequestAcceptanceWith_roundTripAndAlgorithmGate(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	req := requestAcceptanceFixture()
+
+	signer, err := helpers.NewEd25519Signer("agent.v1", priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acceptance, err := helpers.SignRequestAcceptanceWith(context.Background(), signer, req)
+	if err != nil {
+		t.Fatalf("SignRequestAcceptanceWith: %v", err)
+	}
+	if _, err := helpers.VerifyRequestAcceptance(req, acceptance, pub); err != nil {
+		t.Fatalf("signer-produced acceptance does not verify: %v", err)
+	}
+
+	if _, err := helpers.SignRequestAcceptanceWith(context.Background(), notEd25519Signer{}, req); !errors.Is(err, helpers.ErrUnsupportedAlgorithm) {
+		t.Fatalf("expected ErrUnsupportedAlgorithm, got %v", err)
 	}
 }
 

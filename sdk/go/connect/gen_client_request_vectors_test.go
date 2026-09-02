@@ -304,7 +304,7 @@ func verifyOne(t *testing.T, offers offerFixture) core.VerifiedOffer {
 	t.Helper()
 	sorted := core.NewVerifier(
 		core.Strict,
-		helpers.NewStaticKeyResolver(map[string]ed25519.PublicKey{"": offers.exchangePub}),
+		helpers.NewStaticKeyResolver(map[string]ed25519.PublicKey{"exchange.test": offers.exchangePub}),
 		time.Now,
 	).Sort(context.Background(), []*rampv1.Offer{offers.good})
 	if len(sorted.Verified) != 1 {

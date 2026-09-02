@@ -2,6 +2,7 @@ package connect_test
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -252,6 +253,48 @@ func TestExecute_SendsRequesterAndAVerifyingAcceptance(t *testing.T) {
 		item.GetAgentAcceptance().GetSignature(), sig.pub,
 	); err != nil {
 		t.Errorf("the acceptance an Exchange would check does not verify: %v", err)
+	}
+	// The request-level acceptance travels beside the per-item one, and the
+	// receiving Exchange checks it as the complete in-order projection for
+	// itself — so the test verifies exactly what that Exchange would.
+	ra := got.GetAgentRequestAcceptance()
+	if ra.GetSignatureAlgorithm() != helpers.AcceptanceSignatureAlgorithm {
+		t.Errorf("request-acceptance algorithm = %q", ra.GetSignatureAlgorithm())
+	}
+	if _, err = helpers.VerifyRequestAcceptanceProjection(got, ra, "exchange.test", sig.pub); err != nil {
+		t.Errorf("the request acceptance an Exchange would check does not verify: %v", err)
+	}
+}
+
+// An offer that names no exchange cannot appear in a request-acceptance item
+// (the item requires a recipient), so the client sends the request without the
+// field instead of constructing an acceptance no verifier could accept.
+func TestExecute_SkipsRequestAcceptanceWhenTheOfferNamesNoExchange(t *testing.T) {
+	sig := newSigningFixture(t)
+	origin := &recordingExecute{}
+	srv := serveExchange(t, sig, origin)
+
+	_, exchangePriv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	offer := sampleOffer("offer-no-exchange")
+	offer.Exchange = ""
+	offerSig, err := helpers.SignOffer(exchangePriv, offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	offer.Signature = offerSig
+	offer.SignatureAlgorithm = helpers.OfferSignatureAlgorithm
+
+	client := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer), rampconnect.WithRequester(testRequester()))
+	if _, err := client.Execute(context.Background(),
+		core.RejectedOffer{Offer: offer}.Unsafe()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if origin.req.GetAgentRequestAcceptance() != nil {
+		t.Error("an exchange-less offer must not carry a request acceptance")
 	}
 }
 
