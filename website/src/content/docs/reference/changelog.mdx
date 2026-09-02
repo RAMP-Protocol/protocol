@@ -16,8 +16,8 @@ secret shared between the Exchange and the CDN. No implementation ever produced
 one, and the SDK published from this repository has never contained an HMAC.
 
 An implementer following the documentation got four things wrong at once. The
-signed message is `"GET\n"` followed by the canonical URL -- the whole URL with
-the `sig` parameter removed and the remaining query sorted by key -- so scheme,
+signed message is `"GET\n"` followed by the canonical URL — the whole URL with
+the `sig` parameter removed and the remaining query sorted by key — so scheme,
 host, path and every publisher query parameter are covered, not four selected
 fields joined by newlines. The signature is base64url with no padding, not a hex
 digest. The expiry parameter is `exp`, documented as `expires`. There is a `kid`
@@ -27,7 +27,7 @@ delivery endpoint record.
 
 `DomainVerificationConfirmation.cdn_type` now documents the value set
 `"edge-ed25519"` | `"cloudfront"`. The retired values named vendors rather than
-schemes, which made `"fastly"` actively wrong -- a Fastly deployment runs the
+schemes, which made `"fastly"` actively wrong — a Fastly deployment runs the
 Ed25519 verifier. Each value now names the tenant signing scheme it mirrors.
 `signing_key` states its custody model: it carries public key material, and the
 Exchange signs with a private key it holds and never publishes. Akamai is no

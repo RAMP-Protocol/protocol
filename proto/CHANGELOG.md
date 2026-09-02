@@ -7,21 +7,21 @@ verified with its published public key, not HMAC-SHA256 over a shared secret
 (documentation correction; no wire change).** Since the initial public snapshot
 the file header, the DomainVerificationConfirmation comments and twenty website
 pages described a symmetric scheme with a secret shared between the Exchange and
-the CDN. No implementation ever produced one: `git grep -ci hmac -- sdk/` finds
+the CDN. No implementation ever produced one: `git grep -ci hmac — sdk/` finds
 nothing, and signing has always been a detached Ed25519 signature that a
 delivery endpoint verifies with a public key.
 
 The divergence was wider than the algorithm name, so an implementer following
 the documentation got four things wrong at once. The signed message is `"GET\n"`
-followed by the canonical URL -- the whole URL with the `sig` parameter removed
-and the remaining query sorted by key -- not four selected fields joined by
+followed by the canonical URL — the whole URL with the `sig` parameter removed
+and the remaining query sorted by key — not four selected fields joined by
 newlines, which means scheme, host, path and every publisher query parameter are
 covered too. The signature is base64url with no padding, not a hex digest. The
 expiry parameter is `exp`, documented as `expires`. There is a `kid` parameter
 the pages never mentioned, and there is no `txn_id` parameter at all.
 
 Where the documentation said `txn_id` enables three-sided reconciliation, the
-join key is `signed_url_hash` -- SHA-256 of the URL verbatim -- recorded by the
+join key is `signed_url_hash` — SHA-256 of the URL verbatim — recorded by the
 Exchange on the transaction and by the delivery endpoint on its delivery event.
 Neither side chooses the value.
 
@@ -31,14 +31,15 @@ reading that matched the implementation. Its format now follows `cdn_type`, whos
 documented value set becomes `"edge-ed25519"` | `"cloudfront"`. The retired
 values named vendors rather than schemes, which made `"fastly"` actively wrong --
 a Fastly Compute deployment runs the Ed25519 verifier. The name `edge-ed25519`
-is not new; it is the one ADR-012 assigned for this path. The value list also
+is not new; the reference implementation's architecture records already use it
+for this path. The value list also
 moves into the field's leading comment, because the reference page renders
 leading comments in preference to trailing ones and this field already had one,
 so the trailing list was invisible to every reader. The field now also states
 its custody model: it carries public key material, the Exchange signs with a
 private key it holds and never publishes, and where the Exchange must sign with
-a key the provider generated -- a CloudFront trusted key group is the provider's
-own AWS resource -- the private half is provisioned out of band and never
+a key the provider generated — a CloudFront trusted key group is the provider's
+own AWS resource — the private half is provisioned out of band and never
 travels in this field. Both `cdn_type` values name the tenant signing scheme
 they mirror, which the previous wording asserted without saying which is which.
 
