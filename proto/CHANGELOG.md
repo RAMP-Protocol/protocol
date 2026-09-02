@@ -26,6 +26,74 @@ the wire tier still gets the second. The `Restriction` and `CatalogService` comm
 say so, and a conformance guard holds the contract's statement to the rule the SDKs
 run.
 
+**Signed delivery URLs are documented as Ed25519 signed by the Exchange and
+verified with its published public key, not HMAC-SHA256 over a shared secret
+(documentation correction; no wire change).** Since the initial public snapshot
+the file header, the DomainVerificationConfirmation comments and twenty website
+pages described a symmetric scheme with a secret shared between the Exchange and
+the CDN. No implementation ever produced one: `git grep -ci hmac — sdk/` finds
+nothing, and signing has always been a detached Ed25519 signature that a
+delivery endpoint verifies with a public key.
+
+The divergence was wider than the algorithm name, so an implementer following
+the documentation got four things wrong at once. The signed message is `"GET\n"`
+followed by the canonical URL — the whole URL with the `sig` parameter removed
+and the remaining query sorted by key — not four selected fields joined by
+newlines, which means scheme, host, path and every publisher query parameter are
+covered too. The signature is base64url with no padding, not a hex digest. The
+expiry parameter is `exp`, documented as `expires`. There is a `kid` parameter
+the pages never mentioned, and there is no `txn_id` parameter at all.
+
+Where the documentation said `txn_id` enables three-sided reconciliation, the
+join key is `signed_url_hash` — SHA-256 of the URL verbatim — recorded by the
+Exchange on the transaction and by the delivery endpoint on its delivery event.
+Neither side chooses the value.
+
+`DomainVerificationConfirmation.signing_key` said key format is "PEM for
+CloudFront, hex for HMAC"; hex is an HMAC-secret encoding, so the sentence had no
+reading that matched the implementation. Its format now follows `cdn_type`, whose
+documented value set becomes `"edge-ed25519"` | `"cloudfront"`. The retired
+values named vendors rather than schemes, which made `"fastly"` actively wrong --
+a Fastly Compute deployment runs the Ed25519 verifier. The name `edge-ed25519`
+is not new; the reference implementation's architecture records already use it
+for this path. The value list also
+moves into the field's leading comment, because the reference page renders
+leading comments in preference to trailing ones and this field already had one,
+so the trailing list was invisible to every reader. The field now also states
+its custody model: it carries public key material, the Exchange signs with a
+private key it holds and never publishes, and where the Exchange must sign with
+a key the provider generated — a CloudFront trusted key group is the provider's
+own AWS resource — the private half is provisioned out of band and never
+travels in this field. Both `cdn_type` values name the tenant signing scheme
+they mirror, which the previous wording asserted without saying which is which.
+
+The file header said "the agent is the fetcher", which held for one of the two
+deployments. An agent embedding the SDK holds its own key and fetches for
+itself; a custodial agent never fetches, because its key lives in its identity
+service, which fetches on its behalf. Both present the same key to the delivery
+endpoint, which is what makes the binding check work either way. The header's
+"fully offline, no JWKS fetch required" is true of the fetcher's key, which
+arrives in the request; the edge still resolves `kid` to the Exchange's public
+key from a cached directory, so the claim now names the key it applies to.
+
+Two security claims were corrected beyond the primitive. The threat model said
+the provider holds the URL-signing private key and the Exchange calls a provider
+signing service; no such service exists, and the Exchange signs with a per-tenant
+key it holds itself. A walkthrough verified agent binding as
+`SHA256(requester.id + ":" + requester.domain)`, which binds nothing an attacker
+cannot recompute; the check is a thumbprint comparison against the presented
+public key plus an RFC 9421 proof of possession.
+
+Akamai is no longer documented as a supported delivery target: EdgeAuth verifies
+with a secret shared with the CDN, which is the model this correction removes.
+The retired phrasings are held out by the documentation conformance gate.
+
+No wire change. The `cdn_type` value set lives only in a comment on an
+`optional string`, never in an enum, and the field has no consumer in the SDK,
+the conformance corpus, or the reference implementation. `gen/` is regenerated
+with the pinned buf; the conformance corpus is unchanged, as comments carry no
+constraints.
+
 **`Offer.offer_id` is documented as an opaque unique identifier, not a resource
 key (comment clarification; no wire change).** The comment already said the id is
 assigned by the Exchange, but an implementation historically derived it from the

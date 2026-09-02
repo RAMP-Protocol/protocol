@@ -23,7 +23,7 @@ sequenceDiagram
     RAMP-->>Provider: EdgeConfigDocument + deployment instructions
 
     Provider->>CDN: Deploy edge function (platform-specific)
-    Note over CDN: CloudFront: deploy CF Function + update behavior<br/>Cloudflare: wrangler deploy<br/>Akamai: upload EdgeWorker bundle<br/>Fastly: fastly compute deploy
+    Note over CDN: CloudFront: deploy CF Function + update behavior<br/>Cloudflare: wrangler deploy<br/>Fastly: fastly compute deploy
 
     Provider->>CDN: Verify: GET /.well-known/ramp.json
     CDN-->>Provider: 200 OK + WellKnownManifest
@@ -82,7 +82,6 @@ For providers who prefer click-to-deploy:
 
 - **Cloudflare Apps** -- installable from Cloudflare dashboard. Provider enters Exchange endpoint, protected paths. The app deploys a Worker.
 - **AWS CloudFormation StackSet** -- one-click deploy via AWS Exchange or a shared CloudFormation template.
-- **Akamai Exchange** -- EdgeWorker bundle with configuration UI in Akamai Control Center.
 
 ### Format 4: CLI Tool (Planned)
 
@@ -105,8 +104,8 @@ When available, the CLI will generate the platform-specific deployment artifact 
 | Contact email | Provider | Rarely | `licensing@techcrunch.com` |
 | Protected path patterns | Provider editorial policy | Monthly | `["/premium/*", "/archive/*"]` |
 | Bot User-Agent patterns | RAMP community list | Weekly | `["ClaudeBot", "GPTBot", ...]` |
-| Signing mode | Deployment architecture | Never | `"cdn-native"` or `"hmac"` |
-| HMAC secret | Security team | Quarterly (rotation) | `"hmac-secret-..."` |
+| Exchange key directory | Provider-Exchange contract | Rarely | `https://exchange.example/.well-known/http-message-signatures-directory` |
+| Pinned verify keys | Optional; skips the directory fetch | Rarely | `[{"kty":"OKP","crv":"Ed25519",...}]` |
 | Max URL TTL | Policy | Rarely | `300` (seconds) |
 | Single-use enabled | Policy | Rarely | `true` |
 | Agent binding enabled | Policy | Rarely | `false` |
@@ -116,7 +115,7 @@ When available, the CLI will generate the platform-specific deployment artifact 
 ```mermaid
 graph TD
     subgraph "Config Sources"
-        ENV[Environment Variables<br/>Signing secrets, mode flags]
+        ENV[Environment Variables<br/>Exchange directory URL,<br/>mode flags]
         KV[Edge KV Store<br/>Bot patterns, manifest,<br/>content policy]
         INLINE[Inline / Compiled<br/>Provider domain,<br/>Exchange endpoint]
         CMS[CMS API<br/>Content policies,<br/>path rules]
@@ -137,7 +136,7 @@ graph TD
 **Merge order** (later overrides earlier):
 
 1. **Inline / compiled defaults** -- provider domain, protocol version.
-2. **Environment variables** -- signing secrets, mode flags, Exchange endpoint.
+2. **Environment variables** -- the Exchange key directory URL, mode flags, Exchange endpoint. No secret: the edge holds public keys only.
 3. **Edge KV** -- bot patterns (updated frequently), content policy rules.
 4. **CMS API** -- dynamic content policy (which paths are newly protected/released). Only fetched if CMS integration is configured. Cached at edge with TTL.
 
@@ -197,12 +196,12 @@ interface EdgeConfigDocument {
 
   /** Signed URL verification configuration. */
   signing: {
-    /** Verification mode. */
-    mode: "cdn-native" | "hmac";
-    /** Maximum URL TTL in seconds (enforced independently of CDN). */
-    max_ttl_seconds: number;
-    /** Whether to enforce agent identity binding. */
-    agent_binding_enabled: boolean;
+    /** Exchange key directory the edge resolves `kid` against. */
+    exchange_wba_url: string;
+    /** Optional pinned public keys; a covering `kid` skips the fetch. */
+    verify_keys?: JsonWebKey[];
+    /** Whether to enforce agent identity binding. Defaults to true. */
+    enforce_binding: boolean;
     /** Whether to enforce single-use URLs (best-effort, see Section 5.3). */
     single_use_enabled: boolean;
   };
@@ -211,8 +210,8 @@ interface EdgeConfigDocument {
 
 ## Secrets Management
 
-- HMAC secrets and signing keys are **environment variables** or **CDN secret stores** (Cloudflare Secrets, AWS Secrets Manager, Akamai Property Manager variables). Never stored in KV.
-- Secrets are loaded once at function initialization (cold start), not per-request.
+- **The edge function holds no secret.** It verifies with a public key, so its signing configuration is a directory URL and, optionally, pinned public keys. Neither is confidential, and both may live in plain configuration or KV.
+- Configuration is loaded once at function initialization (cold start), not per-request. Where a deployment does carry a secret for unrelated reasons, it belongs in the platform secret store, never in KV.
 
 ### Platform-Specific Wrangler Deployment (Cloudflare)
 
@@ -225,8 +224,8 @@ cd packages/edge-function && npx wrangler dev
 # Production deploy
 cd packages/edge-function && npx wrangler deploy
 
-# Set secrets (never in wrangler.toml)
-npx wrangler secret put HMAC_SECRET
+# Point the worker at the Exchange key directory
+npx wrangler deploy --var EXCHANGE_WBA_URL=https://exchange.example/.well-known/http-message-signatures-directory
 ```
 
 ### CDN-Specific Deployment Commands
@@ -235,7 +234,6 @@ npx wrangler secret put HMAC_SECRET
 |---|---|
 | Cloudflare | `npx wrangler deploy` |
 | CloudFront | Deploy CF Function + update behavior via AWS CLI or Terraform |
-| Akamai | Upload EdgeWorker bundle via Akamai CLI or Control Center |
 | Fastly | `fastly compute deploy` |
 
 ## ACME Domain Verification Challenge Serving (v1.0)

@@ -652,7 +652,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
       "offer_id": "e94e65fc-293e-48bd-9f35-8b38345944d1",
       "transaction_id": "txn-legal-001",
       "billing_id": "bill-legal-001",
-      "retrieval_endpoint": "https://cdn.legaldata.com/pacer/24cv01234.pdf?expires=1742486700&agent_id=3a2b1c0d...&txn_id=txn-legal-001&sig=hmac-sha256-f1e2d3...",
+      "retrieval_endpoint": "https://cdn.legaldata.com/pacer/24cv01234.pdf?agent_id=3a2b1c0d...&exp=1742486700&kid=mZ6vC3jD...&sig=f1e2d3...",
       "cost": { "amount": "4.50", "currency": "USD" },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
       "expires_at": "2026-03-20T14:15:00Z"
@@ -661,7 +661,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
       "offer_id": "b570b9a9-3bd8-47ed-a580-c3245981a573",
       "transaction_id": "txn-legal-002",
       "billing_id": "bill-legal-002",
-      "retrieval_endpoint": "https://cdn.legaldata.com/pacer/25cv05678.pdf?expires=1742486700&agent_id=3a2b1c0d...&txn_id=txn-legal-002&sig=hmac-sha256-a4b5c6...",
+      "retrieval_endpoint": "https://cdn.legaldata.com/pacer/25cv05678.pdf?agent_id=3a2b1c0d...&exp=1742486700&kid=mZ6vC3jD...&sig=a4b5c6...",
       "cost": { "amount": "3.20", "currency": "USD" },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
       "expires_at": "2026-03-20T14:15:00Z"
@@ -670,7 +670,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
       "offer_id": "a37467da-1ba4-4490-9072-75d7194882ea",
       "transaction_id": "txn-legal-003",
       "billing_id": "bill-legal-003",
-      "retrieval_endpoint": "https://cdn.legaldata.com/pacer/23cv09012.pdf?expires=1742486700&agent_id=3a2b1c0d...&txn_id=txn-legal-003&sig=hmac-sha256-d7e8f9...",
+      "retrieval_endpoint": "https://cdn.legaldata.com/pacer/23cv09012.pdf?agent_id=3a2b1c0d...&exp=1742486700&kid=mZ6vC3jD...&sig=d7e8f9...",
       "cost": { "amount": "2.80", "currency": "USD" },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
       "expires_at": "2026-03-20T14:15:00Z"
@@ -866,7 +866,7 @@ RAMP replaces the **data acquisition** layer of due diligence, not the analysis.
 - **Agent to Broker**: RFC 9421 HTTP Message Signature (alg=ed25519) in HTTP headers
 - **Broker to Exchange**: the Broker adds its own labeled RFC 9421 HTTP Message Signature (alg=ed25519) in the HTTP headers, covering the forwarded request plus the agent's prior signature; the ordered set of labeled header signatures is the forwarding chain
 - **Exchange to Agent**: `exchange_signature` on every Offer (Ed25519, stateless verification)
-- **Signed URLs**: HMAC-SHA256 (Exchange-CDN shared secret, agent identity bound)
+- **Signed URLs**: Ed25519 (Exchange-signed, publicly verifiable, agent identity bound)
 
 ## Next Steps
 

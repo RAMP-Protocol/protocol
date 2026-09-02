@@ -187,7 +187,7 @@ Response:
     {
       "transaction_id": "txn-1773682700352684307",
       "billing_id": "bill-000002",
-      "retrieval_endpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=NzbLsXh8...C9Xs&expires=1773683000&sig=3ab495e3...48823a14&txn_id=txn-1773682700352684307",
+      "retrieval_endpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=NzbLsXh8...C9Xs&exp=1773683000&kid=vJ3xR1mQ...&sig=k7Qm2xR9vT4nB8aL...",
       "cost": { "amount": "0.05", "currency": "USD" },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
       "reporting_obligation": {
@@ -204,18 +204,20 @@ Response:
 Key fields:
 - **transaction_id** — unique transaction reference, recorded in the [transaction log](/components/exchange/storage-model) before the signed URL is generated
 - **billing_id** — billing record reference, managed by the [Billing Adapter](/components/exchange/billing-adapter)
-- **retrieval_endpoint** — the [signed URL](/components/edge-function/signed-url-verification) with HMAC-SHA256 signature, expiry, agent identity binding, and transaction ID
+- **retrieval_endpoint** — the [signed URL](/components/edge-function/signed-url-verification) with an Ed25519 signature, expiry, and agent identity binding
 - **cost** — $0.05 USD charged. See [how money flows](/getting-started/how-money-flows) for the full billing lifecycle
 - **reporting_obligation** — you MUST report usage within 24 hours. See [budget and reporting](/components/agent-sdk/budget-reporting) for how the Agent SDK handles this
 - **agent_identity_hash** — RFC 7638 JWK Thumbprint of your Ed25519 request-signing key, bound into the signed URL to [prevent URL sharing](/security/threat-model). See [Signed URL Verification](/components/edge-function/signed-url-verification)
 
 ### Step 5: Fetch Resource via [Signed URL](/components/edge-function/signed-url-verification)
 
-The signed URL contains four verification parameters, all verified by the [CDN edge function](/components/edge-function/overview):
-- `sig` — HMAC-SHA256 signature (Exchange↔CDN shared secret). See [signed URL verification](/components/edge-function/signed-url-verification) for the canonical format
-- `expires` — Unix timestamp (URL expires after 5 minutes)
-- `agent_id` — the agent's RFC 7638 JWK Thumbprint (identity binding — [prevents URL sharing](/security/threat-model))
-- `txn_id` — transaction ID (enables three-sided reconciliation: CDN logs + Exchange logs + agent reports)
+The signed URL carries these parameters, verified by the [delivery endpoint](/components/edge-function/overview):
+- `sig` — the Ed25519 signature, base64url with no padding. See [signed URL verification](/components/edge-function/signed-url-verification) for the canonical message
+- `exp` — Unix timestamp (the URL expires after 5 minutes)
+- `kid` — thumbprint of the Exchange key that signed it, which the edge resolves to a public key
+- `agent_id` — the agent's RFC 7638 JWK Thumbprint (identity binding — [prevents URL sharing](/security/threat-model)); optional, and absent on a bearer URL
+
+Three-sided reconciliation joins on the signed-URL hash, recorded by both the Exchange and the delivery endpoint — not on a parameter in the URL.
 
 In production, the [edge function](/components/edge-function/overview) also performs [bot detection](/components/edge-function/bot-detection) — blocking unauthorized AI crawlers with a 403 and `X-Content-Rules` header that [redirects to the Exchange](/protocol/discovery-paths).
 
@@ -338,7 +340,7 @@ The tool negotiates with the Exchange and returns:
 [RAMP v1.0 | Cost: 0.0500 USD | Transaction: txn-1773682640975288995 |
  Billing: bill-000001 | Usage reported: True]
 
-[Content delivered via signed URL with HMAC-SHA256 + agent identity binding]
+[Content delivered via Ed25519-signed URL + agent key proof-of-possession]
 
 --- RAMP Cost Summary ---
 Total data acquisition cost: $0.0500
@@ -402,7 +404,7 @@ For production deployment, see:
 - [Exchange configuration](/components/exchange/configuration) — environment variables, secrets, tenant setup
 - [Multi-tenant architecture](/components/exchange/multi-tenant) — how one Exchange serves multiple providers
 - [Scaling](/components/exchange/scaling) — from single instance to 10K+ RPS
-- [Edge function deployment](/components/edge-function/deployment) — CDN-specific adapters for [CloudFront, Cloudflare, Akamai, Fastly](/components/edge-function/cdn-adapters)
+- [Edge function deployment](/components/edge-function/deployment) — CDN-specific adapters for [CloudFront, Cloudflare, Fastly](/components/edge-function/cdn-adapters)
 
 ---
 
@@ -414,15 +416,15 @@ For production deployment, see:
 | 1 | [`DiscoverResources`](/components/exchange/request-flows) | Agent queries Exchange for offers on URIs | [Request Flows](/components/exchange/request-flows) |
 | 2 | — | Agent/[Broker](/components/broker/overview) selects best offer | [Selection Engine](/components/broker/selection-engine) |
 | 3 | [`ExecuteTransaction`](/components/exchange/request-flows) | Agent commits to offer, receives [signed URL](/components/edge-function/signed-url-verification) | [Billing Adapter](/components/exchange/billing-adapter) |
-| 4 | — | Agent fetches resource via signed URL ([edge function](/components/edge-function/overview) verifies) | [Bot Detection](/components/edge-function/bot-detection) |
+| 4 | — | The key holder fetches the resource via the signed URL — the agent itself with the SDK, or its identity service when the key is custodial ([edge function](/components/edge-function/overview) verifies) | [Bot Detection](/components/edge-function/bot-detection) |
 | 5 | [`ReportUsage`](/components/exchange/request-flows) | Agent reports consumed quantity (mandatory) | [Budget & Reporting](/components/agent-sdk/budget-reporting) |
 
 **Security at every boundary** ([full threat model](/security/threat-model)):
 - Agent signs requests with [**Ed25519**](/protocol/authentication) (proves identity)
 - Exchange signs offers with [**Ed25519**](/protocol/authentication) (stateless verification)
-- Signed URLs use [**HMAC-SHA256**](/components/edge-function/signed-url-verification) (Exchange↔CDN shared secret)
+- Signed URLs use [**Ed25519**](/components/edge-function/signed-url-verification) (the delivery endpoint verifies with a public key and holds nothing secret)
 - Agent identity bound into signed URL (prevents [URL sharing](/security/threat-model))
-- Transaction ID in signed URL (enables [three-sided reconciliation](/components/exchange/storage-model))
+- Signed-URL hash recorded on both sides (enables [three-sided reconciliation](/components/exchange/storage-model))
 
 ## Next Steps
 

@@ -66,20 +66,29 @@ import "ramp/v1/vocab.proto";
 //   Agent → Exchange:  Signature header (alg=ed25519)
 //   Agent → Broker → Exchange:  multiple Signature headers (one per hop)
 //
-// Signed URLs use HMAC-SHA256 (Exchange↔CDN shared secret, separate concern).
+// Signed delivery URLs carry an Ed25519 signature made by the Exchange over
+// "GET\n<canonical URL>"; the delivery endpoint verifies it with the Exchange's
+// published public key. No shared secret (separate concern).
 //
 // Retrieval-URL identity binding (OPTIONAL, DPoP-style — RFC 9449):
 //   The Exchange MAY bind a signed retrieval_endpoint to the requesting agent
 //   by embedding agent_identity_hash — the RFC 7638 JWK Thumbprint (SHA-256)
-//   of the agent's Ed25519 request-signing key — inside the HMAC-signed URL,
-//   and echoing it in the response. A capable delivery endpoint (edge function)
-//   verifies the binding fully offline: confirm the URL HMAC (proves the hash
-//   is Exchange-issued and untampered), then require the fetcher to present its
+//   of the agent's Ed25519 request-signing key — as the URL's agent_id query
+//   parameter, which the URL signature covers, and echoing it in the response.
+//   A capable delivery endpoint (edge function) verifies the binding without
+//   contacting the fetcher's directory: verify the URL's Ed25519 signature
+//   against the Exchange's published public key (proves the hash is
+//   Exchange-issued and untampered), then require the fetcher to present its
 //   public key and an RFC 9421 signature over the retrieval request, and check
-//   thumbprint(presented key) == agent_identity_hash. No JWKS fetch required.
+//   thumbprint(presented key) == agent_identity_hash. The fetcher's key arrives
+//   in the request, so no JWKS fetch is needed for it; the edge still resolves
+//   kid to the Exchange's public key, from a cached directory or pinned config.
+//   The fetcher is whoever holds the agent's request-signing key: an agent
+//   embedding the SDK fetches for itself, while a custodial agent does not
+//   fetch at all and its identity service fetches on its behalf.
 //   Enforcement is NOT mandatory: a bearer-only signed-URL CDN that cannot run
-//   code falls back to HMAC + short TTL + TLS. RAMP reference implementations
-//   run on edge functions and DO enforce it.
+//   code falls back to the URL signature + short TTL + TLS. RAMP reference
+//   implementations run on edge functions and DO enforce it.
 // ============================================================================
 
 // ============================================================================
@@ -3690,13 +3699,26 @@ message DomainVerificationConfirmation {
   // The challenge token (echoed from DomainVerificationChallenge).
   string token = 3;
 
-  // Optional: signing key to register upon successful verification.
-  // If present, the key is registered atomically with verification.
-  // Key format depends on CDN type (PEM for CloudFront, hex for HMAC).
+  // Optional: the delivery endpoint's verification key, registered atomically
+  // with the domain on successful verification. PUBLIC key material only.
+  // The Exchange signs delivery URLs with a private key it holds and never
+  // publishes; a delivery endpoint verifies with the public half and holds
+  // nothing secret. Where the Exchange has to sign with a key the provider
+  // generated -- a CloudFront trusted key group is the provider's own AWS
+  // resource -- the private half is provisioned to the Exchange out of band
+  // and never travels in this field.
+  //
+  // Format follows cdn_type: a PEM-encoded RSA public key for "cloudfront", or
+  // the base64url-encoded raw Ed25519 public key (the JWK "x" value) for
+  // "edge-ed25519".
   optional string signing_key = 4;
 
-  // CDN type this key is for.
-  optional string cdn_type = 5;  // "cloudfront", "akamai", "fastly", "hmac"
+  // Which delivery-URL verification scheme this key is for: "edge-ed25519" (a
+  // code-capable edge that verifies the Ed25519 URL signature itself) or
+  // "cloudfront" (AWS CloudFront trusted key groups, RSA, verified natively by
+  // the CDN). One value per Exchange-side tenant signing scheme:
+  // "edge-ed25519" is ED25519, "cloudfront" is AWS_CLOUDFRONT_RSA.
+  optional string cdn_type = 5;
 
   // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
   // "exchange.example" or "exchange.example:8081"). See "Request recipient" in
