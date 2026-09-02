@@ -46,11 +46,11 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T6: Overly long signed URL expiry
 **Attack**: Exchange issues 24-hour URLs instead of 5-minute, enabling reuse.
-**Countermeasure (protocol)**: Protocol mandates maximum URL TTL (5 minutes). Provider's edge function enforces independently.
+**Countermeasure (protocol)**: The delivery endpoint refuses any URL whose `exp` has passed, and the Exchange issues short expiries -- five minutes in the reference flows. No verifier enforces a second, independent upper bound on the TTL: the only bound is the `exp` the Exchange signed, so a 24-hour URL is detected by reconciliation (T5), not refused at the edge. A provider who wants a hard ceiling has to add that check to its own edge function.
 
 ### T7: Signing key leakage
 **Attack**: Exchange shares signing keys with a preferred requester, enabling URL forgery.
-**Countermeasure (protocol)**: **Asymmetric signing, with per-tenant key isolation.** The Exchange holds a separate private key per tenant in a secrets manager and signs there; the delivery endpoint verifies with the matching public key, published in the Exchange's key directory. A leaked verification key forges nothing, and a compromised edge cannot mint URLs, because no signing capability is ever distributed. Sharing a signing key with one requester would require exporting a tenant private key, which no code path does.
+**Countermeasure (protocol)**: **Asymmetric signing, with per-tenant key isolation.** The Exchange holds a separate private key per tenant, loaded from a key store at startup; the delivery endpoint verifies with the matching public key, published in the Exchange's key directory. This bounds the damage rather than preventing the act -- the attacker here is the Exchange, so no control the Exchange operates can stop it from exporting its own key. What the design gives you is that a leaked verification key forges nothing, a compromised edge cannot mint URLs, and a leaked tenant key forges URLs for that one tenant and no other. Detection is T5's job: forged fetches appear in the provider's delivery log and not in the Exchange's transaction log, and the two join on `signed_url_hash`.
 
 ## 2. Demand-Side Threats (Dishonest Agent / Requester)
 
