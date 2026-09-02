@@ -7,7 +7,8 @@
 // applied to the entry as received. The ingest tier runs over the CANONICALISED
 // terms: restriction tokens are folded and alias-resolved to their registered
 // form, then a bare Pricing.unit or Quota.metric that is not a registered token
-// is rejected, while an unregistered restriction token and an
+// is rejected, as is a restriction whose permitted and prohibited lists name one
+// token once folded, while an unregistered restriction token and an
 // OBLIGATION_KIND_OTHER obligation without detail are accepted with a warning
 // that reaches PushResourcesResponse.warnings. The Exchange's own run is the
 // deciding one; a client-side verdict is advice about what that run will say.
@@ -69,7 +70,11 @@ export interface RuleWarning {
 	message: string;
 }
 
-/** What validateLicenseTerm reports for one already-canonical term. */
+/**
+ * What validateLicenseTerm reports for one term. Every check but the disjointness
+ * one reads the term as already canonical; that one folds what it compares, so it
+ * is correct on a term as authored too.
+ */
 export interface TermVerdict {
 	violation: RuleViolation | null;
 	warnings: RuleWarning[];

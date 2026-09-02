@@ -74,7 +74,17 @@ type ltFinding struct {
 	Message string `json:"message"`
 }
 
-// ltValidateVector is one ValidateLicenseTerm case over an already-canonical term.
+// ltValidateVector is one ValidateLicenseTerm case.
+//
+// Its term is canonical wherever the case is ACCEPTED, because every check but one
+// reads it that way. The disjointness rejections are the exception and carry the term
+// as a publisher authored it — an alias beside its registered form, or two spellings
+// differing in case — because that check folds what it compares and exists precisely
+// to catch what the fold produces. A case that is accepted must stay canonical: read
+// as written, a bare alias earns a warning that the fold takes away, and this list
+// would then record a warning no Exchange sends. Such a case belongs in the entry
+// list, where a copy is folded first.
+
 type ltValidateVector struct {
 	Name      string          `json:"name"`
 	Term      json.RawMessage `json:"term"`

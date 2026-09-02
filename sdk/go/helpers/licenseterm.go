@@ -328,9 +328,13 @@ func ValidateResourceEntry(entry *rampv1.ResourceEntry) EntryVerdict {
 // wire-visible and pinned byte-for-byte across the three SDKs. Path locates the
 // permitted element; the prohibited one is the entry that folds to the same token.
 //
-// The prohibited list is folded once into a set, so the cost is one fold per
-// token rather than one per pair: both lists are capped at 64, and a pairwise
-// walk would fold four thousand times per restriction.
+// The prohibited list is folded once into a set, so the cost is one fold per token
+// rather than one per pair — linear in the tokens present, where a pairwise walk
+// would have been their product. The bound on how many arrive is NOT this rule's:
+// where the wire tier runs it is the max_items cap on each list, and on the mount
+// named above, which has no wire tier, it is the size of the request the server
+// agreed to read. Stating the cap alone would have claimed a bound that the one
+// deployment this check exists for does not have.
 func canonicalDisjointViolation(i int, r *rampv1.Restriction) *RuleViolation {
 	prohibited := r.GetProhibited()
 	permitted := r.GetPermitted()

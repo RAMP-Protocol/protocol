@@ -6,7 +6,8 @@ A pushed entry passes two tiers at the Exchange. The wire tier is the generated
 field-level model plus the cross-field (message-CEL) rules, applied to the entry
 as received. The ingest tier runs over the CANONICALISED terms: restriction
 tokens are folded and alias-resolved to their registered form, then a bare
-``Pricing.unit`` or ``Quota.metric`` that is not a registered token is rejected,
+``Pricing.unit`` or ``Quota.metric`` that is not a registered token is rejected, as
+is a restriction whose permitted and prohibited lists name one token once folded,
 while an unregistered restriction token and an ``OBLIGATION_KIND_OTHER``
 obligation without detail are accepted with a warning that reaches
 ``PushResourcesResponse.warnings``. The Exchange's own run is the deciding one; a
@@ -36,13 +37,12 @@ from .crossfield import cross_field_rule_ids
 RULE_PRICING_UNIT_REGISTERED = "pricing.unit.registered"
 #: Rejects a bare Quota.metric that is not a registered quota token.
 RULE_QUOTA_METRIC_REGISTERED = "quota.metric.registered"
-#: Warns about a bare restriction token not registered on its axis; the term is accepted.
+#: Rejects a restriction whose permitted and prohibited lists name the same token once both
+#: are canonicalised. The wire tier's rule compares the tokens AS WRITTEN, so two accepted
+#: spellings of one token — an alias beside its registered form, or two spellings differing
+#: only in ASCII case — pass it and collide only after the fold.
 RULE_RESTRICTION_CANONICAL_DISJOINT = "restriction.canonical_disjoint"
-"""Rejects a restriction whose permitted and prohibited lists name the same token once
-both are canonicalised. The wire tier's rule compares the tokens AS WRITTEN, so two
-accepted spellings of one token — an alias beside its registered form, or two spellings
-differing only in ASCII case — pass it and collide only after the fold."""
-
+#: Warns about a bare restriction token not registered on its axis; the term is accepted.
 RULE_RESTRICTION_TOKEN_REGISTERED = "restriction.token.registered"
 #: Warns about an OBLIGATION_KIND_OTHER obligation carrying no detail.
 RULE_OBLIGATION_OTHER_REQUIRES_DETAIL = "obligation.other.requires_detail"
@@ -88,7 +88,11 @@ class RuleWarning:
 
 @dataclass(frozen=True)
 class TermVerdict:
-    """What :func:`validate_license_term` reports for one already-canonical term."""
+    """What :func:`validate_license_term` reports for one term.
+
+    Every check but the disjointness one reads the term as already canonical; that one
+    folds what it compares, so it is correct on a term as authored too.
+    """
 
     violation: RuleViolation | None
     warnings: list[RuleWarning] = field(default_factory=list)
