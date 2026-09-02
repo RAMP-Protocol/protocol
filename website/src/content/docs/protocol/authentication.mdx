@@ -312,6 +312,21 @@ When only the agent's signature is present, the agent is querying the Exchange d
 
 See [Multi-Hop Example (Broker)](#multi-hop-example-broker) below for the concrete header layout.
 
+### Projected execute requests
+
+The hop-signature stack above applies to requests forwarded **byte-for-byte**. Projection is the other case. When a Broker splits a mixed-Exchange `TransactionRequest` into per-Exchange subrequests, each subrequest has a new body, so the agent's original signature — which covered the original body through `Content-Digest` — cannot travel with it. There is no way to forward a projected body under the agent's HTTP signature, and the protocol does not ask for one.
+
+Instead, each projected subrequest is a **new HTTP request its sender authors**. The projecting party — a Broker, or the agent itself when it splits its own set — computes the subrequest's `Content-Digest` and signs it with its own RFC 9421 signature, exactly as any sender does. The Exchange authenticates the wire caller as that sender.
+
+The agent's cryptographic authorization does not ride the transport layer at all. It rides in the body, as two detached Ed25519 signatures that stay valid however the request travels:
+
+- **`agent_acceptance`** on each item — binds that offer to the requester and the idempotency key.
+- **`agent_request_acceptance`** on the request — binds the **complete ordered set** of `(offer signature, exchange)` references, so each Exchange can require its subrequest to be the exact in-order projection of the set the agent signed. See [Broker fan-out and request projection](/components/broker/overview/#execution-separate-step) for the flow.
+
+The Exchange resolves the `agent_request_acceptance` verification key from the requester the signed payload names: the payload's `requester_domain` must equal the request's `requester.domain`, and the signature is accepted only if it verifies against an Ed25519 key currently valid in that domain's WBA directory (`{requester_domain}/.well-known/http-message-signatures-directory`). The envelope carries no `keyid`, so the verifier tries the currently-valid Ed25519 keys of that directory — rotation overlap keeps that set small. When the requester itself signed the arriving request, the request-signing key the Exchange already resolved is that key, and no second fetch is needed. A signature that verifies against a key the requester's domain publishes is what makes the claimed requester identity an authenticated one, the same anchoring every other directory lookup uses.
+
+Delegation is unchanged by projection: the holder-binding check still matches the key that RFC 9421-signed the **arriving** request (see [Which signature binds in a brokered request](#verification)). A projecting Broker is the wire signer, so it may project a delegated request only when the agent has explicitly delegated to the Broker's key — the same terminal-holder rule as narrowing. A pure relay cannot project a delegated request; without a delegation, the Broker simply authenticates as itself while the body's detached signatures carry the agent's authorization.
+
 ## Request Signatures (RFC 9421)
 
 ### Why headers, not message fields

@@ -313,6 +313,8 @@ Content-Type: application/json
 
 Each item's `offer` is the full signed Offer reflected back exactly as received at discovery; a single-offer transaction is the degenerate one-element `items` list. The Exchange verifies each item's `offer.signature` over the presented Offer bytes to confirm the offer has not been tampered with. The Exchange is stateless -- it verifies the self-contained signed Offer rather than storing offers.
 
+The request may also carry `agent_request_acceptance` — the agent's detached Ed25519 signature over the complete ordered set of offers it committed to, across all Exchanges. The SDK clients attach it whenever the offer names its Exchange. It is what lets an Exchange receiving a Broker-projected subrequest prove the items are the exact in-order subset the agent signed — see [Projected execute requests](/protocol/authentication/#projected-execute-requests). The field is optional for wire compatibility: an older client that omits it keeps per-item execution semantics and simply gets no request-level claim.
+
 ### Response (`TransactionResponse`)
 
 ```json
@@ -347,13 +349,14 @@ The `retrieval_endpoint` is a CDN signed URL bound to `agent_identity_hash`. A b
 ### What Happens Inside the Exchange
 
 1. Validate request (proto validation)
-2. Verify the agent's RFC 9421 HTTP Message Signature (alg=ed25519) in the request headers (and each broker hop signature if present)
-3. Check idempotency key (prevent double-charge on retry)
-4. Verify offer signature (reconstruct offer from signed token)
-5. Authorize billing (`BillingAdapter.Authorize`) -- or skip for subscription offers
-6. Write transaction to WAL (must succeed before signing URL)
-7. Generate the Ed25519 signed delivery URL (or a CloudFront RSA canned policy, per the tenant's signing scheme)
-8. Create reporting obligation with deadline
+2. Verify the sender's RFC 9421 HTTP Message Signature (alg=ed25519) in the request headers — the agent's on a direct request, a projecting Broker's on a projected one — and each prior hop signature if present
+3. Verify `agent_request_acceptance` when present: the signature, and that this request's items are the complete in-order projection of the signed set addressed to this Exchange. This runs **before** the idempotency lookup — request-level idempotency state is never created or served for a request whose set claim has not been proven, otherwise a mutated request could consume the key and a later honest retry would replay its result
+4. Check idempotency key (prevent double-charge on retry)
+5. Verify offer signature (reconstruct offer from signed token)
+6. Authorize billing (`BillingAdapter.Authorize`) -- or skip for subscription offers
+7. Write transaction to WAL (must succeed before signing URL)
+8. Generate the Ed25519 signed delivery URL (or a CloudFront RSA canned policy, per the tenant's signing scheme)
+9. Create reporting obligation with deadline
 
 ### Batch TransactionRequest
 

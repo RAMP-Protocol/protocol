@@ -116,6 +116,11 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 **Attack**: Broker logs every DiscoverResources query, sells the data.
 **Countermeasure**: Not solvable at protocol level. Data handling agreements required.
 
+### T-BRK-1: Request-set mutation during execute fan-out
+**Attack**: The agent commits to an ordered set of offers and hands execution to a Broker. While projecting the set into per-Exchange `ExecuteTransaction` subrequests, the Broker mutates it at the **item** level: it removes an item, appends one the agent never chose, reorders the items, or sends a valid subset first so the agent's idempotency key is consumed by a request the agent did not make — a later honest retry then replays the mutilated result instead of executing the real set.
+**Why the hop stack does not cover this**: The RFC 9421 forwarding-signature stack (T20, T-DEL-4) proves who forwarded a request that travels **byte-for-byte**. A projected subrequest is a new HTTP request the Broker authors and signs itself, so hop-chain integrity says nothing about which items the projected body carries — see [Projected execute requests](/protocol/authentication/#projected-execute-requests).
+**Countermeasure (protocol)**: **`TransactionRequest.agent_request_acceptance`.** The agent signs the complete ordered set of `(offer signature, exchange)` references plus the requester and idempotency key with its own Ed25519 key, and the Broker must forward the envelope unchanged on every subrequest. Each Exchange verifies the signature and requires its subrequest to equal the complete in-order projection of the signed set addressed to itself, **before** creating or serving any request-level idempotency state. A removed, appended, reordered, or subset request fails the projection check and claims nothing. The field is optional for wire compatibility: an older client that omits it keeps per-item execution semantics (each item still carries its own `agent_acceptance`) but gets no request-level set claim.
+
 ## 5. Third-Party Attacks
 
 ### T22: Exchange impersonation
@@ -172,7 +177,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 | Level | Threat IDs | What It Means |
 |---|---|---|
-| **Preventable at protocol level** | T3, T4, T5, T6, T7, T8, T9, T12, T16, T19, T22, T23, T24, T25, T26, T-ATT-1, T-ATT-2, T-ATT-3, T-ATT-5, T-DEL-1, T-DEL-2, T-DEL-3, T-DEL-4, T-DEL-5, T-DEL-6 | Protocol changes make the attack structurally impossible |
+| **Preventable at protocol level** | T3, T4, T5, T6, T7, T8, T9, T12, T16, T19, T22, T23, T24, T25, T26, T-BRK-1, T-ATT-1, T-ATT-2, T-ATT-3, T-ATT-5, T-DEL-1, T-DEL-2, T-DEL-3, T-DEL-4, T-DEL-5, T-DEL-6 | Protocol changes make the attack structurally impossible |
 | **Detectable via reconciliation** | T1, T2, T4, T5, T13, T14, T15, T17, T27, T-ATT-4 | Three-sided reconciliation catches it |
 | **Legal/contractual only** | T10, T11, T13, T17, T18, T20, T21, T28, T29, T30 | Can't enforce technically |
 
@@ -181,8 +186,10 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 ```
 Line 1: Protocol-level prevention
   Signed offers, content hashes, agent-bound URLs, idempotency keys,
-  holder-bound JWT delegation chain (cnf), RFC 9421 forwarding-chain verification
-  (stack of per-hop HTTP Message Signatures), subscription-level quota tracking
+  agent-signed request-set proof (request acceptance, verified before
+  idempotency state), holder-bound JWT delegation chain (cnf),
+  RFC 9421 forwarding-chain verification (stack of per-hop HTTP Message
+  Signatures), subscription-level quota tracking
   Makes attacks structurally impossible
 
 Line 2: Three-sided reconciliation

@@ -27,6 +27,20 @@ empty subrequest outright: without that, a request carrying zero items for an
 Exchange the signed set never names would compare zero against zero and report
 a verified projection.
 
+Who authenticates a projected subrequest is now written down. A projected
+subrequest is a new HTTP request its sender authors and RFC 9421-signs — a
+Broker, or the agent itself when it splits its own mixed-Exchange set. The
+agent's original HTTP signature covered the body the agent sent and does not
+travel with a projected body; the detached body signatures (`agent_acceptance`
+per item, `agent_request_acceptance` for the set) are what carry the agent's
+authorization across projection, which is why they exist. The Exchange resolves
+the acceptance verification key from the WBA directory of the requester domain
+the signed payload names, which must equal the request's `requester.domain`;
+when the requester itself signed the arriving request, that is the
+request-signing key already resolved. Holder binding for delegations still
+matches the wire signer, so a Broker may project a delegated request only when
+the agent has delegated to the Broker's key.
+
 **Signed delivery URLs are documented as Ed25519 signed by the Exchange and
 verified with its published public key, not HMAC-SHA256 over a shared secret
 (documentation correction; no wire change).** Since the initial public snapshot

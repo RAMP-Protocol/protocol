@@ -4571,6 +4571,32 @@ func (x *AgentAcceptance) GetSignatureAlgorithm() string {
 // to equal the complete in-order projection of payload.items whose exchange
 // names that Exchange. This is what makes removal, append, and reorder visible
 // before request-level idempotency state is claimed.
+//
+// A projected subrequest is a NEW HTTP request its sender authors. The party
+// that projects — a Broker, or the agent itself when it splits its own
+// mixed-Exchange set — computes that subrequest's Content-Digest and signs it
+// with its own RFC 9421 request signature. The agent's original RFC 9421
+// signature covered the body the agent sent and does not travel with a
+// projected body; that is expected, not a gap, and it is why this proof
+// exists: like AgentAcceptance, it is a detached body signature that stays
+// valid however the request travels. The hop-signature stack applies only to
+// requests forwarded byte-for-byte. If a delegation rides the request, the
+// holder-binding rule is unchanged — the wire signer must be the delegation's
+// terminal holder — so a Broker may project a delegated request only when the
+// agent has delegated to the Broker's key.
+//
+// The verification key is the agent key published for the requester the signed
+// payload names. payload.requester_domain must equal the request's
+// requester.domain, and the Exchange accepts the signature only if it verifies
+// against an Ed25519 key currently valid in that domain's WBA directory
+// ({requester_domain}/.well-known/http-message-signatures-directory), fetched
+// under the same SSRF discipline as every directory fetch. The envelope
+// carries no keyid, so the verifier tries the currently-valid Ed25519 keys of
+// that directory; rotation overlap keeps that set small. When the requester
+// itself signed the arriving request, the request-signing key the Exchange
+// already resolved is that key, and no second fetch is needed. A signature
+// that verifies against a key the requester's domain publishes is what turns
+// the claimed requester identity into an authenticated one.
 type AgentRequestAcceptance struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The signed payload is carried because a projected subrequest does not carry
