@@ -111,6 +111,19 @@ type ltEntryVector struct {
 	Warnings        []ltFinding     `json:"warnings"`
 }
 
+// ltIngestRejectRuleIDs is the set of rule ids ValidateLicenseTerm can return as a
+// VIOLATION. It is the one authored copy of that classification: the emitter uses it
+// to sort an entry's violations into columns, and the three replays derive the same
+// set from the corpus this emitter writes, so a new ingest-tier reject is registered
+// here and nowhere else.
+//
+// It cannot be derived on this side — the emitter produces the corpus the others read.
+var ltIngestRejectRuleIDs = map[string]bool{
+	RulePricingUnitRegistered:        true,
+	RuleQuotaMetricRegistered:        true,
+	RuleRestrictionCanonicalDisjoint: true,
+}
+
 // ltCrossFieldRuleIDs is every message-level CEL id the contract declares, read
 // from the generated descriptor rather than listed here. Listing them would be a
 // fourth copy of a set the proto already owns, and the copy that drifts is the one
@@ -724,8 +737,7 @@ func buildLTEntryVectors(t *testing.T) []ltEntryVector {
 			CrossFieldRules: []string{}, TermRules: []ltFinding{}, Warnings: ltWarningsOf(verdict.Warnings)}
 		for _, viol := range verdict.Violations {
 			switch {
-			case viol.Rule == RulePricingUnitRegistered || viol.Rule == RuleQuotaMetricRegistered ||
-				viol.Rule == RuleRestrictionCanonicalDisjoint:
+			case ltIngestRejectRuleIDs[viol.Rule]:
 				v.TermRules = append(v.TermRules, ltFindingOf(viol.Rule, viol.Path, viol.Token, viol.Message))
 			case celIDs[viol.Rule]:
 				v.CrossFieldRules = append(v.CrossFieldRules, viol.Rule)

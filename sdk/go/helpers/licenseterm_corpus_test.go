@@ -211,9 +211,36 @@ func TestLicenseTermCorpus_Validate(t *testing.T) {
 	}
 }
 
+// corpusTermRuleIDs is the set of ids ValidateLicenseTerm can return as a violation,
+// read out of the corpus's own per-term list rather than listed here: an ingest-tier
+// reject IS an id that list can carry as a violation. Reading them beats restating
+// them, the same trade the cross-field set already makes — a classification written
+// down twice is a classification that can disagree with itself.
+func corpusTermRuleIDs(t *testing.T, c licenseTermCorpus) map[string]bool {
+	t.Helper()
+	ids := map[string]bool{}
+	for _, v := range c.Validate {
+		if v.Violation != nil {
+			ids[v.Violation.Rule] = true
+		}
+	}
+	// Guard the guard. A derivation that stopped reading the column would leave an
+	// empty set here and quietly move every term reject into the structural bucket,
+	// where the entry assertions would still pass. Both long-standing ids are
+	// reachable from that list, so requiring them pins that it is still being read.
+	for _, want := range []string{helpers.RulePricingUnitRegistered, helpers.RuleQuotaMetricRegistered} {
+		if !ids[want] {
+			t.Fatalf("the per-term list carries no %q — the column this classification is derived from has moved", want)
+		}
+	}
+	return ids
+}
+
 func TestLicenseTermCorpus_Entry(t *testing.T) {
+	corpus := loadLicenseTermCorpus(t)
 	celIDs := corpusCrossFieldRuleIDs(t)
-	for _, v := range loadLicenseTermCorpus(t).Entry {
+	termRuleIDs := corpusTermRuleIDs(t, corpus)
+	for _, v := range corpus.Entry {
 		var entry rampv1.ResourceEntry
 		if err := protojson.Unmarshal(v.Entry, &entry); err != nil {
 			t.Fatalf("%s: decode entry: %v", v.Name, err)
@@ -230,8 +257,7 @@ func TestLicenseTermCorpus_Entry(t *testing.T) {
 		termRules := []corpusFinding{}
 		for _, viol := range verdict.Violations {
 			switch {
-			case viol.Rule == helpers.RulePricingUnitRegistered || viol.Rule == helpers.RuleQuotaMetricRegistered ||
-				viol.Rule == helpers.RuleRestrictionCanonicalDisjoint:
+			case termRuleIDs[viol.Rule]:
 				termRules = append(termRules, corpusFinding{Rule: viol.Rule, Path: viol.Path, Token: viol.Token, Message: viol.Message})
 			case celIDs[viol.Rule]:
 				crossField = append(crossField, viol.Rule)

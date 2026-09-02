@@ -17,7 +17,6 @@ import vectorsFile from "../../go/helpers/testdata/licenseterm-vectors.json";
 import {
 	RULE_PRICING_UNIT_REGISTERED,
 	RULE_QUOTA_METRIC_REGISTERED,
-	RULE_RESTRICTION_CANONICAL_DISJOINT,
 	canonicalRestrictionToken,
 	knownRestrictionToken,
 	normalizeLicenseTerm,
@@ -44,11 +43,23 @@ type Vectors = {
 };
 
 const vectors = vectorsFile as Vectors;
-const TERM_RULES = new Set([
-	RULE_PRICING_UNIT_REGISTERED,
-	RULE_QUOTA_METRIC_REGISTERED,
-	RULE_RESTRICTION_CANONICAL_DISJOINT,
-]);
+// The ingest-tier reject ids, read out of the corpus's own per-term list — an
+// ingest-tier reject IS an id that list can carry as a violation. Reading them beats
+// listing them here, the same trade the cross-field set below already makes: a
+// classification written down in four places is one that can disagree with itself.
+const TERM_RULES = new Set(
+	vectors.validate.flatMap((v) => (v.violation ? [v.violation.rule] : [])),
+);
+
+// Guard the guard. A derivation that stopped reading the column would leave an empty
+// set and quietly move every term reject into the structural bucket, where the entry
+// assertions would still pass. Both long-standing ids are reachable from that list,
+// so requiring them pins that it is still being read.
+for (const id of [RULE_PRICING_UNIT_REGISTERED, RULE_QUOTA_METRIC_REGISTERED]) {
+	if (!TERM_RULES.has(id)) {
+		throw new Error(`the per-term list carries no ${id} — the column this classification is derived from has moved`);
+	}
+}
 
 // The registered cross-field rule ids, read from the generated cross-field corpus —
 // corpusgen emits one mutant per message-level CEL rule, so its `rules` are the
