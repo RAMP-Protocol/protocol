@@ -17,6 +17,7 @@ import vectorsFile from "../../go/helpers/testdata/licenseterm-vectors.json";
 import {
 	RULE_PRICING_UNIT_REGISTERED,
 	RULE_QUOTA_METRIC_REGISTERED,
+	RULE_RESTRICTION_CANONICAL_DISJOINT,
 	canonicalRestrictionToken,
 	knownRestrictionToken,
 	normalizeLicenseTerm,
@@ -43,7 +44,11 @@ type Vectors = {
 };
 
 const vectors = vectorsFile as Vectors;
-const TERM_RULES = new Set([RULE_PRICING_UNIT_REGISTERED, RULE_QUOTA_METRIC_REGISTERED]);
+const TERM_RULES = new Set([
+	RULE_PRICING_UNIT_REGISTERED,
+	RULE_QUOTA_METRIC_REGISTERED,
+	RULE_RESTRICTION_CANONICAL_DISJOINT,
+]);
 
 // The registered cross-field rule ids, read from the generated cross-field corpus —
 // corpusgen emits one mutant per message-level CEL rule, so its `rules` are the

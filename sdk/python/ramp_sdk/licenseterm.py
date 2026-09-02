@@ -37,6 +37,12 @@ RULE_PRICING_UNIT_REGISTERED = "pricing.unit.registered"
 #: Rejects a bare Quota.metric that is not a registered quota token.
 RULE_QUOTA_METRIC_REGISTERED = "quota.metric.registered"
 #: Warns about a bare restriction token not registered on its axis; the term is accepted.
+RULE_RESTRICTION_CANONICAL_DISJOINT = "restriction.canonical_disjoint"
+"""Rejects a restriction whose permitted and prohibited lists name the same token once
+both are canonicalised. The wire tier's rule compares the tokens AS WRITTEN, so two
+accepted spellings of one token — an alias beside its registered form, or two spellings
+differing only in ASCII case — pass it and collide only after the fold."""
+
 RULE_RESTRICTION_TOKEN_REGISTERED = "restriction.token.registered"
 #: Warns about an OBLIGATION_KIND_OTHER obligation carrying no detail.
 RULE_OBLIGATION_OTHER_REQUIRES_DETAIL = "obligation.other.requires_detail"
@@ -232,14 +238,47 @@ def _restriction_token_warning(kind: str, tok: str, path: str) -> RuleWarning | 
     )
 
 
-def validate_license_term(term: dict[str, Any]) -> TermVerdict:
-    """Run the ingest-tier checks over one already-canonical term.
+def _canonical_disjoint_violation(i: int, restriction: dict[str, Any]) -> RuleViolation | None:
+    """Return the violation for the first permitted token of ``restriction`` whose canonical
+    form is also the canonical form of one of its prohibited tokens, or ``None``.
 
-    A bare ``pricing.unit`` or ``quotas[].metric`` that is not registered is a
-    violation (pricing first, the first offending quota wins); an accepted term
-    carries one warning per unregistered bare restriction token — restriction
-    order, permitted before prohibited — then one per ``OBLIGATION_KIND_OTHER``
-    obligation without detail. The wire tier is not re-run here.
+    It canonicalises what it compares rather than trusting the term to have been
+    normalised, and it runs on every axis — where the fold is a no-op the check is plain
+    equality, which is what a server that never asked for the wire tier needs. The finding
+    names the canonical token, not the spellings that produced it, so the message does not
+    depend on whether the caller folded first.
+    """
+    permitted = _as_list(restriction.get("permitted"))
+    prohibited = _as_list(restriction.get("prohibited"))
+    if not permitted or not prohibited:
+        return None
+    kind = _str(restriction.get("kind"))
+    banned = {canonical_restriction_token(kind, _str(tok)) for tok in prohibited}
+    for j, tok in enumerate(permitted):
+        canon = canonical_restriction_token(kind, _str(tok))
+        if canon not in banned:
+            continue
+        return RuleViolation(
+            rule=RULE_RESTRICTION_CANONICAL_DISJOINT,
+            path=f"restrictions[{i}].permitted[{j}]",
+            token=canon,
+            message=f'restriction token "{canon}" is both permitted and prohibited after canonicalisation',
+        )
+    return None
+
+
+def validate_license_term(term: dict[str, Any]) -> TermVerdict:
+    """Run the ingest-tier checks over one term, in a fixed order.
+
+    A bare ``pricing.unit`` that is not registered, then the first offending
+    ``quotas[].metric``, then the first restriction whose permitted and prohibited
+    lists name one token once canonicalised. An accepted term carries one warning
+    per unregistered bare restriction token — restriction order, permitted before
+    prohibited — then one per ``OBLIGATION_KIND_OTHER`` obligation without detail.
+
+    Every check but the disjointness one reads the term as already canonical. The
+    wire tier is not re-run here; disjointness is the one property both tiers assert,
+    over different values, so a term the boundary clears can still fail here.
     """
     pricing = _as_obj(term.get("pricing")) or {}
     unit = _str(pricing.get("unit"))
@@ -263,6 +302,13 @@ def validate_license_term(term: dict[str, Any]) -> TermVerdict:
                     message=f'quota metric "{metric}" is not a registered quota token',
                 )
             )
+    for i, r in enumerate(_as_list(term.get("restrictions"))):
+        restriction = _as_obj(r)
+        if restriction is None:
+            continue
+        violation = _canonical_disjoint_violation(i, restriction)
+        if violation is not None:
+            return TermVerdict(violation=violation)
     warnings: list[RuleWarning] = []
     for i, r in enumerate(_as_list(term.get("restrictions"))):
         restriction = _as_obj(r)

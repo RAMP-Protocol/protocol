@@ -24,6 +24,7 @@ from conftest import CONFORMANCE_CORPUS, GO_TESTDATA, load_json
 from ramp_sdk.licenseterm import (
     RULE_PRICING_UNIT_REGISTERED,
     RULE_QUOTA_METRIC_REGISTERED,
+    RULE_RESTRICTION_CANONICAL_DISJOINT,
     canonical_restriction_token,
     known_restriction_token,
     normalize_license_term,
@@ -37,7 +38,11 @@ _NORMALIZE = _VECTORS["normalize"]
 _KNOWN = _VECTORS["known"]
 _VALIDATE = _VECTORS["validate"]
 _ENTRY = _VECTORS["entry"]
-_TERM_RULES = {RULE_PRICING_UNIT_REGISTERED, RULE_QUOTA_METRIC_REGISTERED}
+_TERM_RULES = {
+    RULE_PRICING_UNIT_REGISTERED,
+    RULE_QUOTA_METRIC_REGISTERED,
+    RULE_RESTRICTION_CANONICAL_DISJOINT,
+}
 
 # The registered cross-field rule ids, read from the generated cross-field corpus —
 # corpusgen emits one mutant per message-level CEL rule, so its ``rules`` are the
