@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+**`TransactionRequest.agent_request_acceptance` adds an agent-signed complete
+ordered request-set proof (additive wire change).** The proof signs ordered
+`(offer_sig, exchange)` references plus requester and idempotency key using the
+same RFC 8785 JCS / detached Ed25519 convention as `AgentAcceptance`. A Broker
+forwards the envelope unchanged while projecting a mixed-Exchange request; each
+Exchange can then require the exact in-order projection addressed to itself
+before creating or serving request-level idempotency state. This prevents a
+relay from consuming an agent's key with an appended, removed, reordered, or
+valid-subset-first request.
+
+The field is optional for wire compatibility. The Go, Python, and TypeScript
+SDK clients emit it for valid routed offers, and all three signing/verifying
+faces are pinned to shared cross-language canonicalization and ordering vectors.
+
 **`Offer.offer_id` is documented as an opaque unique identifier, not a resource
 key (comment clarification; no wire change).** The comment already said the id is
 assigned by the Exchange, but an implementation historically derived it from the

@@ -482,3 +482,79 @@ def verify_offer_acceptance_jcs(
     except (InvalidSignature, ValueError):
         return False
     return True
+
+def jcs_request_acceptance_payload(
+    *,
+    items: list[tuple[str, str]],
+    requester_id: str,
+    requester_domain: str,
+    idempotency_key: str,
+) -> bytes:
+    """Canonical bytes for the complete ordered execute-set acceptance."""
+    if not items:
+        raise ValueError("request acceptance requires at least one item")
+    refs: list[dict[str, str]] = []
+    for index, (offer_sig, exchange) in enumerate(items):
+        if offer_sig == "":
+            raise ValueError(f"request acceptance item {index} has an empty offer signature")
+        if exchange == "":
+            raise ValueError(f"request acceptance item {index} has an empty exchange")
+        refs.append({"offer_sig": offer_sig, "exchange": exchange})
+    payload: dict[str, object] = {
+        "items": refs,
+        "requester_id": requester_id,
+        "requester_domain": requester_domain,
+        "idempotency_key": idempotency_key,
+    }
+    return rfc8785.dumps(
+        {k: v for k, v in payload.items() if not isinstance(v, str) or v != ""}
+    )
+
+
+def sign_request_acceptance_jcs(
+    *,
+    seed: bytes,
+    items: list[tuple[str, str]],
+    requester_id: str,
+    requester_domain: str,
+    idempotency_key: str,
+) -> tuple[str, str]:
+    """Sign the complete ordered request set; return ``(hex_signature, alg)``."""
+    payload = jcs_request_acceptance_payload(
+        items=items,
+        requester_id=requester_id,
+        requester_domain=requester_domain,
+        idempotency_key=idempotency_key,
+    )
+    priv = Ed25519PrivateKey.from_private_bytes(seed)
+    return priv.sign(payload).hex(), ACCEPTANCE_SIGNATURE_ALGORITHM
+
+
+def verify_request_acceptance_jcs(
+    *,
+    pubkey_b64: str,
+    signature_hex: str,
+    items: list[tuple[str, str]],
+    requester_id: str,
+    requester_domain: str,
+    idempotency_key: str,
+) -> bool:
+    """Verify a complete ordered request-set acceptance."""
+    try:
+        payload = jcs_request_acceptance_payload(
+            items=items,
+            requester_id=requester_id,
+            requester_domain=requester_domain,
+            idempotency_key=idempotency_key,
+        )
+    except ValueError:
+        return False
+    signature = _hex_bytes(signature_hex)
+    if signature is None:
+        return False
+    try:
+        pub = base64.b64decode(pubkey_b64)
+        Ed25519PublicKey.from_public_bytes(pub).verify(signature, payload)
+    except (InvalidSignature, ValueError):
+        return False
+    return True

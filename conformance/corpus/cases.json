@@ -152,6 +152,101 @@
     }
   },
   {
+    "id": "AgentRequestAcceptance/payload/missing",
+    "message": "AgentRequestAcceptance",
+    "valid": false,
+    "rules": [
+      "required"
+    ],
+    "json": {
+      "signature": "x"
+    }
+  },
+  {
+    "id": "AgentRequestAcceptance/signature/too_short",
+    "message": "AgentRequestAcceptance",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "payload": {
+        "idempotency_key": "idem-tx",
+        "items": [
+          {
+            "exchange": "exchange.example",
+            "offer_sig": "offer-signature"
+          }
+        ],
+        "requester_id": "agent-seed"
+      }
+    }
+  },
+  {
+    "id": "AgentRequestAcceptance/valid",
+    "message": "AgentRequestAcceptance",
+    "valid": true,
+    "json": {
+      "payload": {
+        "idempotency_key": "idem-tx",
+        "items": [
+          {
+            "exchange": "exchange.example",
+            "offer_sig": "offer-signature"
+          }
+        ],
+        "requester_id": "agent-seed"
+      },
+      "signature": "x"
+    }
+  },
+  {
+    "id": "AgentRequestAcceptanceItem/exchange/too_short",
+    "message": "AgentRequestAcceptanceItem",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "offer_sig": "x"
+    }
+  },
+  {
+    "id": "AgentRequestAcceptanceItem/offer_sig/too_short",
+    "message": "AgentRequestAcceptanceItem",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "exchange": "x"
+    }
+  },
+  {
+    "id": "AgentRequestAcceptanceItem/valid",
+    "message": "AgentRequestAcceptanceItem",
+    "valid": true,
+    "json": {
+      "exchange": "x",
+      "offer_sig": "x"
+    }
+  },
+  {
+    "id": "AgentRequestAcceptancePayload/valid",
+    "message": "AgentRequestAcceptancePayload",
+    "valid": true,
+    "json": {
+      "idempotency_key": "idem-tx",
+      "items": [
+        {
+          "exchange": "exchange.example",
+          "offer_sig": "offer-signature"
+        }
+      ],
+      "requester_id": "agent-seed"
+    }
+  },
+  {
     "id": "AuthorizedExchange/domain/killer#0",
     "message": "AuthorizedExchange",
     "valid": false,

@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 116 symbols at cross-language parity · 14 documented divergences · 174 Go-idiomatic exclusions · 33 conformance corpora, each tri-replayed.
+**At a glance:** 119 symbols at cross-language parity · 14 documented divergences · 178 Go-idiomatic exclusions · 34 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -32,6 +32,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `BareDomainPattern` | `BARE_DOMAIN_PATTERN` | `bareDomainPattern` |
 | `CanonicalAcceptanceBytes` | `jcs_acceptance_payload` | `acceptancePayload` |
 | `CanonicalOfferBytes` | `canonical_offer_payload` | `canonicalOfferPayload` |
+| `CanonicalRequestAcceptanceBytes` | `jcs_request_acceptance_payload` | `requestAcceptancePayload` |
 | `CanonicalizeMoney` | `canonicalize_money` | `canonicalizeMoney` |
 | `CatalogRejectionDetail` | `catalog_rejection_detail` | `catalogRejectionDetail` |
 | `CheckAudience` | `check_audience` | `checkAudience` |
@@ -82,6 +83,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `SignOffer` | `sign_offer_jcs` | `signOffer` |
 | `SignOfferAcceptance` | `sign_offer_acceptance_jcs` | `signOfferAcceptance` |
 | `SignRequest` | `sign_request` | `signRequest` |
+| `SignRequestAcceptance` | `sign_request_acceptance_jcs` | `signRequestAcceptance` |
 | `SignURLEd25519` | `sign_ed25519_signed_url` | `signEd25519SignedUrl` |
 | `SignatureAgentHeader` | `SignatureAgentHeader` | `SignatureAgentHeader` |
 | `StaticKeyResolver` | `StaticKeyResolver` | `StaticKeyResolver` |
@@ -93,6 +95,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `VerifyMultisigRequest` | `verify_multisig_request_server` | `verifyMultisigRequestServer` |
 | `VerifyOfferAcceptance` | `verify_offer_acceptance_jcs` | `verifyOfferAcceptance` |
 | `VerifyRequest` | `verify_request` | `verifyRequestServer` |
+| `VerifyRequestAcceptance` | `verify_request_acceptance_jcs` | `verifyRequestAcceptance` |
 | `VerifyURLEd25519` | `verify_ed25519_signed_url` | `verifyEd25519SignedUrl` |
 
 ### resolvers — L2 I/O (key/endpoint resolution, active-key, SSRF-guarded fetch)
@@ -298,6 +301,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.ErrOfferExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrOfferSignatureInvalid` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrProofOfPossessionMismatch` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrRequestAcceptanceSignatureInvalid` | Go errors.Is sentinel; py/ts return false for a request-acceptance mismatch rather than exporting a sentinel. |
 | `helpers.ErrSignatureLifetimeTooLong` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrSignatureVerify` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrTooManyHops` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
@@ -322,6 +326,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.RegistrationDataTooManyMembers` | Member of the mapped helpers.RegistrationDataVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
 | `helpers.RegistrationDataUncanonicalizable` | Member of the mapped helpers.RegistrationDataVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
 | `helpers.RegistrationSchemaCompileTimeout` | Go-only wall-clock backstop on compilation, not part of the accepted/refused contract and deliberately absent from the ports: Go's runtime preempts, while a CPU-bound spin holds CPython's interpreter and blocks Node's event loop, so a timer there cannot interrupt the work it names. What bounds all three identically is static — the size, depth and evaluation caps and the pattern alphabet — and no admitted schema should ever reach this timeout. |
+| `helpers.RequestAcceptancePayload` | Go typed-protobuf builder for the request-acceptance payload; Python and TypeScript build their language-native payload objects inside the mapped canonicalizer/client. |
 | `helpers.RetrievalAuthFailureReasonFromToken` | Go lookup from the delivery edge's refusal token to the typed enum; py/ts branch on the token string directly. |
 | `helpers.SchemaAccepted` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
 | `helpers.SchemaCompileTimeout` | Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token. |
@@ -340,6 +345,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.SharedValidator` | Go protovalidate validator singleton; TS/Python ship no protovalidate face. |
 | `helpers.SignOfferAcceptanceWith` | Go Signer-custody variant of SignOfferAcceptance so the SDK never holds the key; py/ts pass key material directly to their single acceptance signer. |
 | `helpers.SignOptions` | Go options struct for SignRequest; py/ts pass options via kwargs/options objects. |
+| `helpers.SignRequestAcceptanceWith` | Go Signer-custody variant of SignRequestAcceptance; Python custody is a SigningTransport method and TypeScript passes its CryptoKey directly. |
 | `helpers.SignatureAgentFromContext` | Go context.Context accessor; py/ts thread signature-agent state explicitly. |
 | `helpers.SignedURL` | Go signed-URL result value type; py/ts return language-native result objects. |
 | `helpers.Signer` | Go Signer interface; py/ts inject a sign function (TS Ed25519SignFn; Python a signing callable) rather than a named Signer type — divergent handle shape, not a missing operation. |
@@ -351,6 +357,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.VerifyOffer` | Go low-level offer-signature verify; py/ts route offer verification through the Verifier face (core.Verifier). |
 | `helpers.VerifyOptions` | Go options struct for verify; py/ts pass options via kwargs/options objects. |
 | `helpers.VerifyPresentedOffer` | Go low-level presented-offer freshness verify; py/ts route offer verification through the Verifier face. |
+| `helpers.VerifyRequestAcceptanceProjection` | Go Exchange-server projection gate; Python and TypeScript currently ship agent clients, while canonical sign/verify remains at parity and shared vectors pin the payload. |
 | `helpers.VerifyRequestResolved` | Go resolver-injected VerifyRequest overload; py/ts expose a single verify entry point. |
 | `helpers.WithSignatureAgent` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `resolvers.ActiveKeyScanOptions` | Go scan-options struct; py/ts pass scan options inline. |
@@ -386,6 +393,7 @@ Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness
 | `helpers/testdata/offer-verify-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/pop-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/registration-schema-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/request-acceptance-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/scopes-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/sign-request-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/signedurl-vectors.json` | ✅ | ✅ | ✅ |

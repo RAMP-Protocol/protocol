@@ -1868,6 +1868,51 @@ message AgentAcceptance {
   string signature_algorithm = 2;
 }
 
+// AgentRequestAcceptance — the agent's topology-independent authorization of
+// one complete ordered execute set. A Broker forwards this envelope unchanged
+// when it projects a mixed-Exchange request into per-Exchange subrequests.
+// Each receiving Exchange verifies the signature, then requires its subrequest
+// to equal the complete in-order projection of payload.items whose exchange
+// names that Exchange. This is what makes removal, append, and reorder visible
+// before request-level idempotency state is claimed.
+message AgentRequestAcceptance {
+  // The signed payload is carried because a projected subrequest does not carry
+  // offers addressed to other Exchanges and therefore cannot reconstruct the
+  // original complete set by itself.
+  AgentRequestAcceptancePayload payload = 1 [(buf.validate.field).required = true];
+
+  // Hex-encoded detached Ed25519 signature over the canonical payload bytes.
+  string signature = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Signature algorithm; "EdDSA" for Ed25519.
+  string signature_algorithm = 3;
+}
+
+// AgentRequestAcceptanceItem is the minimum reference needed to authorize an
+// offer's membership, order, and fan-out destination without repeating the
+// full Offer in every projected subrequest. Offer.signature transitively binds
+// the full offer, including its exchange field; the explicit exchange lets a
+// recipient derive which signed references must appear in its projection.
+message AgentRequestAcceptanceItem {
+  string offer_sig = 1 [(buf.validate.field).string.min_len = 1];
+  string exchange = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// AgentRequestAcceptancePayload fixes the field set signed by an
+// AgentRequestAcceptance. Its canonical bytes are
+// JCS(protojson(AgentRequestAcceptancePayload)) using the canonical-signing
+// rules defined on Offer.signature.
+message AgentRequestAcceptancePayload {
+  // Complete original request order, before Broker fan-out.
+  repeated AgentRequestAcceptanceItem items = 1 [
+    (buf.validate.field).repeated.min_items = 1
+  ];
+
+  string requester_id = 2;
+  string requester_domain = 3;
+  string idempotency_key = 4;
+}
+
 // AgentAcceptancePayload — the canonical signing structure for AgentAcceptance.
 // It is NEVER sent on the wire; it exists solely so the signer (SDK) and the
 // verifier (Exchange) derive BYTE-IDENTICAL signed bytes from the same proto
@@ -1937,6 +1982,12 @@ message TransactionRequest {
   // presented bytes against its own key — stateless, self-contained bearer
   // tokens, with no reconstruct-from-catalog.
   repeated TransactionItem items = 7 [(buf.validate.field).repeated.min_items = 1];
+
+  // Optional for wire compatibility. When present, an Exchange verifies this
+  // before creating or serving request-level idempotency state. A Broker MUST
+  // forward it unchanged on every projected subrequest. Older clients that omit
+  // it retain per-item execution semantics but receive no request-level claim.
+  optional AgentRequestAcceptance agent_request_acceptance = 8;
 
   // Extension point
   google.protobuf.Struct ext = 15;

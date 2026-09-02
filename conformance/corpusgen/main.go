@@ -88,6 +88,13 @@ func seeds() map[string]proto.Message {
 		// items field is now repeated.min_items=1 (single-offer mode removed).
 		"Offer":              offer(),
 		"TransactionRequest": &rampv1.TransactionRequest{IdempotencyKey: "idem-tx", Items: []*rampv1.TransactionItem{{Offer: offer()}}},
+		"AgentRequestAcceptancePayload": &rampv1.AgentRequestAcceptancePayload{
+			Items: []*rampv1.AgentRequestAcceptanceItem{{
+				OfferSig: "offer-signature",
+				Exchange: "exchange.example",
+			}},
+			RequesterId: "agent-seed", IdempotencyKey: "idem-tx",
+		},
 		// ramp.admin.v1 payloads embedded (required) in the setter request/response
 		// envelopes. RequiredFields MUST be exactly ["x"]: the repeated.unique
 		// duplicate_item edge appends the auto-filled good item (stringSamples[0]=="x")

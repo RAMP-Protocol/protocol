@@ -83,6 +83,7 @@
     "helpers.ComponentParam": "Go value type for an RFC 9421 covered-component parameter; py/ts model components inline.",
     "helpers.CoveredComponent": "Go value type for an RFC 9421 covered component; py/ts model components inline.",
     "helpers.ErrAcceptanceSignatureInvalid": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrRequestAcceptanceSignatureInvalid": "Go errors.Is sentinel; py/ts return false for a request-acceptance mismatch rather than exporting a sentinel.",
     "helpers.ErrAudienceIdentity": "Go errors.Is sentinel for an unusable configured Exchange identity; py/ts raise/throw instead of exporting sentinels.",
     "helpers.ErrBrokenSignatureChain": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "helpers.ErrDigestMismatch": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
@@ -129,6 +130,7 @@
     "helpers.RegistrationDataTooManyMembers": "Member of the mapped helpers.RegistrationDataVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token.",
     "helpers.RegistrationDataUncanonicalizable": "Member of the mapped helpers.RegistrationDataVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token.",
     "helpers.RegistrationSchemaCompileTimeout": "Go-only wall-clock backstop on compilation, not part of the accepted/refused contract and deliberately absent from the ports: Go's runtime preempts, while a CPU-bound spin holds CPython's interpreter and blocks Node's event loop, so a timer there cannot interrupt the work it names. What bounds all three identically is static — the size, depth and evaluation caps and the pattern alphabet — and no admitted schema should ever reach this timeout.",
+    "helpers.RequestAcceptancePayload": "Go typed-protobuf builder for the request-acceptance payload; Python and TypeScript build their language-native payload objects inside the mapped canonicalizer/client.",
     "helpers.RetrievalAuthFailureReasonFromToken": "Go lookup from the delivery edge's refusal token to the typed enum; py/ts branch on the token string directly.",
     "helpers.SchemaAccepted": "Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token.",
     "helpers.SchemaCompileTimeout": "Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token.",
@@ -146,6 +148,7 @@
     "helpers.SchemaWrongDialect": "Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token.",
     "helpers.SharedValidator": "Go protovalidate validator singleton; TS/Python ship no protovalidate face.",
     "helpers.SignOfferAcceptanceWith": "Go Signer-custody variant of SignOfferAcceptance so the SDK never holds the key; py/ts pass key material directly to their single acceptance signer.",
+    "helpers.SignRequestAcceptanceWith": "Go Signer-custody variant of SignRequestAcceptance; Python custody is a SigningTransport method and TypeScript passes its CryptoKey directly.",
     "helpers.SignOptions": "Go options struct for SignRequest; py/ts pass options via kwargs/options objects.",
     "helpers.SignatureAgentFromContext": "Go context.Context accessor; py/ts thread signature-agent state explicitly.",
     "helpers.SignedURL": "Go signed-URL result value type; py/ts return language-native result objects.",
@@ -158,6 +161,7 @@
     "helpers.VerifyOffer": "Go low-level offer-signature verify; py/ts route offer verification through the Verifier face (core.Verifier).",
     "helpers.VerifyOptions": "Go options struct for verify; py/ts pass options via kwargs/options objects.",
     "helpers.VerifyPresentedOffer": "Go low-level presented-offer freshness verify; py/ts route offer verification through the Verifier face.",
+    "helpers.VerifyRequestAcceptanceProjection": "Go Exchange-server projection gate; Python and TypeScript currently ship agent clients, while canonical sign/verify remains at parity and shared vectors pin the payload.",
     "helpers.VerifyRequestResolved": "Go resolver-injected VerifyRequest overload; py/ts expose a single verify entry point.",
     "helpers.WithSignatureAgent": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "resolvers.ActiveKeyScanOptions": "Go scan-options struct; py/ts pass scan options inline.",
@@ -353,6 +357,11 @@
       "allowlist_reason": null,
       "python": "jcs_acceptance_payload",
       "ts": "acceptancePayload"
+    },
+    "helpers.CanonicalRequestAcceptanceBytes": {
+      "allowlist_reason": null,
+      "python": "jcs_request_acceptance_payload",
+      "ts": "requestAcceptancePayload"
     },
     "helpers.CanonicalOfferBytes": {
       "allowlist_reason": null,
@@ -609,6 +618,11 @@
       "python": "sign_offer_acceptance_jcs",
       "ts": "signOfferAcceptance"
     },
+    "helpers.SignRequestAcceptance": {
+      "allowlist_reason": null,
+      "python": "sign_request_acceptance_jcs",
+      "ts": "signRequestAcceptance"
+    },
     "helpers.SignRequest": {
       "allowlist_reason": null,
       "python": "sign_request",
@@ -663,6 +677,11 @@
       "allowlist_reason": null,
       "python": "verify_offer_acceptance_jcs",
       "ts": "verifyOfferAcceptance"
+    },
+    "helpers.VerifyRequestAcceptance": {
+      "allowlist_reason": null,
+      "python": "verify_request_acceptance_jcs",
+      "ts": "verifyRequestAcceptance"
     },
     "helpers.VerifyRequest": {
       "allowlist_reason": null,

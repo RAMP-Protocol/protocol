@@ -164,6 +164,24 @@ The agent's detached acceptance signature over an accepted Offer. It travels in 
 
 ::proto-message{name=AgentAcceptance}
 
+### AgentRequestAcceptance
+
+The agent's detached authorization of one complete ordered execute set. Its payload travels with the signature so a Broker can forward the same proof unchanged on every per-Exchange projection. A receiving Exchange verifies the agent signature and requires its subrequest to equal the complete in-order projection of signed items addressed to that Exchange before creating or serving request-level idempotency state.
+
+::proto-message{name=AgentRequestAcceptance}
+
+### AgentRequestAcceptancePayload
+
+The signed field set: ordered [`AgentRequestAcceptanceItem`](#agentrequestacceptanceitem) references plus the requester identity and idempotency key. Canonical bytes use the same RFC 8785 JCS over canonical proto-JSON rule as Offer and AgentAcceptance signatures.
+
+::proto-message{name=AgentRequestAcceptancePayload}
+
+### AgentRequestAcceptanceItem
+
+A signed request-set reference containing `offer_sig` and `exchange`. The offer signature binds the complete Offer; the explicit issuing Exchange lets each fan-out recipient derive the exact subset it must receive without copying every full Offer into every subrequest.
+
+::proto-message{name=AgentRequestAcceptanceItem}
+
 ### AgentAcceptancePayload
 
 The canonical signing structure for [`AgentAcceptance`](#agentacceptance). It is **never sent on the wire** — this message fixes the *field set*, and the *byte layout* is the canonical signing form defined on `Offer.signature`: RFC 8785 JCS over canonical proto-JSON with a pinned option set. Both halves are normative, so signer and verifier derive byte-identical signed bytes in any language without a protobuf binary codec, and the contract cannot drift between implementations. `offer_sig` is the accepted `Offer.signature` (which transitively binds pricing, terms, and expiry); `requester_id`, `requester_domain`, and `idempotency_key` come from the enclosing `TransactionRequest`.
