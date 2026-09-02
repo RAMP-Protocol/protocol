@@ -34,7 +34,22 @@ a Fastly Compute deployment runs the Ed25519 verifier. The name `edge-ed25519`
 is not new; it is the one ADR-012 assigned for this path. The value list also
 moves into the field's leading comment, because the reference page renders
 leading comments in preference to trailing ones and this field already had one,
-so the trailing list was invisible to every reader.
+so the trailing list was invisible to every reader. The field now also states
+its custody model: it carries public key material, the Exchange signs with a
+private key it holds and never publishes, and where the Exchange must sign with
+a key the provider generated -- a CloudFront trusted key group is the provider's
+own AWS resource -- the private half is provisioned out of band and never
+travels in this field. Both `cdn_type` values name the tenant signing scheme
+they mirror, which the previous wording asserted without saying which is which.
+
+The file header said "the agent is the fetcher", which held for one of the two
+deployments. An agent embedding the SDK holds its own key and fetches for
+itself; a custodial agent never fetches, because its key lives in its identity
+service, which fetches on its behalf. Both present the same key to the delivery
+endpoint, which is what makes the binding check work either way. The header's
+"fully offline, no JWKS fetch required" is true of the fetcher's key, which
+arrives in the request; the edge still resolves `kid` to the Exchange's public
+key from a cached directory, so the claim now names the key it applies to.
 
 Two security claims were corrected beyond the primitive. The threat model said
 the provider holds the URL-signing private key and the Exchange calls a provider

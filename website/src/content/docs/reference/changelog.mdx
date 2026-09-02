@@ -28,8 +28,17 @@ delivery endpoint record.
 `DomainVerificationConfirmation.cdn_type` now documents the value set
 `"edge-ed25519"` | `"cloudfront"`. The retired values named vendors rather than
 schemes, which made `"fastly"` actively wrong -- a Fastly deployment runs the
-Ed25519 verifier. Akamai is no longer documented as a supported delivery target,
-because EdgeAuth verifies with a secret shared with the CDN.
+Ed25519 verifier. Each value now names the tenant signing scheme it mirrors.
+`signing_key` states its custody model: it carries public key material, and the
+Exchange signs with a private key it holds and never publishes. Akamai is no
+longer documented as a supported delivery target, because EdgeAuth verifies with
+a secret shared with the CDN.
+
+Who fetches the content is now written down. An agent embedding the SDK holds
+its own key and fetches for itself; a custodial agent never fetches, because its
+key lives in its identity service, which fetches on its behalf. Both present the
+same key to the delivery endpoint, which is what makes the binding check work
+either way. The pages said "the agent is the fetcher", which covered one case.
 
 The signed-URL verification page is rewritten against the shipped verifier, and
 now documents what it always did but never said: verification fails closed,
