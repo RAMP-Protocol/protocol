@@ -351,7 +351,7 @@ func canonicalDisjointViolation(i int, r *rampv1.Restriction) *RuleViolation {
 			Rule:    RuleRestrictionCanonicalDisjoint,
 			Path:    fmt.Sprintf("restrictions[%d].permitted[%d]", i, j),
 			Token:   canon,
-			Message: fmt.Sprintf("restriction token %q is both permitted and prohibited after canonicalisation", canon),
+			Message: fmt.Sprintf("restriction token \"%s\" is both permitted and prohibited after canonicalisation", canon),
 		}
 	}
 	return nil

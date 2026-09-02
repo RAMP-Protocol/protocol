@@ -251,15 +251,25 @@ function restrictionTokenWarning(kind: string, tok: string, path: string): RuleW
  * plain equality, which is what a server that never asked for the wire tier
  * needs. The finding names the canonical token, not the spellings that produced
  * it, so the message does not depend on whether the caller folded first.
+ *
+ * An element that is not a string is SKIPPED rather than coerced. Coercing it to ""
+ * would report two ill-typed elements as a collision on the empty token, which names
+ * the wrong fault; the wire tier already refuses a non-string where the schema says
+ * string, the same division this file applies to an empty or namespaced token. Two
+ * genuinely empty strings still collide, which is what the Go oracle answers.
  */
 function canonicalDisjointViolation(i: number, r: Obj): RuleViolation | undefined {
 	const permitted = asArr(r["permitted"]);
 	const prohibited = asArr(r["prohibited"]);
 	if (permitted.length === 0 || prohibited.length === 0) return undefined;
 	const kind = str(r["kind"]);
-	const banned = new Set(prohibited.map((t) => canonicalRestrictionToken(kind, str(t))));
+	const banned = new Set(
+		prohibited.filter((t) => typeof t === "string").map((t) => canonicalRestrictionToken(kind, t)),
+	);
 	for (let j = 0; j < permitted.length; j++) {
-		const canon = canonicalRestrictionToken(kind, str(permitted[j]));
+		const tok = permitted[j];
+		if (typeof tok !== "string") continue;
+		const canon = canonicalRestrictionToken(kind, tok);
 		if (!banned.has(canon)) continue;
 		return {
 			rule: RULE_RESTRICTION_CANONICAL_DISJOINT,

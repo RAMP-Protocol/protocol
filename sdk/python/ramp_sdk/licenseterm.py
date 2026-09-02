@@ -247,15 +247,25 @@ def _canonical_disjoint_violation(i: int, restriction: dict[str, Any]) -> RuleVi
     equality, which is what a server that never asked for the wire tier needs. The finding
     names the canonical token, not the spellings that produced it, so the message does not
     depend on whether the caller folded first.
+
+    An element that is not a string is SKIPPED rather than coerced. Coercing it to ``""``
+    would report two ill-typed elements as a collision on the empty token, which names the
+    wrong fault; the wire tier already refuses a non-string where the schema says string,
+    the same division this file applies to an empty or namespaced token. Two genuinely
+    empty strings still collide, which is what the Go oracle answers.
     """
     permitted = _as_list(restriction.get("permitted"))
     prohibited = _as_list(restriction.get("prohibited"))
     if not permitted or not prohibited:
         return None
     kind = _str(restriction.get("kind"))
-    banned = {canonical_restriction_token(kind, _str(tok)) for tok in prohibited}
+    banned = {
+        canonical_restriction_token(kind, tok) for tok in prohibited if isinstance(tok, str)
+    }
     for j, tok in enumerate(permitted):
-        canon = canonical_restriction_token(kind, _str(tok))
+        if not isinstance(tok, str):
+            continue
+        canon = canonical_restriction_token(kind, tok)
         if canon not in banned:
             continue
         return RuleViolation(
