@@ -1130,6 +1130,46 @@ what it does pin, at three different strengths. The two JSON ports walk every me
 reachable from an entry explicitly for the cross-field rules, because their composed
 schemas attach per message and a top-level parse would never reach `terms[1].pricing`.
 
+The consequence of that order took a while to surface, and it is the reason the tier
+boundary is not simply a matter of where a check is cheapest to run. A rule evaluated
+before the fold is a rule about SPELLINGS. `restriction.permitted_prohibited_disjoint`
+is `this.permitted.all(p, !(p in this.prohibited))` — a string comparison standing in
+for a statement about tokens — and the vocabulary it reads has ten aliases and folds
+ASCII case on every axis. So a term naming `scrape` under permitted and `crawl` under
+prohibited passed the rule, because as written the two lists shared nothing, and the
+fold then collapsed both into one token sitting in both lists. The wire tier had
+cleared the very violation the ingest tier went on to create.
+
+What made it expensive was where it landed. The stored term rides on offers and an
+Exchange validates its own responses, so the refusal arrived at a different party, on
+a different RPC, an unbounded time later: discovery of that resource failed with an
+internal error, while the push that caused it had been answered as accepted. A check
+that runs on the wrong values does not merely miss things; it can certify the thing it
+was written to prevent.
+
+The property is now asserted at both tiers, and that is the general rule this records:
+a rule that compares two token-valued fields is only correct on canonical values, so
+when an axis gains canonicalisation, every rule that reads it must be re-examined —
+either the rule moves to the tier that sees canonical values, or canonicalisation moves
+ahead of the tier that carries the rule. Here the rule moved, because the fold resolves
+aliases out of a generated vocabulary and a CEL expression that re-listed that
+vocabulary would drift from it, which is the same reason membership is not a descriptor
+rule.
+
+Three details of the second half are deliberate. It has its own id
+(`restriction.canonical_disjoint`) rather than reusing the first's, because one name for
+two rules is what the ingest-tier id guard exists to prevent, and these two really are
+different rules: they read different values and can disagree. It canonicalises what it
+compares instead of trusting its caller to have folded first — both callers do fold, but
+a rule written to close an ordering gap that opened its own would be the same mistake
+one tier down, and the fold is a fixed point, so the cost is a pass over tokens already
+canonical. And neither rule suppresses the other: a term that fails both is reported by
+both, matching the tier the contract already describes as collecting every violation
+rather than stopping at the first. Suppression was considered and rejected on a concrete
+ground — the server binding defaults to validation off, so on a mount that never asks
+for the wire tier the ingest check is the only one a pushed term meets, and a rule that
+stayed silent because "the boundary already caught it" would catch nothing there.
+
 ## A catalog client is its own constructor
 
 The usage-report decision recorded above settled a rule that generalises: a client's

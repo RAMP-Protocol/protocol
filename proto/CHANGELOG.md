@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+**A term is now checked for permitted/prohibited disjointness a second time, over
+the canonicalised tokens (`restriction.canonical_disjoint`; SDK behaviour change
+plus a comment clarification, no wire change).** `restriction.permitted_prohibited_disjoint`
+runs at the wire tier, over the request exactly as received, so it compares token
+SPELLINGS. Ten restriction tokens have more than one accepted spelling — `scrape`
+is a registered alias of `crawl`, `adapt` and `derivative` both mean `modify`,
+`personal` means `individual` — and every axis also folds ASCII case. A term naming
+one spelling under `permitted` and another under `prohibited` therefore passed the
+boundary check and became, once the ingest tier folded it, a stored term with the
+same token in both lists.
+
+Nothing looked at it again, and the failure surfaced elsewhere: the term rides on
+offers, an Exchange validates its own responses, and so every discovery request
+returning that resource answered with an internal error while the push had looked
+clean. The ingest tier now asserts the same property over the canonical values,
+under its own rule id, in `ValidateLicenseTerm` and its Python and TypeScript twins.
+The boundary rule is unchanged.
+
+Disjointness is now the one property both tiers assert, deliberately: they read
+different values, neither suppresses the other, and a deployment that does not mount
+the wire tier still gets the second. The `Restriction` and `CatalogService` comments
+say so, and a conformance guard holds the contract's statement to the rule the SDKs
+run.
+
 **`Offer.offer_id` is documented as an opaque unique identifier, not a resource
 key (comment clarification; no wire change).** The comment already said the id is
 assigned by the Exchange, but an implementation historically derived it from the
