@@ -102,6 +102,144 @@ func TestRequestAcceptanceProjection_emptySubrequestRejected(t *testing.T) {
 	}
 }
 
+// mixedSpellingFixture spells one Exchange identity three ways the SDK treats
+// as equal — bare, upper-cased, and with the HTTPS-default port written out —
+// plus one genuinely different party.
+func mixedSpellingFixture() *rampv1.TransactionRequest {
+	return &rampv1.TransactionRequest{
+		IdempotencyKey: "idem-1",
+		Requester:      &rampv1.Requester{Id: "agent-1", Domain: "agent.example"},
+		Items: []*rampv1.TransactionItem{
+			{Offer: &rampv1.Offer{Signature: "sig-a", Exchange: "one.example"}},
+			{Offer: &rampv1.Offer{Signature: "sig-b", Exchange: "ONE.EXAMPLE"}},
+			{Offer: &rampv1.Offer{Signature: "sig-c", Exchange: "one.example:443"}},
+			{Offer: &rampv1.Offer{Signature: "sig-d", Exchange: "two.example"}},
+		},
+	}
+}
+
+// Projection membership uses the CheckAudience identity rule, not raw string
+// equality: an honest complete forward whose items spell one Exchange three
+// equivalent ways verifies, whichever accepted spelling the verifier holds as
+// its own identity.
+func TestRequestAcceptanceProjection_equivalentSpellingsVerify(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	original := mixedSpellingFixture()
+	acceptance, err := helpers.SignRequestAcceptance(priv, original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projected := &rampv1.TransactionRequest{
+		IdempotencyKey: original.GetIdempotencyKey(),
+		Requester:      original.GetRequester(),
+		Items:          original.GetItems()[:3],
+	}
+	for _, self := range []string{"one.example", "One.Example:443"} {
+		if _, err := helpers.VerifyRequestAcceptanceProjection(projected, acceptance, self, pub); err != nil {
+			t.Fatalf("verify mixed-spelling projection as %q: %v", self, err)
+		}
+	}
+}
+
+// With raw equality, a relay could remove the differently spelled item and
+// still pass, because the count of raw-equal refs would shrink to match. Under
+// the identity rule, dropping ANY of the three equivalent items is an
+// incomplete projection and is refused.
+func TestRequestAcceptanceProjection_equivalentSpellingRemovalRejected(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	original := mixedSpellingFixture()
+	acceptance, err := helpers.SignRequestAcceptance(priv, original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for drop := 0; drop < 3; drop++ {
+		items := make([]*rampv1.TransactionItem, 0, 2)
+		for i, item := range original.GetItems()[:3] {
+			if i != drop {
+				items = append(items, item)
+			}
+		}
+		projected := &rampv1.TransactionRequest{
+			IdempotencyKey: original.GetIdempotencyKey(),
+			Requester:      original.GetRequester(),
+			Items:          items,
+		}
+		if _, err := helpers.VerifyRequestAcceptanceProjection(projected, acceptance, "one.example", pub); !errors.Is(err, helpers.ErrRequestAcceptanceSignatureInvalid) {
+			t.Fatalf("dropped item %d: expected invalid request acceptance, got %v", drop, err)
+		}
+	}
+	// The sharpest cut: forward only the item whose spelling raw-equals the
+	// verifier's own. Under raw equality the shrunken filter count would match
+	// and this would pass; under the identity rule the projection is three
+	// items and one is an incomplete forward.
+	rawOnly := &rampv1.TransactionRequest{
+		IdempotencyKey: original.GetIdempotencyKey(),
+		Requester:      original.GetRequester(),
+		Items:          original.GetItems()[:1],
+	}
+	if _, err := helpers.VerifyRequestAcceptanceProjection(rawOnly, acceptance, "one.example", pub); !errors.Is(err, helpers.ErrRequestAcceptanceSignatureInvalid) {
+		t.Fatalf("raw-equal subset: expected invalid request acceptance, got %v", err)
+	}
+}
+
+// The identity rule folds only the HTTPS-default port, and a value that is not
+// a bare domain names nobody — neither may fail open.
+func TestRequestAcceptanceProjection_portsAndMalformedValuesStayClosed(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+
+	t.Run("port 80 is a different identity", func(t *testing.T) {
+		original := &rampv1.TransactionRequest{
+			IdempotencyKey: "idem-1",
+			Requester:      &rampv1.Requester{Id: "agent-1", Domain: "agent.example"},
+			Items: []*rampv1.TransactionItem{
+				{Offer: &rampv1.Offer{Signature: "sig-a", Exchange: "one.example"}},
+				{Offer: &rampv1.Offer{Signature: "sig-b", Exchange: "one.example:80"}},
+			},
+		}
+		acceptance, err := helpers.SignRequestAcceptance(priv, original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Forwarding both items to one.example must fail: the :80 item belongs
+		// to a different identity, so the projection for one.example is one item.
+		if _, err := helpers.VerifyRequestAcceptanceProjection(original, acceptance, "one.example", pub); !errors.Is(err, helpers.ErrRequestAcceptanceSignatureInvalid) {
+			t.Fatalf("expected invalid request acceptance, got %v", err)
+		}
+	})
+
+	t.Run("malformed projection exchange is an error", func(t *testing.T) {
+		original := requestAcceptanceFixture()
+		acceptance, err := helpers.SignRequestAcceptance(priv, original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, self := range []string{"", "https://one.example"} {
+			if _, err := helpers.VerifyRequestAcceptanceProjection(original, acceptance, self, pub); err == nil {
+				t.Fatalf("projection exchange %q: expected an error", self)
+			}
+		}
+	})
+
+	t.Run("malformed forwarded offer exchange is refused", func(t *testing.T) {
+		original := requestAcceptanceFixture()
+		acceptance, err := helpers.SignRequestAcceptance(priv, original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		projected := &rampv1.TransactionRequest{
+			IdempotencyKey: original.GetIdempotencyKey(),
+			Requester:      original.GetRequester(),
+			Items: []*rampv1.TransactionItem{
+				{Offer: &rampv1.Offer{Signature: "sig-a", Exchange: "https://one.example"}},
+				{Offer: &rampv1.Offer{Signature: "sig-c", Exchange: "one.example"}},
+			},
+		}
+		if _, err := helpers.VerifyRequestAcceptanceProjection(projected, acceptance, "one.example", pub); !errors.Is(err, helpers.ErrRequestAcceptanceSignatureInvalid) {
+			t.Fatalf("expected invalid request acceptance, got %v", err)
+		}
+	})
+}
+
 // oversizedFixture returns a request carrying n items, every one signed-offer
 // shaped, so payload construction succeeds and only the cap can refuse it.
 func oversizedFixture(n int) *rampv1.TransactionRequest {

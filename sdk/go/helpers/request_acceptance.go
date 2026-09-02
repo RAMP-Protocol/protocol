@@ -189,12 +189,22 @@ func VerifyRequestAcceptanceProjection(req *rampv1.TransactionRequest, acceptanc
 	if err != nil {
 		return nil, err
 	}
-	if exchange == "" {
-		return nil, errors.New("helpers: projection exchange is empty")
+	// Membership uses the Exchange identity rule CheckAudience owns — case
+	// folds, an explicit :443 equals the omitted HTTPS-default port — not raw
+	// string equality. With raw equality, a signed set holding one.example and
+	// one.example:443 lets a relay drop the differently spelled item and still
+	// pass, while an honest complete forward is refused. A value that is not a
+	// bare domain names nobody and never matches.
+	if !IsBareDomain(exchange) {
+		return nil, fmt.Errorf("helpers: projection exchange %q is not a bare domain", exchange)
+	}
+	namesExchange := func(v string) bool {
+		verdict, err := CheckAudience(exchange, v)
+		return err == nil && verdict == AudienceAccepted
 	}
 	want := make([]*rampv1.AgentRequestAcceptanceItem, 0, len(req.GetItems()))
 	for _, ref := range acceptance.GetPayload().GetItems() {
-		if ref.GetExchange() == exchange {
+		if namesExchange(ref.GetExchange()) {
 			want = append(want, ref)
 		}
 	}
@@ -203,7 +213,7 @@ func VerifyRequestAcceptanceProjection(req *rampv1.TransactionRequest, acceptanc
 	}
 	for i, item := range req.GetItems() {
 		offer := item.GetOffer()
-		if offer == nil || offer.GetExchange() != exchange ||
+		if offer == nil || !namesExchange(offer.GetExchange()) ||
 			offer.GetSignature() != want[i].GetOfferSig() {
 			return nil, ErrRequestAcceptanceSignatureInvalid
 		}
