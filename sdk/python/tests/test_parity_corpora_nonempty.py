@@ -121,6 +121,11 @@ _CORPUS_SPECS: list[tuple[pathlib.Path, Callable[[Any], Any], str]] = [
         "content-fetch",
     ),
     (CONFORMANCE_CORPUS / "crossfield.json", _whole, "crossfield"),
+    (GO_TESTDATA / "licenseterm-vectors.json", lambda d: d["fold"], "licenseterm-fold"),
+    (GO_TESTDATA / "licenseterm-vectors.json", lambda d: d["normalize"], "licenseterm-normalize"),
+    (GO_TESTDATA / "licenseterm-vectors.json", lambda d: d["known"], "licenseterm-known"),
+    (GO_TESTDATA / "licenseterm-vectors.json", lambda d: d["validate"], "licenseterm-validate"),
+    (GO_TESTDATA / "licenseterm-vectors.json", lambda d: d["entry"], "licenseterm-entry"),
 ]
 
 

@@ -63,7 +63,14 @@ from .errors import NOT_CANONICAL_WIRE_NAMING, CallError, CallErrorKind
 from .route import EndpointResolver
 
 if TYPE_CHECKING:
-    from wire.models import DisputeResponse, TransactionResponse, UsageReportResponse
+    from wire.models import (
+        DisputeResponse,
+        PushResourcesResponse,
+        RefreshCatalogResponse,
+        RemoveResourcesResponse,
+        TransactionResponse,
+        UsageReportResponse,
+    )
 
     from ramp_sdk.core import DiscoveryResult, VerifiedOffer
 
@@ -77,6 +84,7 @@ __all__ = [
     "BrokerClient",
     "CallError",
     "CallErrorKind",
+    "CatalogClient",
     "Client",
     "ClientConfig",
     "Content",
@@ -337,6 +345,47 @@ class BrokerClient(_Face):
         return await asyncio.to_thread(
             _verbs.finish_resolve, self._config, plan, status, body
         )
+
+
+class CatalogClient(_Face):
+    """The publisher-facing Catalog client: push, remove and refresh the catalog entries a
+    publisher, or a contributor it authorised, supplies to an Exchange.
+
+    A SEPARATE class, as the Broker's is, and for a related reason: the address is a
+    different one. An Exchange advertises CatalogService at its manifest's
+    ``catalog_endpoint``, distinct from the ExchangeService endpoint the agent client
+    dials, and the caller is a different party holding a different key — a contributor's,
+    named by ``caller_id``, never an agent's. The publisher chose the Exchange, so the
+    origin is configuration and every call runs on the plain transport — the posture of
+    the agent client's home Exchange, not of its offer-derived leg.
+
+    It takes the same config; ``signer`` is what a real push needs (an Exchange refuses an
+    unsigned catalog call), and the agent-only parts — the requester, the verifier, the
+    endpoint resolver, the proof window — are inert here rather than errors.
+    """
+
+    def __init__(
+        self, config: ClientConfig, *, http: httpx.AsyncClient | None = None
+    ) -> None:
+        super().__init__(config, http)
+
+    async def push_resources(self, request: dict[str, Any]) -> PushResourcesResponse:
+        """Push or update catalog entries."""
+        plan = await asyncio.to_thread(_verbs.plan_push_resources, self._config, request)
+        status, body = await self._send(plan)
+        return _verbs.finish_push_resources(plan, status, body)
+
+    async def remove_resources(self, request: dict[str, Any]) -> RemoveResourcesResponse:
+        """Remove the catalog entries the request's paths name."""
+        plan = await asyncio.to_thread(_verbs.plan_remove_resources, self._config, request)
+        status, body = await self._send(plan)
+        return _verbs.finish_remove_resources(plan, status, body)
+
+    async def refresh_catalog(self, request: dict[str, Any]) -> RefreshCatalogResponse:
+        """Ask the Exchange to refresh the tenant's catalog from its configured sources."""
+        plan = await asyncio.to_thread(_verbs.plan_refresh_catalog, self._config, request)
+        status, body = await self._send(plan)
+        return _verbs.finish_refresh_catalog(plan, status, body)
 
 
 def _fetch_inputs(

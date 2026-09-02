@@ -1,0 +1,682 @@
+package helpers
+
+// License-term golden-vector emitter.
+//
+// The sdk/ts and sdk/python ports of the ingest-tier checks — token folding and
+// alias resolution, term normalisation, registry membership, the per-term
+// verdict and the composed per-entry verdict — assert byte-parity against this
+// Go oracle. Every expected value is DERIVED by calling the REAL Go face, never
+// hand-typed, exactly as gen_util_vectors_test.go derives the scopes and money
+// corpora.
+//
+// Like TestGenerateVectors this test is a verification no-op by default (it
+// asserts the committed file matches a fresh emit) and (re)writes it under
+// RAMP_UPDATE_VECTORS=1 — the emitter is both generator and drift gate. It is
+// TEST INFRASTRUCTURE, not the code under test.
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+
+	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+	"google.golang.org/protobuf/reflect/protoreflect"
+)
+
+const licenseTermVectorsPath = "testdata/licenseterm-vectors.json"
+
+// ltFoldVector is one CanonicalRestrictionToken case. kind is the enum NAME, the
+// form the JSON clients see on the wire.
+type ltFoldVector struct {
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	Token     string `json:"token"`
+	Canonical string `json:"canonical"`
+}
+
+// ltNormalizeVector is one NormalizeLicenseTerm case: a term as proto-JSON and the
+// same term after normalisation. Applying the face twice must give the second
+// form again (idempotency), which the emitter asserts before it records.
+type ltNormalizeVector struct {
+	Name       string          `json:"name"`
+	Term       json.RawMessage `json:"term"`
+	Normalized json.RawMessage `json:"normalized"`
+}
+
+// ltKnownVector is one KnownRestrictionToken case.
+type ltKnownVector struct {
+	Name  string `json:"name"`
+	Kind  string `json:"kind"`
+	Token string `json:"token"`
+	Known bool   `json:"known"`
+}
+
+// ltFinding is a violation or a warning as the three SDKs report it: the rule
+// id, the snake_case path relative to the checked message, the offending token
+// where the rule is about one, and the message — the exact string the Exchange
+// puts on the wire for a warning.
+type ltFinding struct {
+	Rule    string `json:"rule"`
+	Path    string `json:"path"`
+	Token   string `json:"token"`
+	Message string `json:"message"`
+}
+
+// ltValidateVector is one ValidateLicenseTerm case over an already-canonical term.
+type ltValidateVector struct {
+	Name      string          `json:"name"`
+	Term      json.RawMessage `json:"term"`
+	Violation *ltFinding      `json:"violation"`
+	Warnings  []ltFinding     `json:"warnings"`
+}
+
+// ltEntryVector is one ValidateResourceEntry case. Its three violation columns are
+// compared at three different strengths, because the three languages agree at three
+// different strengths — recording more than they can agree on would pin an accident,
+// and recording less hides a real divergence:
+//
+//   - structural is a BOOLEAN, and only for FIELD-LEVEL wire violations. Their ids
+//     are language-local by construction (Go reports protovalidate's, TypeScript
+//     Zod's issue codes, Python Pydantic's error types) so no id can be compared.
+//     This is the same bargain conformance/corpus/cases.json strikes, and it is
+//     paid for the same way: coverage comes from ONE CASE PER RULE, not from a
+//     richer assertion, which is why every wire case below isolates one violation.
+//   - cross_field_rules are compared as IDS. Message-level CEL ids are authored in
+//     the proto and all three ports emit those exact strings, so a port that fires
+//     the wrong refinement — or, more importantly, fails to walk to a message at all
+//     — is caught here rather than passing on a boolean that stays true anyway.
+//   - term_rules are compared as WHOLE FINDINGS. The ingest tier is SDK-owned code
+//     in all three languages, so its id, path, token and message are all pinned; the
+//     wire strings it produces are what an Exchange puts in warnings[].
+//
+// warnings are the accepted terms' warnings with entry-relative paths, whole.
+type ltEntryVector struct {
+	Name            string          `json:"name"`
+	Entry           json.RawMessage `json:"entry"`
+	OK              bool            `json:"ok"`
+	Structural      bool            `json:"structural"`
+	CrossFieldRules []string        `json:"cross_field_rules"`
+	TermRules       []ltFinding     `json:"term_rules"`
+	Warnings        []ltFinding     `json:"warnings"`
+}
+
+// ltCrossFieldRuleIDs is every message-level CEL id the contract declares, read
+// from the generated descriptor rather than listed here. Listing them would be a
+// fourth copy of a set the proto already owns, and the copy that drifts is the one
+// that decides whether a violation is classified as cross-field or field-level.
+func ltCrossFieldRuleIDs(t *testing.T) map[string]bool {
+	t.Helper()
+	ids := map[string]bool{}
+	var walk func(protoreflect.MessageDescriptors)
+	walk = func(mds protoreflect.MessageDescriptors) {
+		for i := 0; i < mds.Len(); i++ {
+			md := mds.Get(i)
+			opts, ok := md.Options().(proto.Message)
+			if ok && proto.HasExtension(opts, validate.E_Message) {
+				rules, _ := proto.GetExtension(opts, validate.E_Message).(*validate.MessageRules)
+				for _, c := range rules.GetCel() {
+					ids[c.GetId()] = true
+				}
+			}
+			walk(md.Messages())
+		}
+	}
+	walk(rampv1.File_ramp_v1_ramp_proto.Messages())
+	if len(ids) == 0 {
+		t.Fatal("no message-level CEL ids found in the descriptor — the classification below " +
+			"would silently call every cross-field violation field-level")
+	}
+	return ids
+}
+
+var ltVectorJSON = protojson.MarshalOptions{UseProtoNames: true}
+
+func ltProtoJSON(t *testing.T, m proto.Message) json.RawMessage {
+	t.Helper()
+	return ltStableJSON(t, ltVectorJSON, m)
+}
+
+// ltWireJSON renders an entry the way an Exchange's own codec does. It is the
+// same message as ltProtoJSON's, spelled the way it actually arrives:
+// EmitUnpopulated writes an unset message field as a null and an unset scalar as
+// its zero, where the compact rendering omits both. The verdict recorded beside
+// it is the oracle's verdict on the MESSAGE, so a port that reads one spelling
+// differently from the other is what the case catches — the two are one entry.
+func ltWireJSON(t *testing.T, m proto.Message) json.RawMessage {
+	t.Helper()
+	return ltStableJSON(t, wireEmitJSONOptions, m)
+}
+
+func ltStableJSON(t *testing.T, opts protojson.MarshalOptions, m proto.Message) json.RawMessage {
+	t.Helper()
+	b, err := opts.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal %T: %v", m, err)
+	}
+	// Re-encode through encoding/json so the committed bytes carry the corpus
+	// writer's own formatting rather than protojson's deliberately unstable one.
+	var v any
+	if err := json.Unmarshal(b, &v); err != nil {
+		t.Fatalf("re-decode %T: %v", m, err)
+	}
+	out, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("re-encode %T: %v", m, err)
+	}
+	return out
+}
+
+func ltFindingOf(rule, path, token, message string) ltFinding {
+	return ltFinding{Rule: rule, Path: path, Token: token, Message: message}
+}
+
+func ltWarningsOf(ws []RuleWarning) []ltFinding {
+	out := make([]ltFinding, 0, len(ws))
+	for _, w := range ws {
+		out = append(out, ltFindingOf(w.Rule, w.Path, w.Token, w.Message))
+	}
+	return out
+}
+
+const (
+	ltKindFunction    = rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION
+	ltKindGeography   = rampv1.RestrictionKind_RESTRICTION_KIND_GEOGRAPHY
+	ltKindUserType    = rampv1.RestrictionKind_RESTRICTION_KIND_USER_TYPE
+	ltKindOther       = rampv1.RestrictionKind_RESTRICTION_KIND_OTHER
+	ltKindUnspecified = rampv1.RestrictionKind_RESTRICTION_KIND_UNSPECIFIED
+)
+
+// buildLTFoldVectors emits the CanonicalRestrictionToken corpus. The non-ASCII
+// inputs are the load-bearing rows: a port that reaches for its platform's
+// Unicode lowercase folds U+212A into "k" and turns a homograph into a
+// registered token.
+func buildLTFoldVectors() []ltFoldVector {
+	cases := []struct {
+		name  string
+		kind  rampv1.RestrictionKind
+		token string
+	}{
+		{"function_alias_tdm", ltKindFunction, "tdm"},
+		{"function_alias_mixed_case_padded", ltKindFunction, "  Generative-AI "},
+		{"function_registered_upper", ltKindFunction, "AI-INPUT"},
+		{"function_unknown_lowercased", ltKindFunction, "Flibbertigibbet"},
+		{"function_alias_derivative", ltKindFunction, "Derivative"},
+		{"user_type_alias_business", ltKindUserType, "Business"},
+		{"user_type_registered_untouched", ltKindUserType, "commercial_entity"},
+		{"geography_lower_to_upper", ltKindGeography, "us"},
+		{"geography_padded", ltKindGeography, " de "},
+		{"geography_wildcard", ltKindGeography, "*"},
+		{"geography_special_eea", ltKindGeography, "eea"},
+		{"other_untouched", ltKindOther, "  Custom-Token "},
+		{"unspecified_kind_untouched", ltKindUnspecified, "AI-Train"},
+		{"kelvin_sign_not_folded", ltKindFunction, "KEEP"},
+		{"dotted_capital_i_not_folded", ltKindFunction, "İnput"},
+		{"eszett_not_folded", ltKindUserType, "STRAßE"},
+		{"nbsp_not_trimmed", ltKindFunction, " tdm "},
+		{"ideographic_space_not_trimmed", ltKindGeography, "　us　"},
+		{"rfc8259_whitespace_trimmed", ltKindFunction, "\t\ntdm\r "},
+		{"namespaced_lowercased_not_aliased", ltKindFunction, "Acme:Custom-Use"},
+		{"empty", ltKindFunction, ""},
+	}
+	out := make([]ltFoldVector, 0, len(cases))
+	for _, c := range cases {
+		out = append(out, ltFoldVector{
+			Name:      c.name,
+			Kind:      c.kind.String(),
+			Token:     c.token,
+			Canonical: CanonicalRestrictionToken(c.kind, c.token), // REAL face
+		})
+	}
+	return out
+}
+
+func ltRestriction(kind rampv1.RestrictionKind, permitted, prohibited []string) *rampv1.Restriction {
+	return &rampv1.Restriction{Kind: kind, Permitted: permitted, Prohibited: prohibited}
+}
+
+func ltPerUnitPricing(unit string) *rampv1.Pricing {
+	return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Rate: "0.07", Currency: "USD", Unit: proto.String(unit)}
+}
+
+func ltFreePricing() *rampv1.Pricing {
+	return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
+}
+
+func ltEnumerated(pricing *rampv1.Pricing, mutate func(t *rampv1.LicenseTerm)) *rampv1.LicenseTerm {
+	t := &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Pricing: pricing}
+	if mutate != nil {
+		mutate(t)
+	}
+	return t
+}
+
+// buildLTNormalizeVectors emits the NormalizeLicenseTerm corpus and asserts, for
+// every case, that the face is idempotent: normalising the normalised term
+// changes nothing.
+func buildLTNormalizeVectors(t *testing.T) []ltNormalizeVector {
+	t.Helper()
+	cases := []struct {
+		name string
+		term *rampv1.LicenseTerm
+	}{
+		{"function_permitted_aliases", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"generative-ai", "train-ai", "tdm"}, nil)}
+		})},
+		{"function_prohibited_aliases", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, nil, []string{"scrape", "copy", "adapt", "derivative"})}
+		})},
+		{"function_mixed_case_padding", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"  Generative-AI ", "AI-INPUT"}, nil)}
+		})},
+		{"user_type_aliases", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindUserType, []string{"personal", "business", "enterprise"}, nil)}
+		})},
+		{"geography_upper", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindGeography, []string{"us", " de ", "eu", "*"}, nil)}
+		})},
+		{"other_untouched", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindOther, []string{"Custom-Token", "  Spaced  "}, nil)}
+		})},
+		{"function_unknown_lowercased", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"Search", "Display"}, nil)}
+		})},
+		{"three_axes_at_once", ltEnumerated(ltPerUnitPricing("tokens"), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{
+				ltRestriction(ltKindFunction, []string{"TDM"}, []string{"Scrape"}),
+				ltRestriction(ltKindGeography, []string{"gb", "eea"}, nil),
+				ltRestriction(ltKindOther, []string{"Left-Alone"}, nil),
+			}
+			x.Quotas = []*rampv1.Quota{{Metric: "tokens", Limit: 10, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}}
+			x.Scopes = []string{"Subscription:Premium"}
+		})},
+		{"restriction_without_tokens", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, nil, nil)}
+		})},
+		{"non_ascii_untouched", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"KEEP", " tdm"}, nil)}
+		})},
+		{"empty_term", &rampv1.LicenseTerm{}},
+	}
+	out := make([]ltNormalizeVector, 0, len(cases))
+	for _, c := range cases {
+		input := ltProtoJSON(t, c.term)
+		once, ok := proto.Clone(c.term).(*rampv1.LicenseTerm)
+		if !ok {
+			t.Fatalf("%s: clone", c.name)
+		}
+		NormalizeLicenseTerm(once) // REAL face
+		twice, ok := proto.Clone(once).(*rampv1.LicenseTerm)
+		if !ok {
+			t.Fatalf("%s: clone", c.name)
+		}
+		NormalizeLicenseTerm(twice)
+		if !proto.Equal(once, twice) {
+			t.Fatalf("%s: NormalizeLicenseTerm is not idempotent", c.name)
+		}
+		out = append(out, ltNormalizeVector{Name: c.name, Term: input, Normalized: ltProtoJSON(t, once)})
+	}
+	return out
+}
+
+// buildLTKnownVectors emits the KnownRestrictionToken corpus.
+func buildLTKnownVectors() []ltKnownVector {
+	cases := []struct {
+		name  string
+		kind  rampv1.RestrictionKind
+		token string
+	}{
+		{"function_registered", ltKindFunction, "ai-train"},
+		{"function_registered_second", ltKindFunction, "ai-input"},
+		{"function_unknown", ltKindFunction, "ai-foo"},
+		{"function_alias_is_not_registered", ltKindFunction, "tdm"},
+		{"function_uppercase_not_registered", ltKindFunction, "AI-TRAIN"},
+		{"geography_iso_alpha2", ltKindGeography, "US"},
+		{"geography_iso_alpha2_any_two_letters", ltKindGeography, "ZZ"},
+		{"geography_special_wildcard", ltKindGeography, "*"},
+		{"geography_special_eea", ltKindGeography, "EEA"},
+		{"geography_lowercase", ltKindGeography, "us"},
+		{"geography_three_letters", ltKindGeography, "USA"},
+		{"geography_non_ascii_two_letters", ltKindGeography, "ÉE"},
+		{"user_type_registered", ltKindUserType, "commercial_entity"},
+		{"user_type_unknown", ltKindUserType, "robots"},
+		{"user_type_alias_is_not_registered", ltKindUserType, "business"},
+		{"other_never_known", ltKindOther, "ai-train"},
+		{"unspecified_never_known", ltKindUnspecified, "ai-train"},
+		{"empty_not_known", ltKindFunction, ""},
+	}
+	out := make([]ltKnownVector, 0, len(cases))
+	for _, c := range cases {
+		out = append(out, ltKnownVector{
+			Name:  c.name,
+			Kind:  c.kind.String(),
+			Token: c.token,
+			Known: KnownRestrictionToken(c.kind, c.token), // REAL face
+		})
+	}
+	return out
+}
+
+// buildLTValidateVectors emits the ValidateLicenseTerm corpus over canonical terms.
+func buildLTValidateVectors(t *testing.T) []ltValidateVector {
+	t.Helper()
+	licenseURI := func() *rampv1.License {
+		return &rampv1.License{Uri: proto.String("https://example.com/license.txt"), UriDigest: proto.String("sha256:" + ltRepeatHex(64))}
+	}
+	cases := []struct {
+		name string
+		term *rampv1.LicenseTerm
+	}{
+		{"reference_only_with_restrictions_accepted", &rampv1.LicenseTerm{
+			Semantics: rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY, License: licenseURI(), Pricing: ltPerUnitPricing("accesses"),
+			Restrictions: []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"ai-train"}, nil)},
+		}},
+		{"reference_only_bare_accepted", &rampv1.LicenseTerm{
+			Semantics: rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY, License: licenseURI(), Pricing: ltPerUnitPricing("accesses"),
+		}},
+		{"pricing_unit_unregistered_rejected", ltEnumerated(ltPerUnitPricing("frobnications"), nil)},
+		{"pricing_unit_registered_accepted", ltEnumerated(ltPerUnitPricing("tokens"), nil)},
+		{"pricing_unit_namespaced_accepted", ltEnumerated(ltPerUnitPricing("acme:widgets"), nil)},
+		{"pricing_unit_empty_not_checked", ltEnumerated(ltFreePricing(), nil)},
+		{"pricing_unit_uppercase_rejected", ltEnumerated(ltPerUnitPricing("TOKENS"), nil)},
+		{"quota_metric_unregistered_rejected", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Quotas = []*rampv1.Quota{{Metric: "frobnications", Limit: 10, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}}
+		})},
+		{"quota_metric_second_quota_rejected", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Quotas = []*rampv1.Quota{
+				{Metric: "tokens", Limit: 10, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY},
+				{Metric: "frobnications", Limit: 10, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY},
+			}
+		})},
+		{"quota_metric_registered_accepted", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Quotas = []*rampv1.Quota{{Metric: "tokens", Limit: 10, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}}
+		})},
+		{"quota_metric_namespaced_accepted", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Quotas = []*rampv1.Quota{{Metric: "acme:widgets", Limit: 10, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}}
+		})},
+		{"pricing_unit_checked_before_quota", ltEnumerated(ltPerUnitPricing("frobnications"), func(x *rampv1.LicenseTerm) {
+			x.Quotas = []*rampv1.Quota{{Metric: "gizmos", Limit: 10, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}}
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"flibbertigibbet"}, nil)}
+		})},
+		{"distinct_kinds_disjoint_tokens_accepted", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{
+				ltRestriction(ltKindFunction, []string{"ai-train"}, []string{"search"}),
+				ltRestriction(ltKindGeography, []string{"US"}, nil),
+			}
+		})},
+		{"unregistered_token_advisory_warns", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{{Kind: ltKindFunction, Permitted: []string{"flibbertigibbet"}, Advisory: true}}
+		})},
+		{"unregistered_token_binding_also_only_warns", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{{Kind: ltKindFunction, Permitted: []string{"flibbertigibbet"}, Advisory: false}}
+		})},
+		{"registered_token_binding_accepted_cleanly", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{{Kind: ltKindFunction, Permitted: []string{"ai-train"}, Advisory: false}}
+		})},
+		{"namespaced_token_bypasses_membership_on_other", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindOther, []string{"acme:custom-use"}, nil)}
+		})},
+		{"bare_token_on_other_warns", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindOther, []string{"custom-use"}, nil)}
+		})},
+		{"warnings_in_report_order", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{
+				ltRestriction(ltKindFunction, []string{"ai-train", "flib"}, []string{"blib"}),
+				ltRestriction(ltKindGeography, []string{"US", "usa"}, nil),
+				ltRestriction(ltKindUserType, []string{"robots"}, nil),
+			}
+			x.Obligations = []*rampv1.Obligation{
+				{Kind: rampv1.ObligationKind_OBLIGATION_KIND_OTHER, Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE},
+				{Kind: rampv1.ObligationKind_OBLIGATION_KIND_ATTRIBUTION, Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE},
+				{Kind: rampv1.ObligationKind_OBLIGATION_KIND_OTHER, Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE},
+			}
+		})},
+		{"other_obligation_without_detail_warns", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Obligations = []*rampv1.Obligation{{Kind: rampv1.ObligationKind_OBLIGATION_KIND_OTHER, Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE}}
+		})},
+		{"other_obligation_with_detail_accepted", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Obligations = []*rampv1.Obligation{{Kind: rampv1.ObligationKind_OBLIGATION_KIND_OTHER, Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE, Detail: proto.String("see appendix B")}}
+		})},
+		{"attribution_obligation_without_detail_accepted", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Obligations = []*rampv1.Obligation{{Kind: rampv1.ObligationKind_OBLIGATION_KIND_ATTRIBUTION, Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE}}
+		})},
+		// A restriction with no kind. The wire tier refuses it — kind is not_in [0] —
+		// but this face runs the ingest tier alone, so the warning is reached and its
+		// text is what the three languages had never been held to: Go formats the enum
+		// and names the unset value, while a port interpolating the raw JSON string
+		// would leave a gap where the kind should be. The messages here are the exact
+		// bytes an Exchange puts in warnings[], so the difference is what a publisher
+		// is told, not a rendering detail.
+		{"unregistered_token_without_kind_names_the_unset_enum", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{{Permitted: []string{"flibbertigibbet"}}}
+		})},
+		{"empty_term_accepted", &rampv1.LicenseTerm{}},
+	}
+	out := make([]ltValidateVector, 0, len(cases))
+	for _, c := range cases {
+		warnings, err := ValidateLicenseTerm(c.term) // REAL face
+		v := ltValidateVector{Name: c.name, Term: ltProtoJSON(t, c.term), Warnings: ltWarningsOf(warnings)}
+		if err != nil {
+			var rv *RuleViolation
+			if !errors.As(err, &rv) {
+				t.Fatalf("%s: ValidateLicenseTerm returned a non-RuleViolation error: %v", c.name, err)
+			}
+			f := ltFindingOf(rv.Rule, rv.Path, rv.Token, rv.Message)
+			v.Violation = &f
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// buildLTEntryVectors emits the ValidateResourceEntry corpus: the composition of
+// the two tiers in the Exchange's order, over the entry exactly as given.
+func buildLTEntryVectors(t *testing.T) []ltEntryVector {
+	t.Helper()
+	entry := func(mutate func(e *rampv1.ResourceEntry)) *rampv1.ResourceEntry {
+		e := &rampv1.ResourceEntry{Domain: "publisher.example", Path: "/premium/article-42.html",
+			Terms: []*rampv1.LicenseTerm{ltEnumerated(ltFreePricing(), nil)}}
+		if mutate != nil {
+			mutate(e)
+		}
+		return e
+	}
+	cases := []struct {
+		name  string
+		entry *rampv1.ResourceEntry
+	}{
+		{"valid_minimal", entry(nil)},
+		{"domain_with_port_and_single_label_accepted", entry(func(e *rampv1.ResourceEntry) { e.Domain = "edge:8787" })},
+		{"alias_resolved_before_membership_no_warning", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"Generative-AI"}, nil)}
+		})},
+		{"unknown_token_warns_with_entry_path", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms = append(e.Terms, ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+				x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"ai-train", "flibbertigibbet"}, nil)}
+			}))
+		})},
+		{"structural_path_without_slash", entry(func(e *rampv1.ResourceEntry) { e.Path = "premium/article-42.html" })},
+		{"structural_empty_domain", entry(func(e *rampv1.ResourceEntry) { e.Domain = "" })},
+		{"structural_domain_with_scheme", entry(func(e *rampv1.ResourceEntry) { e.Domain = "https://publisher.example" })},
+		{"structural_padded_token_fails_wire_before_fold", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Restrictions = []*rampv1.Restriction{ltRestriction(ltKindGeography, []string{" de "}, nil)}
+		})},
+		{"structural_term_without_pricing", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Pricing = nil
+		})},
+		{"structural_nested_cel_only", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms = append(e.Terms, ltEnumerated(&rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Rate: "0.05", Currency: "USD"}, nil))
+		})},
+		// One case per cross-field rule reachable from an entry. Before these, the
+		// only nested-CEL case was a Pricing one, so the three sites a port walks to
+		// reach Restriction, Obligation and a nested License were never isolated —
+		// deleting those walk sites from a port left every test green. Each case
+		// carries exactly ONE cross-field violation: Go reports them in descriptor
+		// order and the ports in walk order, so a case with two would be order-flaky
+		// across languages. Each also stays far under the list bounds, or the
+		// cardinality rule would fire too and be classified as field-level, masking
+		// the rule the case exists to isolate.
+		{"cross_field_restriction_permitted_prohibited_overlap", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Restrictions = []*rampv1.Restriction{
+				ltRestriction(ltKindFunction, []string{"ai-train"}, []string{"ai-train"}),
+			}
+		})},
+		{"cross_field_license_term_one_restriction_per_kind", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Restrictions = []*rampv1.Restriction{
+				ltRestriction(ltKindFunction, []string{"ai-train"}, nil),
+				ltRestriction(ltKindFunction, []string{"crawl"}, nil),
+			}
+		})},
+		// The twin of the case above, one past the restrictions cap. The one-per-kind
+		// rule carries a size test so a list longer than the cap reports the cap and
+		// nothing else, and all three languages must agree on that silence: the ports
+		// evaluate this rule themselves, so without a vector here a port that kept
+		// reporting it would diverge from the wire with every suite green. Duplicate
+		// kinds throughout, so the rule WOULD fire were the list short enough.
+		{"structural_over_cap_restrictions_silences_one_per_kind", entry(func(e *rampv1.ResourceEntry) {
+			for i := 0; i < 9; i++ {
+				e.Terms[0].Restrictions = append(e.Terms[0].Restrictions,
+					ltRestriction(ltKindFunction, []string{"ai-train"}, nil))
+			}
+		})},
+		{"cross_field_license_term_reference_only_requires_uri", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Semantics = rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY
+		})},
+		{"cross_field_obligation_share_alike_requires_scope_license", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Obligations = []*rampv1.Obligation{{
+				Kind:    rampv1.ObligationKind_OBLIGATION_KIND_SHARE_ALIKE,
+				Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE,
+			}}
+		})},
+		{"cross_field_pricing_free_zero_rate", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Pricing = &rampv1.Pricing{
+				Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0.05", Currency: "USD",
+			}
+		})},
+		{"cross_field_license_digest_required_with_uri", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].License = &rampv1.License{Id: proto.String("CC-BY-4.0"), Uri: proto.String("https://publisher.example/licence")}
+		})},
+		// The same License rule reached through the OTHER path a port must walk —
+		// an obligation's scope_license. A walk that reaches terms[].license but not
+		// terms[].obligations[].scope_license passes the case above and fails here.
+		{"cross_field_license_digest_required_via_scope_license", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Obligations = []*rampv1.Obligation{{
+				Kind:         rampv1.ObligationKind_OBLIGATION_KIND_SHARE_ALIKE,
+				Trigger:      rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE,
+				ScopeLicense: &rampv1.License{Id: proto.String("CC-BY-SA-4.0"), Uri: proto.String("https://publisher.example/sa")},
+			}}
+		})},
+		{"structural_too_many_terms", entry(func(e *rampv1.ResourceEntry) {
+			for len(e.Terms) < 33 {
+				e.Terms = append(e.Terms, ltEnumerated(ltFreePricing(), nil))
+			}
+		})},
+		{"term_reject_pricing_unit", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0] = ltEnumerated(ltPerUnitPricing("frobnications"), nil)
+		})},
+		{"term_reject_second_term_quota", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms = append(e.Terms, ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+				x.Quotas = []*rampv1.Quota{{Metric: "gizmos", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}}
+			}))
+		})},
+		{"term_reject_drops_that_terms_warnings", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0] = ltEnumerated(ltPerUnitPricing("frobnications"), func(x *rampv1.LicenseTerm) {
+				x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"flibbertigibbet"}, nil)}
+			})
+			e.Terms = append(e.Terms, ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+				x.Obligations = []*rampv1.Obligation{{Kind: rampv1.ObligationKind_OBLIGATION_KIND_OTHER, Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE}}
+			}))
+		})},
+		{"structural_and_term_reject_both_reported", entry(func(e *rampv1.ResourceEntry) {
+			e.Path = "x"
+			e.Terms[0] = ltEnumerated(ltPerUnitPricing("frobnications"), nil)
+		})},
+		{"no_terms_accepted", entry(func(e *rampv1.ResourceEntry) { e.Terms = nil })},
+	}
+	celIDs := ltCrossFieldRuleIDs(t)
+	// render is how the case's entry is spelled into the corpus. The verdict is
+	// taken from the MESSAGE either way, so the spelling is the only variable.
+	emit := func(name string, e *rampv1.ResourceEntry, render func(*testing.T, proto.Message) json.RawMessage) ltEntryVector {
+		before := render(t, e)
+		verdict := ValidateResourceEntry(e) // REAL face
+		if after := render(t, e); string(after) != string(before) {
+			t.Fatalf("%s: ValidateResourceEntry modified its input", name)
+		}
+		v := ltEntryVector{Name: name, Entry: before, OK: verdict.OK(),
+			CrossFieldRules: []string{}, TermRules: []ltFinding{}, Warnings: ltWarningsOf(verdict.Warnings)}
+		for _, viol := range verdict.Violations {
+			switch {
+			case viol.Rule == RulePricingUnitRegistered || viol.Rule == RuleQuotaMetricRegistered:
+				v.TermRules = append(v.TermRules, ltFindingOf(viol.Rule, viol.Path, viol.Token, viol.Message))
+			case celIDs[viol.Rule]:
+				v.CrossFieldRules = append(v.CrossFieldRules, viol.Rule)
+			default:
+				v.Structural = true
+			}
+		}
+		return v
+	}
+	out := make([]ltEntryVector, 0, len(cases))
+	for _, c := range cases {
+		out = append(out, emit(c.name, c.entry, ltProtoJSON))
+	}
+	// The same entries again in the spelling an Exchange actually serves. A
+	// generated schema cannot express "a null is how proto-JSON writes an absent
+	// field", so that rule lives in each port's wire-policy seam — and a port
+	// that parses around the seam refuses a body the oracle and the other port
+	// both accept. Nothing caught that before these, because every other case is
+	// written in the compact spelling, where the null never appears.
+	for _, c := range []struct {
+		name  string
+		entry *rampv1.ResourceEntry
+	}{
+		{"wire_form_minimal_entry", entry(nil)},
+		{"wire_form_entry_with_restrictions_and_obligations", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0].Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"ai-train"}, nil)}
+			e.Terms[0].Obligations = []*rampv1.Obligation{{
+				Kind:    rampv1.ObligationKind_OBLIGATION_KIND_ATTRIBUTION,
+				Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE,
+			}}
+		})},
+	} {
+		out = append(out, emit(c.name, c.entry, ltWireJSON))
+	}
+	return out
+}
+
+func ltRepeatHex(n int) string {
+	const hexdigits = "0123456789abcdef"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = hexdigits[i%len(hexdigits)]
+	}
+	return string(b)
+}
+
+// TestGenerateLicenseTermVectors emits the license-term golden corpus.
+// Verification no-op by default, (re)writes under RAMP_UPDATE_VECTORS=1.
+func TestGenerateLicenseTermVectors(t *testing.T) {
+	doc := map[string]any{
+		"note": "Go-emitted oracle for the ingest-tier license-term checks. fold: CanonicalRestrictionToken; " +
+			"normalize: NormalizeLicenseTerm (idempotent); known: KnownRestrictionToken; validate: ValidateLicenseTerm over " +
+			"canonical terms; entry: ValidateResourceEntry (wire tier over the raw entry, then the ingest tier over a " +
+			"canonicalised copy). Messages are the exact strings the Exchange puts in PushResourcesResponse.warnings. " +
+			"Regenerate with RAMP_UPDATE_VECTORS=1 go test ./sdk/go/helpers/ -run TestGenerateLicenseTermVectors.",
+		"fold":      buildLTFoldVectors(),
+		"normalize": buildLTNormalizeVectors(t),
+		"known":     buildLTKnownVectors(),
+		"validate":  buildLTValidateVectors(t),
+		"entry":     buildLTEntryVectors(t),
+	}
+	path := filepath.Join("testdata", filepath.Base(licenseTermVectorsPath))
+	if os.Getenv("RAMP_UPDATE_VECTORS") == "1" {
+		writeJSON(t, path, doc)
+		return
+	}
+	assertMatches(t, path, doc)
+}

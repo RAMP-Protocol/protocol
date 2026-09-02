@@ -307,7 +307,7 @@ The error includes an actionable URL (in `metadata`) where the institution can a
       "offer_id": "78e43486-599b-4016-b5a7-1bed5d22d1c0",
       "transaction_id": "txn-mri-gbm-0152-001",
       "billing_id": "bill-mri-001",
-      "retrieval_endpoint": "https://cdn.medimg-exchange.com/delivery/manifest/txn-mri-gbm-0152-001.json?expires=1742410800&agent_id=c4d5e6f7...&sig=hmac-sha256-9a8b7c...",
+      "retrieval_endpoint": "https://cdn.medimg-exchange.com/delivery/manifest/txn-mri-gbm-0152-001.json?agent_id=c4d5e6f7...&exp=1742410800&kid=sW9bF5tN...&sig=9a8b7c...",
       "cost": {
         "amount": "25.00",
         "currency": "USD"
@@ -346,7 +346,7 @@ The error includes an actionable URL (in `metadata`) where the institution can a
 The agent fetches the delivery manifest via the signed URL:
 
 ```bash
-GET https://cdn.medimg-exchange.com/delivery/manifest/txn-mri-gbm-0152-001.json?expires=1742410800&agent_id=c4d5e6f7...&sig=hmac-sha256-9a8b7c...
+GET https://cdn.medimg-exchange.com/delivery/manifest/txn-mri-gbm-0152-001.json?agent_id=c4d5e6f7...&exp=1742410800&kid=sW9bF5tN...&sig=9a8b7c...
 ```
 
 The manifest is a JSON document listing all 847 DICOM instances grouped by series, each with its own signed URL:
@@ -369,14 +369,14 @@ The manifest is a JSON document listing all 847 DICOM instances grouped by serie
         {
           "sop_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.1.1",
           "instance_number": 1,
-          "url": "https://cdn.medimg-exchange.com/dicom/txn-mri-gbm-0152-001/series-1/instance-001.dcm?sig=hmac-sha256-...",
+          "url": "https://cdn.medimg-exchange.com/dicom/txn-mri-gbm-0152-001/series-1/instance-001.dcm?exp=1742410800&kid=sW9bF5tN...&sig=4c1d8e...",
           "size_bytes": 1524736,
           "hash": "sha256:e5f6a7b8..."
         },
         {
           "sop_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.1.2",
           "instance_number": 2,
-          "url": "https://cdn.medimg-exchange.com/dicom/txn-mri-gbm-0152-001/series-1/instance-002.dcm?sig=hmac-sha256-...",
+          "url": "https://cdn.medimg-exchange.com/dicom/txn-mri-gbm-0152-001/series-1/instance-002.dcm?exp=1742410800&kid=sW9bF5tN...&sig=7f2a9b...",
           "size_bytes": 1524736,
           "hash": "sha256:c9d0e1f2..."
         }

@@ -1063,6 +1063,369 @@ dial) and the **I/O resolvers tier** (vetted maintained client, SSRF-guarded) ar
 distinct tiers with opposite dependency policies, and "no httpx" is a property of the
 core alone, never of the whole SDK above L1.
 
+## The publisher's pre-check is the Exchange's check, lifted one tier down
+
+A pushed entry passes two tiers at the Exchange. The wire tier is protovalidate: the
+`ResourceEntry` envelope rules and the `LicenseTerm` structural and cross-field rules,
+applied to the request exactly as received. The ingest tier runs afterwards, over the
+canonicalised terms: restriction tokens are folded and alias-resolved to their
+registered form, then a bare `Pricing.unit` or `Quota.metric` that is not a registered
+token is rejected, while an unregistered restriction token and an `OBLIGATION_KIND_OTHER`
+obligation without detail are accepted and reported in `PushResourcesResponse.warnings`.
+The first tier was always in the contract. The second lived only inside the reference
+Exchange, so a publisher learned what it would say by pushing and reading the refusal.
+
+It moved into the L1 helpers, in all three languages, because it passes the inclusion
+test on every count: the rules are protocol-defined (the token registry and, now, its
+aliases are authored in the proto and generated into every SDK), each face is a pure
+function over one message, and the code has more than one consumer — the Exchange at
+ingest, a publisher pre-checking a feed, the reference catalog CLI. What did NOT move is
+the Exchange's discovery-side term eligibility (which terms a requester's scopes cover):
+that is a question the Exchange answers about a requester, not a check a publisher can
+run before sending, and it stays where its state is.
+
+The line between the tiers is where it is for a reason a CEL expression makes plain: a
+rule that re-lists a vocabulary drifts from it, so membership cannot be a descriptor
+rule. It is still reported to a publisher as a rule id, and those ids take the shape the
+descriptor's CEL ids already have — the owning message in snake_case, then the rule
+(`pricing.unit.registered`, `restriction.token.registered`). One namespace, and a
+conformance guard reads the ids out of the committed corpus and holds them to it: every
+id names a contract message, and none equals a CEL id.
+
+The reject-versus-warn split is on the wire — `warnings[]` is a list of strings a
+publisher reads — so the messages are pinned byte-for-byte across the three SDKs rather
+than merely their shape. That is what lets an Exchange that imports the SDK emit the
+same text a publisher's pre-check showed.
+
+Folding is ASCII-only, and only RFC 8259's four whitespace bytes are trimmed. The reason
+is the one the recipient-addressing rule records: several non-ASCII code points
+lowercase or NFKC-fold INTO ASCII letters — U+212A KELVIN SIGN becomes "k" — so a port
+that reached for its platform's Unicode lowercase would turn a homograph into a
+registered token. A non-ASCII byte passes through a fold unchanged, a token padded with
+a non-breaking space is not trimmed, and the corpus carries those inputs so the three
+answers cannot drift on them.
+
+The aliases had been a private Go map inside the Exchange, although the licensing core's
+own vocabulary table had always listed them beside the tokens (`train-ai` is AIPREF's
+spelling of `ai-train`, `generative-ai` the industry's spelling of `ai-input`), and the
+user-type aliases had no record outside the code at all. They are now
+`(ramp.v1.vocab_enum_alias)` entries on the enum values that carry the tokens, and the
+vocabulary plugin emits an alias map and a canonical lookup per axis into every SDK — an
+axis without aliases carries an empty map, so every axis has the same face. Codegen
+refuses what the lookup could not honour: an alias that is itself a token, a canonical
+that is not one, a duplicate, and a spelling that is not already trimmed and lowercase,
+since the SDK folds before it looks up and any other spelling could never match. The
+generated lookup does no folding of its own; which case an axis folds to is the SDK's
+rule, implied by the case its registered tokens are authored in.
+
+The composition order is the Exchange's, and it is not the friendly one. The wire tier
+runs over the entry exactly as given; only then is a copy canonicalised for the ingest
+tier. So a geography token spelled `" de "` is refused by the wire pattern — whitespace —
+before any fold would have rescued it, and the SDK says so rather than quietly folding
+first and reporting an entry the Exchange would refuse. Where the Exchange stops at the
+first tier that fails, the SDK reports both, so a publisher fixes everything in one
+round; that is the one deliberate difference. What the corpus's per-entry list pins is
+narrower than "the composition", and the section below on language-local rule ids says
+what it does pin, at three different strengths. The two JSON ports walk every message
+reachable from an entry explicitly for the cross-field rules, because their composed
+schemas attach per message and a top-level parse would never reach `terms[1].pricing`.
+
+## A catalog client is its own constructor
+
+The usage-report decision recorded above settled a rule that generalises: a client's
+constructor takes its shape from where the address comes from. A report goes where a
+signed offer says, so the report verb resolves its destination from the message and
+takes no configured origin. A publisher pushing a catalog is the other case — it chose
+the Exchange — so the origin is configuration and the leg runs on the plain signing
+transport, the posture of the agent client's home Exchange rather than of its
+offer-derived leg.
+
+What it does not share with the home Exchange is the address itself, or the caller. An
+Exchange advertises CatalogService at `WellKnownManifest.catalog_endpoint`, distinct
+from the ExchangeService endpoint the agent dials, and the party pushing holds a
+contributor key named by `caller_id`, never an agent key. Hanging the three catalog
+verbs on the agent client would have carried every agent-only holder — the offer
+Verifier, the requester, the delivery fetcher — into a client that uses none of them,
+and pointed one of two roles at the wrong address. So the publisher role got a third
+constructor, on the Broker's precedent, sharing the plumbing and nothing else. The
+catalog messages carry no idempotency key, by the decision recorded under idempotency —
+an upsert and a delete are naturally idempotent — and the client mints none; it stamps
+`ver` when empty and refuses, before signing, a request that names no bare-domain
+recipient, the same verdict a dispute with no `exchange` gets.
+
+That refusal uses the SHAPE predicate, `IsBareDomain`, and not the routing one the
+offer-derived legs use. The two are kept apart deliberately and the catalog leg is where
+the difference bites: nothing dials this value — the address is configuration — so the
+only question worth asking is whether the value is a form the contract admits, which is
+the protovalidate pattern the field carries and the same rule the Exchange's own audience
+check applies on arrival. The routing predicate is wider by design, because it answers
+whether a value is safe to concatenate into a URL: an underscore, a trailing root dot and
+a bracketed IPv6 literal are all usable hosts and none of them is a value `exchange` may
+hold. Vetting with it signed and sent requests the recipient could only refuse — the
+round trip this check exists to save. A port and a single-label host stay accepted, since
+both are live in the deployment's own catalog and both are what the wire rule admits.
+
+`catalog_endpoint` had carried no host binding while `endpoint` did. The predicate is the
+same one, applied for the same reason: a publisher's push is a signed call to that
+address, and a manifest naming an unrelated host would redirect it to a party the
+signature never covered. The comment now states the MUST, the conformance guard that
+holds `endpoint`'s comment to its clauses reads `catalog_endpoint`'s too, and absence
+means the Exchange does not expose the service — a consumer does not fall back to
+`endpoint`.
+
+The envelope rules on `ResourceEntry` were checked against production data before their
+strictness was chosen. `domain` reuses the shared bare-host rule, which admits a port and
+a single-label host, because both are live in the reference deployment's catalog and
+because the catalog URI is synthesised by concatenating `domain` and `path`: a value
+carrying a scheme or a path would choose the URI rather than name the host. `path` is an
+absolute URL path with no query or fragment delimiter and no whitespace or control byte,
+for the same reason. `content_hash` is bounded but not format-checked, because a bare hex
+digest and a `method:hexdigest` form both travel today and `hash_method` names the
+algorithm. `terms` caps at 32, the limit the reference Exchange already enforced privately —
+moved into the contract so every implementation refuses the same size. Moving it also
+changed WHEN it is refused, and only that: an over-cap entry always refused the whole
+submission, because a catalog push is all-or-nothing, so what a wire rule changes is that
+the refusal happens at the boundary before any per-entry classification runs — which is
+exactly why the rejection reason that named this cap is retired on that path.
+
+One accounting decision belongs here because it is not visible from the code. The
+parity allowlist is a shrink-only ratchet over documented divergences, and its only prior
+growth was netted by a resolution in the same change. This work adds two rows of classes
+the record already carries — a Go factory that folds into a Python constructor, and a
+third Go-only Connect handler binding under the existing decision — with nothing left to
+net against. The alternatives were to reclassify the ten existing factory-fold rows as
+mappings, which re-opens a classification a review had verified, or to add unrelated
+Python surface for the arithmetic, which is gaming. The baseline moved 14 to 16 as a
+reviewed bump, and the gate now states the one growth it sanctions: a new Go symbol of an
+already-recorded divergence class, arriving with that class's reason or anchor. Whether
+the factory folds should be mappings at all is a separate question, left open on purpose.
+
+## A bound belongs on the phase whose cost it models, and the catalog relearned it
+
+The list caps on `ResourceEntry` and `LicenseTerm` were added to bound the work one push
+can cost. They do not, and the comment that said they did was wrong for a reason worth
+recording, because this contract has now met it twice.
+
+protovalidate does not short-circuit. It walks every element it is handed and collects
+every violation, and the cardinality rule is reported alongside the others rather than
+instead of them. Measured on this contract: an entry carrying 100,000 terms costs 393ms
+and allocates 100,001 violation objects — even though `terms` was already capped at 32,
+and the cap fires. The list was fully traversed on its way to being refused. A cap of N
+does not mean a validator handles at most N; it means a validator that has already handled
+however many arrived will say so.
+
+That is the same lesson the registration-schema work recorded above, in the same words: a
+bound belongs on the phase whose cost it models, and the caps there bounded the document
+rather than the work. So the caps here are kept and re-described for what they genuinely
+control — how many terms one entry may carry, how many entries a push can store, and how
+many paths a rejection has to name back — and the work is bounded where the work happens,
+at the transport, by the maximum request size the recipient will read. The SDK's server
+binding sets that cap on every handler and states the cost the default implies: a
+full-cardinality push costs ~475ms to validate, and the most expensive conformant shape
+that still fits under 4 MiB costs ~1.8s. Bounded, not small; an uncapped handler has no
+worst case at all. That shape carries the SHORTEST legal tokens, which is the detail an
+earlier figure got backwards: cost tracks the number of elements walked and size tracks
+their length, so under a byte cap the expensive shape is the one spending its bytes on
+count rather than on length.
+
+Three corrections arrived with the honest measurements, each a way a cost model can read as
+tighter than it is. The published figure was ~1.6s, and it described the contract the author
+intended rather than the one that shipped: with `Restriction.kind` open a term could carry
+sixty-four distinct axes, and the real figure was an order of magnitude higher. A cost model
+that assumes a bound the contract does not state is not a measurement of the contract. And
+the transport cap bounds the decompressed message without bounding decompression: an
+over-cap body is inflated to completion so the error can name its size, which is bounded
+only by the RAW read — 4 MiB compressed is 4.32 GB inflated, ~850ms spent on a request that
+is refused. A bound on a result is not a bound on the work that produced it, which is the
+same lesson one layer further down.
+
+They bound COUNTS and not bytes, which is worth saying plainly because the first
+re-description overreached in the other direction. `Obligation.detail`, the `License`
+strings and every `ResourceAttestation` member carry no length rule, so there is no
+largest conformant entry and no largest conformant push — the transport cap can refuse a
+conformant one. That is the intended trade rather than a gap: bytes are the recipient's
+budget to set, and a deployment that must accept larger documents raises its own cap.
+
+The third correction is the one that outlived the other two, because it says where the
+argument above stops. Closing the axis was itself described as bounding the one-per-kind
+rule — a list longer than the axis set must repeat a kind, so `all()` would short-circuit —
+and that is wrong for the same reason the caps are: the rule refusing a number does not make
+that number EQUAL to another, so each undefined kind stays distinct and the walk runs in
+full. Measured: four thousand restrictions cost 17s to refuse, from 20 KB of wire and 56 KB
+of proto-JSON.
+
+Which is the limit of "bound the work at the transport". A read cap bounds work that is
+LINEAR in bytes, and nothing else. A rule that walks its list against itself is bounded by
+neither the cap on the list nor the cap on the request — 56 KB is far under any transport
+cap anyone would set — and the only thing that bounds it is a size test inside the rule,
+which short-circuits before the walk. The contract has exactly one such rule; it now carries
+that test, refuses the same input in 26ms, and a conformance guard holds the test's threshold
+equal to the field's own cap, because the rule stays silent above it and a cap raised alone
+would leave the lists in between both unchecked and accepted.
+
+Two details of that cap are load-bearing. It covers the RAW body as well as the decoded
+message, because the verify face must buffer the whole body to check a signature over the
+exact bytes and therefore runs before the caller is known — an unauthenticated caller
+reaches only that read. And it is composed inside request-id, so a refusal still carries
+the correlation id the reject-path logs are read by.
+
+## An answer that is not the canonical one needs a single author
+
+The cap above answers a body past it with 413, and a hop budget with 429. Both are the
+same Connect code — `ResourceExhausted` — and the Connect specification maps that code to
+429 for every cause; the function that does it, `connectCodeToHTTP`, is unexported in
+connect-go. So 413 is a departure. It is the right one, because the two refusals ask the
+caller for different things and only one of them is fixed by sending less, but it is not
+the answer a second implementation arrives at. A second implementation reads the
+specification and returns 429.
+
+That is what makes this classification different from the ones around it. A consumer can
+re-derive an obvious rule and stay level with the SDK by accident. It cannot re-derive a
+deliberate departure, and it will not notice when the departure moves. The reference
+implementation had already grown its own copy of the mapping — the same predicate over
+`*http.MaxBytesError`, the same three-way status split, the same error body — for the one
+mount it composes by hand rather than through this binding, so two mounts in one process
+answered a refusal from two authorities, agreeing only because both files had been written
+to match.
+
+So the split and the error-envelope body are exported and live in one function.
+`RejectCode` classifies, `IsBodyTooLarge` is the predicate a caller branches on before it
+can answer at all, and `WriteReject` writes the pair. The status stays unexported: nothing
+needs it without the body that goes with it, and pairing them is the point.
+
+`WriteReject` takes the Connect code as a parameter rather than deriving it, which is the
+one design choice here worth explaining. A gate that is not this one may carry a
+resource-limit sentinel this package has never heard of — the reference implementation's
+own hop-budget error is a distinct value from the SDK's, and `errors.Is` between the two
+is false. A writer that classified for itself would answer that caller's hop-budget
+rejection 401 instead of 429, so delegating would be a regression and the copy would stay.
+Taking the code lets the caller answer the one case it owns and defer every other to
+`RejectCode`, which is the whole difference between a delegation and a fork.
+
+Making the code a parameter opened one hole, closed in the same change: the over-cap arm
+now tests the code as well as the error, so a caller that classifies a rejection as
+something other than a resource limit cannot be answered 413 over a body that names a
+different verdict. On the path that existed before, the guard is always true — `RejectCode`
+already returns `ResourceExhausted` for every over-cap error — so nothing on the wire moved.
+
+The same reasoning bounds what the parameter accepts. A rejection writer's input domain is
+the seam's verdicts, not the whole Connect code space: `ResourceExhausted` and
+`Unauthenticated` are what the gate produces, and both consumers' classifiers return only
+those two. A code outside them is refused 401 rather than translated, because translating
+means a hand-written copy of connect-go's canonical table — unexported there, and the second
+authority this entry is about. The body still reports the code it was given, so a caller
+that passes a verdict the writer does not model can see that it did.
+
+The audit face does not follow the transport face all the way. `RejectReason` names the four
+outcomes an RFC 9421 gate produces and has no value for a body past the read cap, so
+`ClassifyReject` reports that refusal as its default, a signature failure — the misreport the
+response side was changed to stop making, still standing on the logging side. Adding a value
+is a cross-language change to a mapped symbol whose tokens are stable values a consumer's
+dashboards key on, so the two faces are documented as disagreeing on that one input rather
+than quietly assumed to agree, and a consumer auditing an over-cap refusal names it itself.
+
+## The wire tier's rule ids are language-local, and the corpus says only what they share
+
+The ingest-tier rule ids share one namespace, as recorded above. The tier ABOVE them does
+not, and that is a property of where the ids come from rather than a choice anyone made:
+Go reports protovalidate's ids, TypeScript reports Zod's issue codes, Python reports
+Pydantic's error types. Three engines, three vocabularies, one behaviour.
+
+So the per-entry corpus compares the three languages at three strengths, one per column,
+and the split is not arbitrary — it is exactly what they can agree on. Field-level wire
+violations are recorded as a BOOLEAN, because no id survives the crossing; coverage comes
+instead from one case per rule, the same bargain the field-level validation corpus already
+strikes and pays for the same way. Cross-field violations are recorded as IDS, because
+message-level CEL ids are authored in the proto and all three ports emit those exact
+strings. Ingest-tier violations are recorded as WHOLE FINDINGS — id, path, token and
+message — because that tier is SDK-owned code in all three languages and its strings are
+what an Exchange puts in `warnings[]`.
+
+The cross-field column is the one that earns its keep. The two JSON ports cannot compose a
+message-level rule the way protovalidate does, so each hand-enumerates the sites reachable
+from an entry and walks them, and a hand-written walk fails by silently stopping short.
+Before the column existed, deleting three of the five walk sites from the TypeScript port
+left its entire suite green: no case isolated a `Restriction`, `Obligation` or nested
+`scope_license` rule, so the boolean stayed true either way and a publisher would have been
+told an overlapping term was fine. A conformance guard now derives the reachable rule set
+from the descriptor and fails until every one of them has a case isolating it, which is
+what makes the case list an obligation rather than a sample.
+
+One limit belongs in the record rather than in a comment nobody reads. The corpus is
+emitted by the Go oracle, so it can only carry inputs Go can construct and marshal. Legal
+proto-JSON that Go never emits — a numeric enum, `null` for a repeated field — is outside
+what this corpus can prove about the ports, and the ports do diverge there. That gap is
+real, it is not closed here, and closing it needs a different instrument than a
+Go-generated corpus.
+
+Two halves of it turned out NOT to need one, and finding that was worth the search. The
+null a real Exchange serves is on a singular MESSAGE field, which Go emits perfectly well
+— EmitUnpopulated is the codec's own option set — so the entry corpus now carries the same
+entries in that spelling beside the compact one, verdict taken from the message either
+way. The camelCase refusal is the opposite case and genuinely cannot be vectored: protojson
+ACCEPTS both spellings, so the oracle has no refusal to record, and the rule belongs to the
+two JSON ports whose schemas strip what they do not recognise. It is held by a mirrored
+test in each port instead. What remains outside the corpus is narrower than it looked: a
+numeric enum, and a null on a repeated field.
+
+## The license-term faces keep each language's idiom, and the map records only the name
+
+Two of them differ in shape across the three languages, deliberately, and neither
+difference belongs in `sdk/parity/symbol-map.json`. That map records whether a FACE exists
+in each language; the allowlist beside it is a shrink-only ratchet over SYMBOLS, for a
+face one language does not have. A symbol present in all three whose contract differs is
+not that, and filing it there would say the opposite of what is true — the map's presence
+check deliberately stops asserting an entry that carries an allowlist reason, so recording
+these as divergences would have switched off the check that the names still exist. Same
+treatment as the client defaults recorded further down, and as `SignAgentBinding`, whose
+Go and Python faces take different custody and are mapped as plain counterparts.
+
+**`NormalizeLicenseTerm` and `NormalizeResourceEntry` rewrite in place in Go and return a
+copy in the ports.** Go takes a `*rampv1.LicenseTerm` and mutates it; the ports take a
+proto-JSON object and hand back a new one, leaving the input alone. Each is the idiom of
+its language, and the Go shape is load-bearing downstream rather than incidental: the
+Exchange normalises the entry it is about to persist, so an in-place face is what lets the
+canonical tokens reach the row and the offer projection without a second copy. The corpus
+pins the OUTPUT, which is the part that must agree, and both port docstrings state the
+contract they keep.
+
+**`ValidateLicenseTerm` returns `([]RuleWarning, error)` in Go and a named `TermVerdict`
+in the ports.** A term yields at most one hard violation, and in Go that is an error —
+`RuleViolation` implements `error` precisely so the face can return it as one while a
+caller still reads the typed fields back through `errors.As`. The ports have no comparable
+idiom, so they name the pair. `EntryVerdict` is a struct in all three because an entry
+yields MANY violations and a tuple would not carry them.
+
+That leaves `TermVerdict` itself: a public name in two languages and absent from the third.
+The surface gate walks Go to the ports and is complete in that direction, so a port-only
+symbol is outside what it can see — by construction, not by oversight. Recording it here is
+the available answer; making the gate walk both ways is a larger change and its own.
+
+## A contract that describes its checks and not its verdict gets read wrong
+
+`CatalogService`'s comment set out both validation tiers in detail — which rules run at the
+boundary, how tokens are folded and aliases resolved, which checks reject and which only
+warn — and never said what a rejection costs. Entry, or submission? The contract did not
+answer, so readers answered it from the reference implementation, and the reference
+implementation's own comments disagreed with each other: one described an over-cap entry as
+dropped from a batch whose other entries still upsert, while its caller two files away
+refuses everything and says so. Two consecutive readings of that code reached the wrong
+answer, and one of them shipped into this repo's prose before it was caught.
+
+The rule is now in the contract, where the question is settled once instead of re-derived:
+a push is all-or-nothing at both tiers, and the per-entry detail a refusal carries is
+reporting, not partial acceptance. The proto already did this for the other batch path —
+`TransactionResponse` states that its per-item denials are partial results of a successful
+request — so the pattern is established; catalog was the batch RPC that never used it.
+
+Two things generalise. A message that carries per-item detail says nothing about whether
+items are accepted per-item: naming what failed and applying what did not are different
+questions, and `PushResourcesResponse.accepted` / `.rejected` and
+`CatalogRejection.rejected_paths` are shaped for both answers while the contract permits
+only one. And a behaviour stated nowhere in the contract will be inferred from whatever
+implementation the reader has at hand — which makes an unstated verdict a defect in the
+contract, not a gap in the docs.
+
 ## SSRF-guarded fetch: two flags, a corpus-locked transport
 
 Every third-party-influenceable fetch across all three SDKs runs through a guarded

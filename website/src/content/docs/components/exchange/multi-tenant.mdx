@@ -30,9 +30,9 @@ type TenantConfig struct {
     PricingOverrides map[string]*rampv1.Pricing // path pattern -> pricing
 
     // Content delivery
-    ContentBaseURL string  // CDN base URL (e.g., "https://cdn.techcrunch.com")
-    CDNType        CDNType // CloudFront, Akamai, Fastly, GenericHMAC
-    SigningKeyRef  string  // Reference to key in secrets manager
+    ContentBaseURL string        // CDN base URL (e.g., "https://cdn.techcrunch.com")
+    Scheme         SigningScheme // ED25519 or AWS_CLOUDFRONT_RSA
+    SigningKeyRef  string        // Reference to key in secrets manager
 
     // Signed URL configuration
     URLTTLSeconds  int  // Default: 300 (5 minutes)
@@ -238,3 +238,5 @@ The Exchange exposes `CatalogService` (PushResources, RemoveResources, RefreshCa
    - Caller type — "cms_plugin", "intelligence_provider", "syndicator"
 
 This prevents unauthorized parties from injecting or modifying catalog entries. The same authentication mechanism applies to RemoveResources and RefreshCatalog calls.
+
+An Exchange implemented on the Go SDK mounts the service through `connectserver.NewCatalogServiceHandler`, which composes the same request-id · verify · validate · error-detail stack as the Exchange and Broker bindings: an unsigned push never reaches the handler, the wire tier (the `ResourceEntry` envelope rules and the `LicenseTerm` rules) refuses a malformed entry before it **on a mount that passes `connectserver.WithValidation(connect.ValidationStrict)`** — that option composes protovalidate and is not the default, so a deployment relying on the boundary rules names it explicitly — and the proven signer is available to the handler from the request context. Steps 2 and 3 above — contributor authorisation and tenant binding — and the ingest-tier term checks (`helpers.ValidateResourceEntry`) are the handler implementation's job.

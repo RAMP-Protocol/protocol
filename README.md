@@ -98,11 +98,11 @@ The SDK is **layered the same way in every language** — full detail in
 | Layer | What it is | Go | Python | TypeScript |
 |---|---|---|---|---|
 | **L0** | generated wire types (consumed, never rebuilt) | `gen/go/…` | `wire.models` | `wire/schemas` |
-| **L1** | stateless, **IO-free** trust core — crypto sign/verify, canonicalization, money, scopes, thumbprint | `sdk/go/helpers` | `ramp_sdk` (`httpsig`, `signedurl`, `pop`, `money`, …) | `sdk/ts/src` |
+| **L1** | stateless, **IO-free** trust core — crypto sign/verify, canonicalization, money, scopes, thumbprint, the license-term pre-check | `sdk/go/helpers` | `ramp_sdk` (`httpsig`, `signedurl`, `pop`, `money`, `licenseterm`, …) | `sdk/ts/src` |
 | **L2 · I/O** | the only tier that dials the network — key/endpoint/offer-key resolvers behind one SSRF-guarded client | `sdk/go/resolvers` | `ramp_sdk.resolvers` | `sdk/ts/resolvers` |
-| **L2 · transport** | transport-neutral composition + Connect bindings | `sdk/go/core` · `connect` · `connectserver` | `ramp_sdk.core` · `server_verify` | `sdk/ts/core` · `hono` |
+| **L2 · transport** | transport-neutral composition + Connect bindings; the agent, broker and catalog clients | `sdk/go/core` · `connect` · `connectserver` | `ramp_sdk.core` · `server_verify` · `ramp_sdk.client` (+ `sync`) | `sdk/ts/core` · `hono` · `sdk/ts/client` |
 
-Go is the reference/oracle; Python and TypeScript mirror it face-for-face. The exact
+The SDK is scored by integration role — edge, agent, account setup, publisher, exchange operator — and the agent and publisher roles ship in all three languages: the agent verbs (`discover` / `resolve` / `execute` / `reportUsage` / `dispute` / `fetch`) and the publisher verbs (`pushResources` / `removeResources` / `refreshCatalog`) plus the two-tier entry pre-check. Go is the reference/oracle; Python and TypeScript mirror it face-for-face. The exact
 public surface per language — every symbol and its cross-language counterpart, the
 documented divergences, and the conformance-vector replay coverage — is tracked in the
 **generated, CI-drift-gated** [SDK parity matrix](docs/sdk-parity-matrix.md). The

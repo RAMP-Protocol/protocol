@@ -21,7 +21,7 @@ The provider grants CDN access during onboarding. The Exchange generates keys, c
 
 **Best for**: Single-exchange providers who want zero operational overhead.
 
-**What you provide**: IAM role (CloudFront), API credentials (Akamai/Fastly).
+**What you provide**: IAM role (CloudFront), API credentials (Fastly).
 
 ### Model B: Provider-Managed (Opt-In)
 
@@ -69,14 +69,11 @@ ramp-cli                    Exchange                   Provider CDN
 ### Generate a signing key
 
 ```bash
-# CloudFront (ECDSA P-256 recommended)
-ramp-cli key generate --cdn cloudfront --algorithm ecdsa-p256
+# A code-capable edge (Cloudflare, Fastly, Lambda@Edge) verifies Ed25519
+ramp-cli key generate --cdn edge-ed25519
 
-# Akamai (HMAC-SHA256)
-ramp-cli key generate --cdn akamai
-
-# Fastly (HMAC-SHA256)
-ramp-cli key generate --cdn fastly
+# AWS CloudFront verifies RSA natively, via a trusted key group
+ramp-cli key generate --cdn cloudfront --algorithm rsa-2048
 ```
 
 ### Push key to an Exchange
@@ -88,8 +85,15 @@ ramp-cli key push \
   --exchange mp.ssp.com \
   --domain techcrunch.com \
   --cdn cloudfront \
-  --key-file ./ramp-cloudfront-private.pem
+  --public-key ./ramp-cloudfront-public.pem
 ```
+
+The push carries the public half only -- it is what
+[`DomainVerificationConfirmation.signing_key`](/reference/proto-ramp/#domainverificationconfirmation)
+registers. The Exchange signs delivery URLs, so under Model B it also needs the
+private half; that is delivered to the Exchange operator through their key
+provisioning channel, never through this RPC. Under Model A the Exchange
+generates both halves itself and the question does not arise.
 
 Output:
 ```
@@ -159,6 +163,16 @@ Set up `/.well-known/ramp.json` to authorize Exchanges and catalog contributors:
 
 The `catalog_contributors` field authorizes third parties to push attestations and catalog metadata for your resources via `CatalogService.PushResources`.
 
+## Push Your Catalog with the SDK
+
+Whatever your source material — a JSONL feed, a sitemap, an RSL file, a crawl, a CMS plugin — it converges on one `ResourceEntry` per resource, and the SDK owns the rest: the shape, the Exchange's own validation run for you to call before you push, and the push itself.
+
+1. Build a `ResourceEntry` per resource: `domain` (your bare host), `path` (an absolute URL path), the metadata you have, and one or more `terms` — every term carries a `pricing` (`model: FREE` is stated, never implied).
+2. Pre-check it with `validate_resource_entry` (Python), `validateResourceEntry` (TypeScript) or `helpers.ValidateResourceEntry` (Go). The verdict lists every rule the Exchange would refuse the entry on, with its field path, and the warnings the accepted terms would carry — the exact strings that come back in `PushResourcesResponse.warnings`. Token spellings and aliases (`generative-ai` → `ai-input`, `de` → `DE`) are canonicalised for you.
+3. Push with the catalog client — `ramp_sdk.client.CatalogClient`, `createCatalogClient`, `connect.NewCatalogClient` — built against the CatalogService address you have configured for that Exchange, and your contributor signing key. The address is configuration, the way the agent client's home Exchange is: nobody but you named it, so the client dials only what you gave it. An Exchange MAY advertise the address as `catalog_endpoint` in its `/.well-known/ramp.json`, and a deployment that reads it from there MUST itself check the binding that field states — same host and port as the manifest, or a subdomain of that host on that port, no userinfo — before dialling it; a manifest naming an unrelated host would otherwise redirect a signed push to a party the signature never covered. Set `exchange` to the Exchange's bare domain, `tenant_id` to your tenant and `caller_id` to your domain; the client stamps `ver`, signs the request with your key and refuses before signing a request whose `exchange` is not a bare domain — the shape the wire rule admits, which is narrower than a usable host.
+
+A push is all-or-nothing: an entry that fails a hard rule refuses the whole submission with the offending entry named, and nothing is persisted. Warnings never block. The pre-check is advice about what the Exchange will say; the Exchange re-runs both tiers on every push and its verdict decides. Worked examples in all three languages are in [Source 7: CatalogService API Push](/components/content-ingestion/sources/#source-7-catalogservice-api-push); the feed format is in [JSONL Ingestion Feed](/protocol/jsonl-ingestion/).
+
 ## Self-Attestation Keys (Optional)
 
 If you want to self-attest resources (Level 1 verification), publish your Ed25519 signing keys in your WBA directory — a JWK Set served at `/.well-known/http-message-signatures-directory`. Keys live here, not in `ramp.json`, and each is identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`) rather than a label:
@@ -207,14 +221,12 @@ See [Content Attestation](/protocol/content-attestation/) for the full attestati
 
 ## CDN Key Types
 
-| CDN | Key Type | Algorithm |
-|---|---|---|
-| CloudFront | Asymmetric | ECDSA P-256 (recommended) or RSA-2048 |
-| Akamai | Symmetric | Auth Token 2.0 (HMAC-SHA256) |
-| Fastly | Symmetric | Custom VCL (HMAC-SHA256) |
-| Generic | Symmetric | HMAC-SHA256 |
+| Delivery endpoint | `cdn_type` | Key Type | Algorithm |
+|---|---|---|---|
+| Edge function (Cloudflare, Fastly, Lambda@Edge) | `edge-ed25519` | Asymmetric | Ed25519 |
+| AWS CloudFront | `cloudfront` | Asymmetric | RSA-2048 |
 
-CloudFront's asymmetric model provides the strongest security separation: the Exchange holds the private key for signing, CloudFront holds the public key for verification.
+Both are asymmetric, so the separation is universal: the Exchange holds the private key for signing and the delivery endpoint holds only the public key for verification. What differs is whether the delivery endpoint can run code — and therefore whether it can enforce agent identity binding. CloudFront verifies natively but cannot, so its URLs are bearer credentials; an edge function does both.
 
 ## Onboarding Checklist
 

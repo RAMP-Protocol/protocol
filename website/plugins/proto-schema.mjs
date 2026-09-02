@@ -143,20 +143,29 @@ export function loadSchema() {
   // extensions are declared in the descriptor, so getExtension decodes them).
   const reg = createFileRegistry(fds);
   const vEnumExt = reg.getExtension('ramp.v1.vocab_enum');
+  const vEnumAliasExt = reg.getExtension('ramp.v1.vocab_enum_alias');
   const vFieldExt = reg.getExtension('ramp.v1.vocab');
   const vocab = {};
+  /** axis -> [{ alias, canonical }] — the accepted spellings an axis canonicalises at ingest */
+  const vocabAliases = {};
   for (const [axis, src] of Object.entries(VOCAB_AXES)) {
     let opts;
     if (src.enum) {
       opts = reg.getEnum(`ramp.v1.${src.enum}`)?.values.find((v) => v.name === src.value)?.proto.options;
       vocab[axis] = opts ? (getExtension(opts, vEnumExt) ?? []) : [];
+      // "alias=canonical" entries, authored beside the tokens (ramp/v1/vocab.proto).
+      vocabAliases[axis] = (opts ? (getExtension(opts, vEnumAliasExt) ?? []) : []).map((entry) => {
+        const i = entry.indexOf('=');
+        return { alias: entry.slice(0, i), canonical: entry.slice(i + 1) };
+      });
     } else {
       opts = reg.getMessage(`ramp.v1.${src.message}`)?.fields.find((f) => f.name === src.field)?.proto.options;
       vocab[axis] = opts ? (getExtension(opts, vFieldExt) ?? []) : [];
+      vocabAliases[axis] = [];
     }
   }
 
-  cached = { enums, messages, services, symbols, vocab };
+  cached = { enums, messages, services, symbols, vocab, vocabAliases };
   return cached;
 }
 

@@ -27,7 +27,7 @@ import httpx
 import pytest
 
 from conftest import GO_CONNECT_TESTDATA, load_json
-from ramp_sdk.client import BrokerClient, Client, ClientConfig
+from ramp_sdk.client import BrokerClient, CatalogClient, Client, ClientConfig
 from ramp_sdk.core import Mode, StaticOfferKeyResolver, Verifier, sign_offer_jcs
 from ramp_sdk.idempotency import validate_idempotency_key
 from ramp_sdk.signing_transport import SigningTransport
@@ -120,6 +120,39 @@ def _call(name: str) -> httpx.Request:
         )
     elif name == "resolve":
         asyncio.run(BrokerClient(config, http=http).resolve({}))
+    elif name.startswith("push_resources"):
+        push: dict[str, Any] = {
+            "exchange": "exchange.test",
+            "tenant_id": "tenant-1",
+            "caller_id": "publisher.test",
+            "entries": [
+                {
+                    "domain": "publisher.test",
+                    "path": "/x",
+                    "terms": [
+                        {
+                            "semantics": "TERM_SEMANTICS_ENUMERATED",
+                            "pricing": {"model": "PRICING_MODEL_FREE", "rate": "0"},
+                        }
+                    ],
+                }
+            ],
+        }
+        if name == "push_resources_caller_ver_wins":
+            push["ver"] = "9.9"
+        asyncio.run(CatalogClient(config, http=http).push_resources(push))
+    elif name == "remove_resources":
+        asyncio.run(
+            CatalogClient(config, http=http).remove_resources(
+                {"exchange": "exchange.test", "tenant_id": "tenant-1", "paths": ["/x"]}
+            )
+        )
+    elif name == "refresh_catalog":
+        asyncio.run(
+            CatalogClient(config, http=http).refresh_catalog(
+                {"exchange": "exchange.test", "tenant_id": "tenant-1"}
+            )
+        )
     else:  # pragma: no cover - a vector this replay does not know how to drive
         pytest.fail(f"no Python driver for vector {name!r}")
     return seen[0]

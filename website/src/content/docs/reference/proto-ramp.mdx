@@ -30,7 +30,7 @@ The core protocol. Both AI agents and Brokers are valid clients.
 
 ### CatalogService
 
-Optional RPC for providers/CMS/third-party intelligence providers to push content metadata.
+Optional RPC for providers/CMS/third-party intelligence providers to push content metadata. A push is **all-or-nothing at both validation tiers**: a hard rejection anywhere in the submission refuses the entire submission and persists nothing, and the refusal names the entries that failed so the publisher can fix and resubmit the whole set. That per-entry detail is reporting, not partial acceptance.
 
 ::proto-service{name=CatalogService}
 
@@ -308,6 +308,10 @@ The account's current state. `billing_ref` is empty when the calling agent has n
 
 Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchange, broker, publisher). Single canonical document, role-tagged via `role`. Signing keys are **not** carried here — each participant publishes them in its WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`, modeled by [`WBAFile`](#wbafile)). Per-role fields are populated only when that role applies; consumers MUST ignore non-applicable fields based on `role`.
 
+Two advertised addresses carry the same host binding: `endpoint` (ExchangeService) and `catalog_endpoint` (CatalogService) MUST each be on the host and port that serve the manifest, or a subdomain of that host on that port, and MUST NOT carry userinfo — because a signed call goes to that address and a manifest naming an unrelated host would redirect it to a party the signature never covered. An absent `catalog_endpoint` means the Exchange does not expose CatalogService; a consumer does not fall back to `endpoint`. See [Endpoint host binding](/protocol/exchange-manifest/#endpoint-host-binding).
+
+**Who checks each is not the same today.** The rule on `endpoint` is enforced below the caller: it runs inside the shared endpoint resolver in all three SDKs, before the value is returned and before it is cached, and it is corpus-locked. No SDK reads `catalog_endpoint` at all — a publisher configures the catalog address the way the agent client's home Exchange is configured — so a deployment that does read it from a manifest MUST apply the binding itself before dialling. The MUST is on the consumer, not on a library it can assume.
+
 ::proto-message{name=WellKnownManifest}
 
 ### AccountRegistration
@@ -375,27 +379,39 @@ Broker returns to Agent (Step 6). Discovery-only: `offer_groups` (field 4, one `
 
 ## Messages -- CatalogService
 
-Messages for the optional CatalogService RPC.
+Messages for the optional CatalogService RPC — the publisher role's surface: push, remove and refresh the catalog entries a publisher, or a contributor it authorised, supplies to an Exchange.
+
+Every pushed entry is checked in two tiers, and both are stated so a publisher can run them before sending. The **wire tier** is protovalidate: the `ResourceEntry` envelope rules below and the `LicenseTerm` rules, applied to the request exactly as received. The **ingest tier** runs over the canonicalised terms: restriction tokens are trimmed of RFC 8259 whitespace, ASCII-case-folded (lower for `RESTRICTION_KIND_FUNCTION` and `RESTRICTION_KIND_USER_TYPE`, upper for `RESTRICTION_KIND_GEOGRAPHY`; a non-ASCII byte is never folded) and alias-resolved to their registered token; then a bare (non-namespaced) `Pricing.unit` or `Quota.metric` that is not a registered token is rejected, while an unregistered restriction token and an `OBLIGATION_KIND_OTHER` obligation without detail are accepted and reported in `PushResourcesResponse.warnings`. The SDK ships both tiers (`ValidateResourceEntry` and its Python/TypeScript twins) and a catalog client (`NewCatalogClient` / `createCatalogClient` / `CatalogClient`) in all three languages; the Exchange's own run of the checks is the deciding one.
 
 ### PushResourcesRequest
 
-Push or update content entries in the Exchange catalog.
+Push or update content entries in the Exchange catalog. `entries` carries at least one entry and at most 256 — an empty push is refused rather than answered with zero counts, and a larger feed is pushed in several submissions. The cap bounds one submission, not the work of checking it: that is bounded by the maximum request size the recipient will read. `exchange` is the bare domain of the Exchange the push is meant for (the recipient-addressing rule), and `caller_id` names the contributor whose key signed the request.
 
 ::proto-message{name=PushResourcesRequest}
 
 ### ResourceEntry
 
-A single resource catalog entry.
+A single resource catalog entry. The envelope carries its own wire rules, so an entry that cannot become a catalog URI is refused at the boundary rather than after ingestion. The list caps below bound **how many** — how many terms one entry may carry, how many entries a submission can store — never how many bytes, and not the work of checking one: a validator walks every element it is handed before any cardinality rule is reported, so that cost is bounded at the transport instead. Several members inside an entry carry no length rule, so a conformant push has no size ceiling and the transport cap can refuse one.
+
+- `domain` is a bare host in the recipient-addressing shape (a port is allowed; a scheme, path, query or userinfo is not; at most 260 characters). With `path` it forms the catalog URI by concatenation, so anything but a host would choose the URI rather than name the host.
+- `path` is an absolute URL path: it starts with `/`, carries no `?` or `#`, no whitespace and no control character, and is 1–2048 characters.
+- `title` (512), `content_id` and `content_hash` (255), `hash_method` (64) and `provenance_source` (260) are length-bounded, in characters. `content_hash` is deliberately not format-checked — a bare hex digest and a `method:hexdigest` form both travel — because `hash_method` names the algorithm.
+- `word_count` and `estimated_quantity` are non-negative.
+- Every length above is **characters — Unicode code points, not bytes**, which is what `protovalidate`'s `max_len` counts. `path`'s pattern admits non-ASCII and the unpatterned fields admit anything, so a conformant value can exceed its character count in bytes several times over.
+- `attestations` carries at most 64 entries and `terms` at most 32, stated on the wire so every implementation refuses the same size. Because the terms cap is a wire rule, an over-cap entry is refused at the boundary before any per-entry classification runs — which is why `CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED` can no longer be produced for a push.
+- `resource_mutability`, when present, must not be `RESOURCE_MUTABILITY_UNSPECIFIED`; omitted, the Exchange applies `RESOURCE_MUTABILITY_STATIC` at Offer build.
 
 ::proto-message{name=ResourceEntry}
 
 ### PushResourcesResponse
 
-The `accepted` / `rejected` counts are entry-level tallies of a successful push — not the removed failure bools. A push that could not be applied at all travels as a non-OK transport error carrying [`ErrorDetail.catalog_rejection`](#unified-error-model).
+`accepted` tallies the entries a successful push stored — and because a push is all-or-nothing, a success stores every entry it carried. A push that could not be applied travels as a non-OK transport error carrying [`ErrorDetail.catalog_rejection`](#unified-error-model).
 
 ::proto-message{name=PushResourcesResponse}
 
 ### RemoveResourcesRequest
+
+`paths` carries at least one path and at most 256 — the same batch bound `PushResourcesRequest.entries` carries — each in the same absolute-path shape `ResourceEntry.path` carries.
 
 ::proto-message{name=RemoveResourcesRequest}
 
@@ -427,7 +443,10 @@ code is the cross-field CEL rule `id:` that enforces the rule (e.g. `license_ter
 - `semantics` MUST be set — `TERM_SEMANTICS_UNSPECIFIED` is rejected (the field's `enum.not_in:[0]` rule).
 - `REFERENCE_ONLY` requires `license.uri` to be non-empty (`license_term.reference_only.requires_uri`); a `License` with a `uri` requires a `uri_digest` (`license.digest_required_with_uri`).
 - At most one `Restriction` per `kind` (`license_term.one_restriction_per_kind`); a token cannot be both permitted and prohibited (`restriction.permitted_prohibited_disjoint`).
-- Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause hard rejection (ingest-time, not CEL).
+- `quotas` and `obligations` each carry at most 64 items, the bound every per-message list in the contract carries when no rule walks it more than once. They bound what one term can carry, not the cost of checking it. `restrictions` carries at most **8**, and like the other two this bounds the document, not the cost of checking it. Only one restriction per axis is valid and `Restriction.kind` is defined-only, so four is the longest conformant list and eight leaves room for an axis this version does not have. The tighter bound is deliberate for a second reason: this is the one list a message rule walks against itself, so the cap is also the threshold of the size test the one-per-kind rule carries, and a conformance guard holds the two equal. The disjointness rule on each element is quadratic only in that element's two token lists, both capped at 64, so its cost is bounded per restriction and linear across the list.
+- Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause hard rejection (ingest-time, not CEL). Tokens are canonicalised first — RFC 8259 whitespace trimmed, ASCII case folded, and the aliases authored beside the tokens resolved (`train-ai` → `ai-train`, `tdm` → `text-and-data-mining`, `personal` → `individual`, …) — so `Generative-AI` is the registered `ai-input`, not an unknown token.
+- A bare (non-namespaced) `pricing.unit` or `quotas[].metric` that is not a registered token IS a hard rejection at ingest (registry membership, not CEL: a rule that re-listed the vocabulary would drift from it). A `vendor:token` value bypasses membership on every axis.
+- The same checks ship in the SDK as a publisher pre-check (`ValidateLicenseTerm` / `ValidateResourceEntry` and their Python and TypeScript twins); the Exchange's own run is the deciding one.
 
 ::proto-message{name=LicenseTerm}
 

@@ -61,6 +61,11 @@ const TERM_SEMANTICS_REFERENCE_ONLY = "TERM_SEMANTICS_REFERENCE_ONLY";
 const REGISTRATION_FAILURE_INVALID_DATA = "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA";
 const PRICING_MODEL_FREE = "PRICING_MODEL_FREE";
 const PRICING_MODEL_PER_UNIT = "PRICING_MODEL_PER_UNIT";
+/**
+ * LicenseTerm.restrictions max_items. The one-per-kind rule stays silent above it,
+ * matching the contract — see licenseTermRules.
+ */
+const MAX_RESTRICTIONS = 8;
 
 // ---- per-message cross-field predicates -----------------------------------
 // Each returns the rule-ids VIOLATED by the instance (empty => passes). The
@@ -84,7 +89,12 @@ function licenseRules(o: Obj): string[] {
  *  - reference_only.requires_uri:
  *    `this.semantics != REFERENCE_ONLY || (has(this.license) && this.license.uri != '')`
  *  - one_restriction_per_kind:
- *    `this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)`
+ *    `this.restrictions.size() > 8 || this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)`
+ *
+ * The size test in the second rule is part of its meaning, not a detail of how the
+ * contract evaluates it: a list longer than the cap is refused by the cap, and this
+ * rule stays silent about it so the reported fault is the length. Mirroring it here
+ * is what keeps this face's verdict equal to the wire's on such a list.
  */
 function licenseTermRules(o: Obj): string[] {
   const out: string[] = [];
@@ -96,7 +106,7 @@ function licenseTermRules(o: Obj): string[] {
     }
   }
   const restrictions = field(o, "restrictions");
-  if (Array.isArray(restrictions)) {
+  if (Array.isArray(restrictions) && restrictions.length <= MAX_RESTRICTIONS) {
     const kinds = restrictions.map((r) => str(field(asObj(r) ?? {}, "kind")));
     const seen = new Set<string>();
     let dup = false;

@@ -43,7 +43,7 @@ var malformedDomains = []struct{ name, value string }{
 
 // wantDomainFields is the number of fields the shared domain constraint is meant
 // to be on. It is a ratchet, not a description: see the exact-count check below.
-const wantDomainFields = 17
+const wantDomainFields = 18
 
 // digestPattern is the "method:hexdigest" shape. Several fields carry it, and which
 // ones is read from the descriptor by the membership check below rather than listed
@@ -53,6 +53,18 @@ const wantDomainFields = 17
 const digestPattern = `^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$`
 
 const wantDigestFields = 4
+
+// resourcePathPattern is the absolute-path shape, carried by ResourceEntry.path
+// and RemoveResourcesRequest.paths. It is the third shared pattern in the
+// contract, and it gets the same descriptor-derived membership check the other two
+// have for a reason the corpus generator depends on: corpusgen keys its
+// pattern-specific killer table BY THE PATTERN STRING, so if the proto's copy moves
+// and the generator's does not, the lookup misses, five killer mutants silently
+// stop being emitted, and nothing else in the suite notices. This guard is what
+// makes that drift loud.
+const resourcePathPattern = `^/[^?#\x00-\x20\x7f]*$`
+
+const wantResourcePathFields = 2
 
 func fieldNames(fs []domainField) string {
 	names := make([]string, 0, len(fs))
@@ -84,6 +96,38 @@ func TestDigestPatternMembership(t *testing.T) {
 		}
 		if !validateDomainValue(t, df, "sha256:"+strings.Repeat("ab", 32)) {
 			t.Errorf("%s refused a well-formed sha256 digest", name)
+		}
+	}
+}
+
+// TestResourcePathPatternMembership pins the catalog-path family the way the domain
+// and digest families are pinned: an exact count, then a shared reject/accept set
+// proving the two copies still admit the same values.
+//
+// The shapes below are the ones that change WHICH resource a row names rather than
+// merely how it is spelled — the path is concatenated after the domain to form the
+// catalog URI, so a missing leading slash, a query or fragment delimiter,
+// whitespace or a control byte each re-point the row.
+func TestResourcePathPatternMembership(t *testing.T) {
+	fields := findFieldsWithPattern(t, resourcePathPattern)
+	if len(fields) != wantResourcePathFields {
+		t.Fatalf("the resource-path pattern is on %d fields, expected %d — a copy drifted, or a "+
+			"new path field was added without it. If that was deliberate, update "+
+			"wantResourcePathFields; if the pattern itself was edited, update "+
+			"resourcePathPattern here AND the copy in conformance/corpusgen (its killer "+
+			"table is keyed by the pattern string, so a stale key emits nothing).\nFields: %s",
+			len(fields), wantResourcePathFields, fieldNames(fields))
+	}
+	for _, df := range fields {
+		name := string(df.msg.Name()) + "." + string(df.fd.Name())
+		for _, bad := range []string{"x", "/a?b", "/a#b", "/a b", "/a\x7f", ""} {
+			if validateDomainValue(t, df, bad) {
+				t.Errorf("%s accepted %q — a value that re-points the catalog URI rather than "+
+					"naming the resource the publisher meant", name, bad)
+			}
+		}
+		if !validateDomainValue(t, df, "/premium/article-42.html") {
+			t.Errorf("%s refused a well-formed absolute path", name)
 		}
 	}
 }

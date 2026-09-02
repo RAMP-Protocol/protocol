@@ -37,18 +37,22 @@
     "connectserver.AttachDetail": "Go-only Connect ErrorDetail attach; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row).",
     "connectserver.AttachErrorDetail": "Go-only Connect ErrorDetail attach; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row).",
     "connectserver.ClassifyReject": "Go-only reject classifier; part of the Go Connect handler binding (connectserver-handler DECISION).",
+    "connectserver.DefaultMaxRequestBytes": "Go-only per-request read cap on the Connect handler binding; py/ts expose no server binding, so there is no cap to name (see the connectserver-handler DECISION).",
     "connectserver.EmitUnpopulatedJSONCodec": "Go connect-go codec; n/a for TS/Python (no Connect binding) per the matrix Codec row.",
     "connectserver.ErrReplayed": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "connectserver.IsBodyTooLarge": "Go-only predicate over net/http's *http.MaxBytesError; py/ts expose no server binding, so there is no read-cap refusal to classify (see the connectserver-handler DECISION).",
     "connectserver.NewErrorDetail": "Go-only Connect ErrorDetail envelope build (the build half of AttachErrorDetail, exposed for callers that set a typed reason before attaching); TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row).",
     "connectserver.ReasonBrokenChain": "Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export.",
     "connectserver.ReasonHopBudget": "Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export.",
     "connectserver.ReasonReplay": "Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export.",
     "connectserver.ReasonSignature": "Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export.",
+    "connectserver.RejectCode": "Go-only reject-to-connect.Code mapping; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row).",
     "connectserver.ServerOption": "Part of the Go-only Connect handler binding; see the connectserver-handler DECISION in docs/sdk-parity-matrix.md.",
     "connectserver.WithEmitUnpopulated": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connectserver.WithHandlerOptions": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connectserver.WithInterceptors": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connectserver.WithKeyResolver": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithMaxRequestBytes": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connectserver.WithMaxSignatureAge": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connectserver.WithMaxSignatures": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connectserver.WithOnReject": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
@@ -58,6 +62,7 @@
     "connectserver.WithValidation": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connectserver.WithVerifyGate": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connectserver.WithoutReplayStore": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WriteReject": "Go-only Connect-over-HTTP reject responder; TS/Python emit reject-reason tokens and write no response of their own (matrix SERVER-role reject-mapping row).",
     "core.DefaultRequestID": "Go default request-id minter; py/ts mint request-ids inline.",
     "core.ErrOfferExpired": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "core.Off": "Member of the mapped core.Mode enum. Python spells it Mode.STRICT / Mode.OFF and TypeScript as the literal \"strict\" / \"off\".",
@@ -196,6 +201,11 @@
       "python": "CallErrorKind",
       "ts": "CallErrorKind"
     },
+    "connect.CatalogClient": {
+      "allowlist_reason": null,
+      "python": "CatalogClient",
+      "ts": "CatalogClient"
+    },
     "connect.Client": {
       "allowlist_reason": null,
       "python": "Client",
@@ -226,6 +236,11 @@
       "python": null,
       "ts": "createBrokerClient"
     },
+    "connect.NewCatalogClient": {
+      "allowlist_reason": "Go NewX factory folds into the Python class constructor (CatalogClient(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix.",
+      "python": null,
+      "ts": "createCatalogClient"
+    },
     "connect.NewClient": {
       "allowlist_reason": "Go NewX factory folds into the Python class constructor (Client(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix.",
       "python": null,
@@ -238,6 +253,12 @@
     },
     "connectserver.NewBrokerServiceHandler": {
       "allowlist_reason": "Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md",
+      "decision_anchor": "full Connect handler binding",
+      "python": null,
+      "ts": null
+    },
+    "connectserver.NewCatalogServiceHandler": {
+      "allowlist_reason": "Go-only full Connect Catalog handler binding — OPEN DECISION in docs/sdk-parity-matrix.md",
       "decision_anchor": "full Connect handler binding",
       "python": null,
       "ts": null
@@ -368,6 +389,11 @@
       "python": "canonical_offer_payload",
       "ts": "canonicalOfferPayload"
     },
+    "helpers.CanonicalRestrictionToken": {
+      "allowlist_reason": null,
+      "python": "canonical_restriction_token",
+      "ts": "canonicalRestrictionToken"
+    },
     "helpers.CanonicalizeMoney": {
       "allowlist_reason": null,
       "python": "canonicalize_money",
@@ -428,6 +454,11 @@
       "python": "domain_verification_failure_detail",
       "ts": "domainVerificationFailureDetail"
     },
+    "helpers.EntryVerdict": {
+      "allowlist_reason": null,
+      "python": "EntryVerdict",
+      "ts": "EntryVerdict"
+    },
     "helpers.ErrUnknownKey": {
       "allowlist_reason": null,
       "python": "UnknownKeyError",
@@ -472,6 +503,11 @@
       "allowlist_reason": null,
       "python": "KeyResolver",
       "ts": "RequestKeyResolver"
+    },
+    "helpers.KnownRestrictionToken": {
+      "allowlist_reason": null,
+      "python": "known_restriction_token",
+      "ts": "knownRestrictionToken"
     },
     "helpers.MaxBareDomainLen": {
       "allowlist_reason": null,
@@ -538,6 +574,16 @@
       "python": null,
       "ts": "createStaticKeyResolver"
     },
+    "helpers.NormalizeLicenseTerm": {
+      "allowlist_reason": null,
+      "python": "normalize_license_term",
+      "ts": "normalizeLicenseTerm"
+    },
+    "helpers.NormalizeResourceEntry": {
+      "allowlist_reason": null,
+      "python": "normalize_resource_entry",
+      "ts": "normalizeResourceEntry"
+    },
     "helpers.NormalizeScopes": {
       "allowlist_reason": null,
       "python": "normalize_scopes",
@@ -592,6 +638,36 @@
       "allowlist_reason": null,
       "python": "retrieval_auth_failure_detail",
       "ts": "retrievalAuthFailureDetail"
+    },
+    "helpers.RuleObligationOtherRequiresDetail": {
+      "allowlist_reason": null,
+      "python": "RULE_OBLIGATION_OTHER_REQUIRES_DETAIL",
+      "ts": "RULE_OBLIGATION_OTHER_REQUIRES_DETAIL"
+    },
+    "helpers.RulePricingUnitRegistered": {
+      "allowlist_reason": null,
+      "python": "RULE_PRICING_UNIT_REGISTERED",
+      "ts": "RULE_PRICING_UNIT_REGISTERED"
+    },
+    "helpers.RuleQuotaMetricRegistered": {
+      "allowlist_reason": null,
+      "python": "RULE_QUOTA_METRIC_REGISTERED",
+      "ts": "RULE_QUOTA_METRIC_REGISTERED"
+    },
+    "helpers.RuleRestrictionTokenRegistered": {
+      "allowlist_reason": null,
+      "python": "RULE_RESTRICTION_TOKEN_REGISTERED",
+      "ts": "RULE_RESTRICTION_TOKEN_REGISTERED"
+    },
+    "helpers.RuleViolation": {
+      "allowlist_reason": null,
+      "python": "RuleViolation",
+      "ts": "RuleViolation"
+    },
+    "helpers.RuleWarning": {
+      "allowlist_reason": null,
+      "python": "RuleWarning",
+      "ts": "RuleWarning"
     },
     "helpers.SchemaVerdict": {
       "allowlist_reason": null,
@@ -662,6 +738,16 @@
       "allowlist_reason": null,
       "python": "validate_idempotency_key",
       "ts": "validateIdempotencyKey"
+    },
+    "helpers.ValidateLicenseTerm": {
+      "allowlist_reason": null,
+      "python": "validate_license_term",
+      "ts": "validateLicenseTerm"
+    },
+    "helpers.ValidateResourceEntry": {
+      "allowlist_reason": null,
+      "python": "validate_resource_entry",
+      "ts": "validateResourceEntry"
     },
     "helpers.ValidationRuleIDs": {
       "allowlist_reason": null,

@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 119 symbols at cross-language parity · 14 documented divergences · 178 Go-idiomatic exclusions · 34 conformance corpora, each tri-replayed.
+**At a glance:** 133 symbols at cross-language parity · 16 documented divergences · 183 Go-idiomatic exclusions · 35 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -20,7 +20,7 @@ Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring inv
 
 Legend: a name = the public face in that language · `—` = intentionally none (see Documented divergences). Every row here is at parity by construction: the gate rejects a mapped name that is absent from the live surface.
 
-### helpers — L1 pure primitives (crypto, canonicalization, money, scopes)
+### helpers — L1 pure primitives (crypto, canonicalization, money, scopes, license terms)
 
 | Go | python | ts |
 |---|---|---|
@@ -33,6 +33,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `CanonicalAcceptanceBytes` | `jcs_acceptance_payload` | `acceptancePayload` |
 | `CanonicalOfferBytes` | `canonical_offer_payload` | `canonicalOfferPayload` |
 | `CanonicalRequestAcceptanceBytes` | `jcs_request_acceptance_payload` | `requestAcceptancePayload` |
+| `CanonicalRestrictionToken` | `canonical_restriction_token` | `canonicalRestrictionToken` |
 | `CanonicalizeMoney` | `canonicalize_money` | `canonicalizeMoney` |
 | `CatalogRejectionDetail` | `catalog_rejection_detail` | `catalogRejectionDetail` |
 | `CheckAudience` | `check_audience` | `checkAudience` |
@@ -45,6 +46,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `ContentTypeProto` | `ContentTypeProto` | `ContentTypeProto` |
 | `DisputeFailureDetail` | `dispute_failure_detail` | `disputeFailureDetail` |
 | `DomainVerificationFailureDetail` | `domain_verification_failure_detail` | `domainVerificationFailureDetail` |
+| `EntryVerdict` | `EntryVerdict` | `EntryVerdict` |
 | `ErrUnknownKey` | `UnknownKeyError` | `UnknownKey` |
 | `FormatMoney` | `format_money` | `formatMoney` |
 | `HashURL` | `hash_url` | `hashUrl` |
@@ -54,6 +56,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `IsBareHost` | `is_bare_host` | `isBareHost` |
 | `IsSafeSchemaPattern` | `is_safe_schema_pattern` | `isSafeSchemaPattern` |
 | `KeyResolver` | `KeyResolver` | `RequestKeyResolver` |
+| `KnownRestrictionToken` | `known_restriction_token` | `knownRestrictionToken` |
 | `MaxBareDomainLen` | `MAX_BARE_DOMAIN_LEN` | `maxBareDomainLen` |
 | `MaxRegistrationDataBytes` | `MAX_REGISTRATION_DATA_BYTES` | `maxRegistrationDataBytes` |
 | `MaxRegistrationDataDepth` | `MAX_REGISTRATION_DATA_DEPTH` | `maxRegistrationDataDepth` |
@@ -66,6 +69,8 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `MaxRegistrationSchemaEvaluations` | `MAX_REGISTRATION_SCHEMA_EVALUATIONS` | `maxRegistrationSchemaEvaluations` |
 | `MaxRegistrationSchemaRefHops` | `MAX_REGISTRATION_SCHEMA_REF_HOPS` | `maxRegistrationSchemaRefHops` |
 | `NewIdempotencyKey` | `generate_idempotency_key` | `generateIdempotencyKey` |
+| `NormalizeLicenseTerm` | `normalize_license_term` | `normalizeLicenseTerm` |
+| `NormalizeResourceEntry` | `normalize_resource_entry` | `normalizeResourceEntry` |
 | `NormalizeScopes` | `normalize_scopes` | `normalizeScopes` |
 | `OfferSignatureAlgorithm` | `OFFER_SIGNATURE_ALGORITHM` | `OFFER_SIGNATURE_ALGORITHM` |
 | `ParseMoney` | `parse_money` | `parseMoney` |
@@ -77,6 +82,12 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `RegistrationSchemaDialect` | `REGISTRATION_SCHEMA_DIALECT` | `registrationSchemaDialect` |
 | `RequestIDHeader` | `RequestIDHeader` | `RequestIDHeader` |
 | `RetrievalAuthFailureDetail` | `retrieval_auth_failure_detail` | `retrievalAuthFailureDetail` |
+| `RuleObligationOtherRequiresDetail` | `RULE_OBLIGATION_OTHER_REQUIRES_DETAIL` | `RULE_OBLIGATION_OTHER_REQUIRES_DETAIL` |
+| `RulePricingUnitRegistered` | `RULE_PRICING_UNIT_REGISTERED` | `RULE_PRICING_UNIT_REGISTERED` |
+| `RuleQuotaMetricRegistered` | `RULE_QUOTA_METRIC_REGISTERED` | `RULE_QUOTA_METRIC_REGISTERED` |
+| `RuleRestrictionTokenRegistered` | `RULE_RESTRICTION_TOKEN_REGISTERED` | `RULE_RESTRICTION_TOKEN_REGISTERED` |
+| `RuleViolation` | `RuleViolation` | `RuleViolation` |
+| `RuleWarning` | `RuleWarning` | `RuleWarning` |
 | `SchemaVerdict` | `SchemaVerdict` | `SchemaVerdict` |
 | `ScopesSubset` | `scopes_subset` | `scopesSubset` |
 | `SignAgentBinding` | `sign_agent_binding` | `signInbound` |
@@ -91,6 +102,8 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `TransactionDenialDetail` | `transaction_denial_detail` | `transactionDenialDetail` |
 | `UsageReportRejectionDetail` | `usage_report_rejection_detail` | `usageReportRejectionDetail` |
 | `ValidateIdempotencyKey` | `validate_idempotency_key` | `validateIdempotencyKey` |
+| `ValidateLicenseTerm` | `validate_license_term` | `validateLicenseTerm` |
+| `ValidateResourceEntry` | `validate_resource_entry` | `validateResourceEntry` |
 | `ValidationRuleIDs` | `cross_field_rule_ids` | `crossFieldRuleIds` |
 | `VerifyMultisigRequest` | `verify_multisig_request_server` | `verifyMultisigRequestServer` |
 | `VerifyOfferAcceptance` | `verify_offer_acceptance_jcs` | `verifyOfferAcceptance` |
@@ -151,6 +164,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `BrokerClient` | `BrokerClient` | `BrokerClient` |
 | `CallError` | `CallError` | `RampCallError` |
 | `CallErrorKind` | `CallErrorKind` | `CallErrorKind` |
+| `CatalogClient` | `CatalogClient` | `CatalogClient` |
 | `Client` | `Client` | `Client` |
 | `DefaultCallTimeout` | `DEFAULT_CALL_TIMEOUT_SEC` | `DEFAULT_CALL_TIMEOUT_MS` |
 | `DefaultMaxRPCReadBytes` | `DEFAULT_MAX_RPC_READ_BYTES` | `DEFAULT_MAX_RPC_READ_BYTES` |
@@ -170,15 +184,17 @@ Deliberate, reason-backed asymmetries. The allowlist is **shrink-only** — a ne
 
 ### Architectural DECISIONs
 
-- **DECISION — full Connect handler binding.** Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md _(symbols: `connectserver.NewBrokerServiceHandler`, `connectserver.NewExchangeServiceHandler`)_
+- **DECISION — full Connect handler binding.** Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md _(symbols: `connectserver.NewBrokerServiceHandler`, `connectserver.NewCatalogServiceHandler`, `connectserver.NewExchangeServiceHandler`)_
 
 ### Mapped symbols with an intentional per-language gap
 
 | Go symbol | python | ts | rationale |
 |---|---|---|---|
 | `connect.NewBrokerClient` | — | `createBrokerClient` | Go NewX factory folds into the Python class constructor (BrokerClient(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix. |
+| `connect.NewCatalogClient` | — | `createCatalogClient` | Go NewX factory folds into the Python class constructor (CatalogClient(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix. |
 | `connect.NewClient` | — | `createClient` | Go NewX factory folds into the Python class constructor (Client(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix. |
 | `connectserver.NewBrokerServiceHandler` | — | — | Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md |
+| `connectserver.NewCatalogServiceHandler` | — | — | Go-only full Connect Catalog handler binding — OPEN DECISION in docs/sdk-parity-matrix.md |
 | `connectserver.NewExchangeServiceHandler` | — | — | Go-only full Connect Exchange handler binding — OPEN DECISION in docs/sdk-parity-matrix.md |
 | `core.NewVerifier` | — | `createVerifier` | Go NewVerifier factory folds into the Python class constructor (Verifier(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createVerifier factory. |
 | `helpers.NewStaticKeyResolver` | — | `createStaticKeyResolver` | Go NewStaticKeyResolver factory folds into the Python class constructor (StaticKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createStaticKeyResolver factory. |
@@ -233,18 +249,22 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `connectserver.AttachDetail` | Go-only Connect ErrorDetail attach; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row). |
 | `connectserver.AttachErrorDetail` | Go-only Connect ErrorDetail attach; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row). |
 | `connectserver.ClassifyReject` | Go-only reject classifier; part of the Go Connect handler binding (connectserver-handler DECISION). |
+| `connectserver.DefaultMaxRequestBytes` | Go-only per-request read cap on the Connect handler binding; py/ts expose no server binding, so there is no cap to name (see the connectserver-handler DECISION). |
 | `connectserver.EmitUnpopulatedJSONCodec` | Go connect-go codec; n/a for TS/Python (no Connect binding) per the matrix Codec row. |
 | `connectserver.ErrReplayed` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `connectserver.IsBodyTooLarge` | Go-only predicate over net/http's *http.MaxBytesError; py/ts expose no server binding, so there is no read-cap refusal to classify (see the connectserver-handler DECISION). |
 | `connectserver.NewErrorDetail` | Go-only Connect ErrorDetail envelope build (the build half of AttachErrorDetail, exposed for callers that set a typed reason before attaching); TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row). |
 | `connectserver.ReasonBrokenChain` | Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export. |
 | `connectserver.ReasonHopBudget` | Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export. |
 | `connectserver.ReasonReplay` | Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export. |
 | `connectserver.ReasonSignature` | Member of the mapped connectserver.RejectReason enum. Python spells it RejectReason.<NAME> and TypeScript as a literal-union member; neither is a top-level export. |
+| `connectserver.RejectCode` | Go-only reject-to-connect.Code mapping; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row). |
 | `connectserver.ServerOption` | Part of the Go-only Connect handler binding; see the connectserver-handler DECISION in docs/sdk-parity-matrix.md. |
 | `connectserver.WithEmitUnpopulated` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithHandlerOptions` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithInterceptors` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithKeyResolver` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithMaxRequestBytes` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithMaxSignatureAge` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithMaxSignatures` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithOnReject` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
@@ -254,6 +274,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `connectserver.WithValidation` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithVerifyGate` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithoutReplayStore` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WriteReject` | Go-only Connect-over-HTTP reject responder; TS/Python emit reject-reason tokens and write no response of their own (matrix SERVER-role reject-mapping row). |
 | `core.DefaultRequestID` | Go default request-id minter; py/ts mint request-ids inline. |
 | `core.ErrOfferExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `core.Off` | Member of the mapped core.Mode enum. Python spells it Mode.STRICT / Mode.OFF and TypeScript as the literal "strict" / "off". |
@@ -388,6 +409,7 @@ Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness
 | `helpers/testdata/hashurl-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/host-rule-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/idempotency-validate-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/licenseterm-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/money-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/multisig-chain-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/offer-verify-vectors.json` | ✅ | ✅ | ✅ |
