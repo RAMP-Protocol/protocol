@@ -743,7 +743,12 @@ The request body is identical to the direct case; the forwarding chain lives in 
    - 850000 > 3300 -> sufficient quota, proceed
    - Deduct 3300 from quota -> new remaining: 846700
 7. Compute agent identity hash:
-   agentHash = SHA256(requester.id + ":" + requester.domain) = SHA256("claude-agent-001:claude.ai") = "e3b0c442..."
+   agentHash = RFC 7638 JWK thumbprint of the agent's request-signing public key
+             = the keyid this request's RFC 9421 signature was just verified with
+             = "NzbLsXh8..."
+   (A hash of the agent's id and domain would bind nothing: the edge checks the
+   hash against a key the fetcher must prove it holds, and anyone can recompute
+   a hash of two public identifiers.)
 8. Write transaction log (WAL) — MUST succeed before signing URL:
    {
      transaction_id: "txn-alpha-001",
@@ -751,7 +756,7 @@ The request body is identical to the direct case; the forwarding chain lives in 
      offer_id: "4f155204-a53e-42aa-8471-154f87d7d3d5",
      subscription_id: "SUB-ANTHROPIC-HEARST-2026",
      amount: "0",
-     agent_identity_hash: "e3b0c442...",
+     agent_identity_hash: "NzbLsXh8...",
      offer_snapshot_json: "<full offer at transaction time, including exchange_signature>",
      reporting_required: true,
      reporting_deadline: "2026-03-16T15:00:00Z"
@@ -763,7 +768,7 @@ The request body is identical to the direct case; the forwarding chain lives in 
 
    Signed URL:
    https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html
-     ?agent_id=e3b0c442...
+     ?agent_id=NzbLsXh8...
      &exp=1710517800
      &kid=vJ3xR1mQ...
      &sig=k7Qm2xR9vT4nB8aL...
@@ -776,13 +781,13 @@ The request body is identical to the direct case; the forwarding chain lives in 
 ```json
 {
   "ver": "1.0",
-  "agent_identity_hash": "e3b0c442...",
+  "agent_identity_hash": "NzbLsXh8...",
   "items": [
     {
       "transaction_id": "txn-alpha-001",
       "billing_id": "bill-sub-alpha-001",
       "resource_title": "AI Regulation: What Providers Need to Know",
-      "retrieval_endpoint": "https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html?agent_id=e3b0c442...&exp=1710517800&kid=vJ3xR1mQ...&sig=k7Qm2xR9vT4nB8aL...",
+      "retrieval_endpoint": "https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html?agent_id=NzbLsXh8...&exp=1710517800&kid=vJ3xR1mQ...&sig=k7Qm2xR9vT4nB8aL...",
       "cost": { "amount": "0", "currency": "USD", "unit_cost": "0" },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
       "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
@@ -806,7 +811,7 @@ The `subscription_unit_value` field carries the per-unit cost ($0.05) even thoug
 
 ```
 Agent -> CDN: GET https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html
-              ?agent_id=e3b0c442...
+              ?agent_id=NzbLsXh8...
               &exp=1710517800
               &kid=vJ3xR1mQ...
               &sig=k7Qm2xR9vT4nB8aL...
@@ -901,7 +906,7 @@ Three independent records that must agree:
 ```
 1. Edge delivery log (Hearst controls):
    - url_hash=9f2c7a4e... fetched at 15:25:00, 200 OK, 45KB
-   - agent_id=e3b0c442..., signature and agent binding verified by the edge
+   - agent_id=NzbLsXh8..., signature and agent binding verified by the edge
 
 2. Exchange transaction log (SSP-Alpha controls):
    - txn-alpha-001: signed_url_hash=9f2c7a4e... (the join key to the log above)
@@ -955,7 +960,7 @@ Response includes signed Offer snapshots for every transaction:
       },
       "cost": { "amount": "0", "currency": "USD" },
       "subscription_unit_value": { "amount": "0.05", "currency": "USD" },
-      "agent_id": "e3b0c442...",
+      "agent_id": "NzbLsXh8...",
       "timestamp": "2026-03-15T15:25:00Z"
     }
   ]

@@ -463,7 +463,7 @@ Response:
     {
       "transaction_id": "txn-dnb-acme-001",
       "billing_id": "bill-dnb-acme-001",
-      "retrieval_endpoint": "https://api.dnb.com/ramp/deliver/123456789/standard?agent_id=9c5f0d3e...&exp=1742475900&kid=hT4nR8yK...&sig=b8c9d0e1...",
+      "retrieval_endpoint": "https://api.dnb.com/ramp/deliver/123456789/standard?agent_id=9c5f0d3e...&exp=1742475900&kid=hT4nR8yK...&sig=pQ7wF2sN9xC5tH1e...",
       "cost": {
         "amount": "61.99",
         "currency": "USD"
@@ -489,7 +489,7 @@ The signed URL is valid for 5 minutes. The `agent_identity_hash` (the agent's RF
 The agent fetches the credit report via the signed URL:
 
 ```bash
-GET https://api.dnb.com/ramp/deliver/123456789/standard?agent_id=9c5f0d3e...&exp=1742475900&kid=hT4nR8yK...&sig=b8c9d0e1...
+GET https://api.dnb.com/ramp/deliver/123456789/standard?agent_id=9c5f0d3e...&exp=1742475900&kid=hT4nR8yK...&sig=pQ7wF2sN9xC5tH1e...
 ```
 
 D&B's delivery endpoint verifies:
