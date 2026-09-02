@@ -14,7 +14,7 @@ Open-source infrastructure components for metered resource access. Like Prebid.j
 | **Exchange Node** | Exchange operator / Provider / 3rd party | Operator's billing, provider catalogs, resource delivery |
 | **RAMP Broker** | AI company / 3rd party | Agent's budget system, auth, multi-Exchange selection |
 | **Agent SDK** | AI agent developers | Embedded in agent process; handles discovery, negotiation, resource fetch, budget, and usage reporting via one-liner `Fetch(url)` API |
-| **Edge Function** | Provider | Provider's CDN (CF/Akamai/Fastly) |
+| **Edge Function** | Provider | Provider's CDN (CloudFront/Cloudflare/Fastly) |
 | **Client SDK** | AI agent developers | Low-level generated Connect client for direct Exchange RPC access (no orchestration logic) |
 
 ### Role Mapping (Ad-Tech Analogy)
@@ -199,8 +199,8 @@ Cross-provider dedup is a **Broker-level concern**, not a protocol concern. The 
                          ▼
               ┌─────────────────────┐
               │   Edge / CDN        │  ← Provider's existing CDN
-              │   (CF/Akamai/Fastly)│     Lightweight edge function
-              │                     │     Returns 403 + X-Content-Rules
+              │  (Cloudflare, Fastly│     Lightweight edge function
+              │   CloudFront)       │     Returns 403 + X-Content-Rules
               └──────────┬──────────┘
                          │
             ┌────────────┼────────────┐

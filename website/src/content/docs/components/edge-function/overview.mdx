@@ -126,7 +126,7 @@ The edge function serves `/.well-known/ramp.json` containing the `WellKnownManif
 
 ### Signed URL Passthrough with Agent Identity Validation
 
-When a request arrives with signed URL parameters, the edge function verifies the signature, checks expiry, validates agent identity binding (if enabled), and enforces single-use (if enabled). See [Signed URL Verification](/components/edge-function/signed-url-verification/) for the full verification flow.
+When a request arrives with signed URL parameters, the edge function verifies the signature, checks expiry, validates agent identity binding (on by default), and enforces single-use (off by default, and best-effort). See [Signed URL Verification](/components/edge-function/signed-url-verification/) for the full verification flow.
 
 ## Performance Budget
 
@@ -151,8 +151,8 @@ Single-use disabled, everything else works
 Stale config, core functionality preserved
   | ramp.json generation fails
 Bot detection + 403 redirect still work
-  | Signing secret missing
-Bot detection works, paid access broken (503)
+  | Verification key unavailable
+Bot detection works, paid access broken (503 verify_unavailable)
   | Edge function itself crashes
 CDN serves content normally (no protection)
 ```

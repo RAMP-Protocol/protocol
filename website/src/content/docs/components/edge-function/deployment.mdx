@@ -23,7 +23,7 @@ sequenceDiagram
     RAMP-->>Provider: EdgeConfigDocument + deployment instructions
 
     Provider->>CDN: Deploy edge function (platform-specific)
-    Note over CDN: CloudFront: deploy CF Function + update behavior<br/>Cloudflare: wrangler deploy<br/>Akamai: upload EdgeWorker bundle<br/>Fastly: fastly compute deploy
+    Note over CDN: CloudFront: deploy CF Function + update behavior<br/>Cloudflare: wrangler deploy<br/>Fastly: fastly compute deploy
 
     Provider->>CDN: Verify: GET /.well-known/ramp.json
     CDN-->>Provider: 200 OK + WellKnownManifest
@@ -82,7 +82,6 @@ For providers who prefer click-to-deploy:
 
 - **Cloudflare Apps** -- installable from Cloudflare dashboard. Provider enters Exchange endpoint, protected paths. The app deploys a Worker.
 - **AWS CloudFormation StackSet** -- one-click deploy via AWS Exchange or a shared CloudFormation template.
-- **Akamai Exchange** -- EdgeWorker bundle with configuration UI in Akamai Control Center.
 
 ### Format 4: CLI Tool (Planned)
 
@@ -116,7 +115,7 @@ When available, the CLI will generate the platform-specific deployment artifact 
 ```mermaid
 graph TD
     subgraph "Config Sources"
-        ENV[Environment Variables<br/>Signing secrets, mode flags]
+        ENV[Environment Variables<br/>Exchange directory URL,<br/>mode flags]
         KV[Edge KV Store<br/>Bot patterns, manifest,<br/>content policy]
         INLINE[Inline / Compiled<br/>Provider domain,<br/>Exchange endpoint]
         CMS[CMS API<br/>Content policies,<br/>path rules]
@@ -137,7 +136,7 @@ graph TD
 **Merge order** (later overrides earlier):
 
 1. **Inline / compiled defaults** -- provider domain, protocol version.
-2. **Environment variables** -- signing secrets, mode flags, Exchange endpoint.
+2. **Environment variables** -- the Exchange key directory URL, mode flags, Exchange endpoint. No secret: the edge holds public keys only.
 3. **Edge KV** -- bot patterns (updated frequently), content policy rules.
 4. **CMS API** -- dynamic content policy (which paths are newly protected/released). Only fetched if CMS integration is configured. Cached at edge with TTL.
 
@@ -235,7 +234,6 @@ npx wrangler deploy --var EXCHANGE_WBA_URL=https://exchange.example/.well-known/
 |---|---|
 | Cloudflare | `npx wrangler deploy` |
 | CloudFront | Deploy CF Function + update behavior via AWS CLI or Terraform |
-| Akamai | Upload EdgeWorker bundle via Akamai CLI or Control Center |
 | Fastly | `fastly compute deploy` |
 
 ## ACME Domain Verification Challenge Serving (v1.0)

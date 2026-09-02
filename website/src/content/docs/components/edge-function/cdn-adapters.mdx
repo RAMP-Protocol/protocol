@@ -82,14 +82,11 @@ interface EdgeConfig {
   /** Optional pinned public keys; a covering `kid` skips the directory fetch. */
   verifyKeys?: JsonWebKey[];
 
-  /** Maximum signed URL TTL in seconds (enforced independently). */
-  maxUrlTtlSeconds: number;
-
   /** Whether to enforce single-use URLs (best-effort). Requires kv. */
   singleUseEnabled: boolean;
 
-  /** Whether to enforce agent identity binding. */
-  agentBindingEnabled: boolean;
+  /** Whether to enforce agent identity binding. Defaults to true. */
+  enforceBinding: boolean;
 }
 ```
 
