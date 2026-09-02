@@ -296,7 +296,7 @@ class DomainVerificationChallenge(WireModel):
 class DomainVerificationConfirmation(WireModel):
     cdn_type: str | None = Field(
         None,
-        description='Which delivery-URL verification scheme this key is for: "edge-ed25519" (a\n code-capable edge that verifies the Ed25519 URL signature itself) or\n "cloudfront" (AWS CloudFront trusted key groups, RSA, verified natively by\n the CDN). Mirrors the Exchange-side tenant signing scheme.',
+        description='Which delivery-URL verification scheme this key is for: "edge-ed25519" (a\n code-capable edge that verifies the Ed25519 URL signature itself) or\n "cloudfront" (AWS CloudFront trusted key groups, RSA, verified natively by\n the CDN). One value per Exchange-side tenant signing scheme:\n "edge-ed25519" is ED25519, "cloudfront" is AWS_CLOUDFRONT_RSA.',
     )
     domain: str | None = Field('', description='The domain being verified.')
     exchange: constr(
@@ -313,7 +313,7 @@ class DomainVerificationConfirmation(WireModel):
     )
     signing_key: str | None = Field(
         None,
-        description='Optional: signing key to register upon successful verification.\n If present, the key is registered atomically with verification.\n Format follows cdn_type: a PEM-encoded RSA public key for "cloudfront", or\n the base64url-encoded raw Ed25519 public key (the JWK "x" value) for\n "edge-ed25519".',
+        description='Optional: the delivery endpoint\'s verification key, registered atomically\n with the domain on successful verification. PUBLIC key material only.\n The Exchange signs delivery URLs with a private key it holds and never\n publishes; a delivery endpoint verifies with the public half and holds\n nothing secret. Where the Exchange has to sign with a key the provider\n generated -- a CloudFront trusted key group is the provider\'s own AWS\n resource -- the private half is provisioned to the Exchange out of band\n and never travels in this field.\n\nFormat follows cdn_type: a PEM-encoded RSA public key for "cloudfront", or\n the base64url-encoded raw Ed25519 public key (the JWK "x" value) for\n "edge-ed25519".',
     )
     token: str | None = Field(
         '', description='The challenge token (echoed from DomainVerificationChallenge).'

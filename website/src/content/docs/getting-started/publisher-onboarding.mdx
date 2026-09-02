@@ -21,7 +21,7 @@ The provider grants CDN access during onboarding. The Exchange generates keys, c
 
 **Best for**: Single-exchange providers who want zero operational overhead.
 
-**What you provide**: IAM role (CloudFront), API credentials (Akamai/Fastly).
+**What you provide**: IAM role (CloudFront), API credentials (Fastly).
 
 ### Model B: Provider-Managed (Opt-In)
 
@@ -85,8 +85,15 @@ ramp-cli key push \
   --exchange mp.ssp.com \
   --domain techcrunch.com \
   --cdn cloudfront \
-  --key-file ./ramp-cloudfront-private.pem
+  --public-key ./ramp-cloudfront-public.pem
 ```
+
+The push carries the public half only -- it is what
+[`DomainVerificationConfirmation.signing_key`](/reference/proto-ramp/#domainverificationconfirmation)
+registers. The Exchange signs delivery URLs, so under Model B it also needs the
+private half; that is delivered to the Exchange operator through their key
+provisioning channel, never through this RPC. Under Model A the Exchange
+generates both halves itself and the question does not arise.
 
 Output:
 ```

@@ -187,7 +187,7 @@ Response:
     {
       "transaction_id": "txn-1773682700352684307",
       "billing_id": "bill-000002",
-      "retrieval_endpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=NzbLsXh8...C9Xs&exp=1773683000&kid=vJ3xR1mQ...&sig=3ab495e3...48823a14",
+      "retrieval_endpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=NzbLsXh8...C9Xs&exp=1773683000&kid=vJ3xR1mQ...&sig=k7Qm2xR9vT4nB8aL...",
       "cost": { "amount": "0.05", "currency": "USD" },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
       "reporting_obligation": {
@@ -404,7 +404,7 @@ For production deployment, see:
 - [Exchange configuration](/components/exchange/configuration) — environment variables, secrets, tenant setup
 - [Multi-tenant architecture](/components/exchange/multi-tenant) — how one Exchange serves multiple providers
 - [Scaling](/components/exchange/scaling) — from single instance to 10K+ RPS
-- [Edge function deployment](/components/edge-function/deployment) — CDN-specific adapters for [CloudFront, Cloudflare, Akamai, Fastly](/components/edge-function/cdn-adapters)
+- [Edge function deployment](/components/edge-function/deployment) — CDN-specific adapters for [CloudFront, Cloudflare, Fastly](/components/edge-function/cdn-adapters)
 
 ---
 
@@ -416,7 +416,7 @@ For production deployment, see:
 | 1 | [`DiscoverResources`](/components/exchange/request-flows) | Agent queries Exchange for offers on URIs | [Request Flows](/components/exchange/request-flows) |
 | 2 | — | Agent/[Broker](/components/broker/overview) selects best offer | [Selection Engine](/components/broker/selection-engine) |
 | 3 | [`ExecuteTransaction`](/components/exchange/request-flows) | Agent commits to offer, receives [signed URL](/components/edge-function/signed-url-verification) | [Billing Adapter](/components/exchange/billing-adapter) |
-| 4 | — | Agent fetches resource via signed URL ([edge function](/components/edge-function/overview) verifies) | [Bot Detection](/components/edge-function/bot-detection) |
+| 4 | — | The key holder fetches the resource via the signed URL — the agent itself with the SDK, or its identity service when the key is custodial ([edge function](/components/edge-function/overview) verifies) | [Bot Detection](/components/edge-function/bot-detection) |
 | 5 | [`ReportUsage`](/components/exchange/request-flows) | Agent reports consumed quantity (mandatory) | [Budget & Reporting](/components/agent-sdk/budget-reporting) |
 
 **Security at every boundary** ([full threat model](/security/threat-model)):
