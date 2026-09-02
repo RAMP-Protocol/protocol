@@ -230,7 +230,8 @@ func TestLicenseTermCorpus_Entry(t *testing.T) {
 		termRules := []corpusFinding{}
 		for _, viol := range verdict.Violations {
 			switch {
-			case viol.Rule == helpers.RulePricingUnitRegistered || viol.Rule == helpers.RuleQuotaMetricRegistered:
+			case viol.Rule == helpers.RulePricingUnitRegistered || viol.Rule == helpers.RuleQuotaMetricRegistered ||
+				viol.Rule == helpers.RuleRestrictionCanonicalDisjoint:
 				termRules = append(termRules, corpusFinding{Rule: viol.Rule, Path: viol.Path, Token: viol.Token, Message: viol.Message})
 			case celIDs[viol.Rule]:
 				crossField = append(crossField, viol.Rule)

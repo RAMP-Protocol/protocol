@@ -17,8 +17,11 @@ package helpers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -26,6 +29,8 @@ import (
 
 	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+	"github.com/RAMP-Protocol/protocol/gen/go/vocab/functiontokens"
+	"github.com/RAMP-Protocol/protocol/gen/go/vocab/usertypes"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -236,6 +241,23 @@ func buildLTFoldVectors() []ltFoldVector {
 	return out
 }
 
+// ltSortedAliases returns an axis's alias spellings in a fixed order, so the
+// derived case list is stable across runs — Go randomises map iteration and the
+// corpus is compared byte for byte.
+func ltSortedAliases(aliases map[string]string) []string {
+	out := make([]string, 0, len(aliases))
+	for alias := range aliases {
+		out = append(out, alias)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ltCaseToken renders a token as a case-name segment. Only the hyphen needs
+// folding: every registered spelling is otherwise lowercase alphanumerics and
+// underscores, which the vocabulary generator enforces.
+func ltCaseToken(token string) string { return strings.ReplaceAll(token, "-", "_") }
+
 func ltRestriction(kind rampv1.RestrictionKind, permitted, prohibited []string) *rampv1.Restriction {
 	return &rampv1.Restriction{Kind: kind, Permitted: permitted, Prohibited: prohibited}
 }
@@ -368,10 +390,11 @@ func buildLTValidateVectors(t *testing.T) []ltValidateVector {
 	licenseURI := func() *rampv1.License {
 		return &rampv1.License{Uri: proto.String("https://example.com/license.txt"), UriDigest: proto.String("sha256:" + ltRepeatHex(64))}
 	}
-	cases := []struct {
+	type validateCase struct {
 		name string
 		term *rampv1.LicenseTerm
-	}{
+	}
+	cases := []validateCase{
 		{"reference_only_with_restrictions_accepted", &rampv1.LicenseTerm{
 			Semantics: rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY, License: licenseURI(), Pricing: ltPerUnitPricing("accesses"),
 			Restrictions: []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"ai-train"}, nil)},
@@ -456,7 +479,89 @@ func buildLTValidateVectors(t *testing.T) []ltValidateVector {
 			x.Restrictions = []*rampv1.Restriction{{Permitted: []string{"flibbertigibbet"}}}
 		})},
 		{"empty_term_accepted", &rampv1.LicenseTerm{}},
+
+		// The canonical-disjointness reject. The alias pairs are derived below; these
+		// are the shapes a table of aliases cannot express.
+		//
+		// Two ALIASES of one token, neither of them the registered spelling — the
+		// pairing the derived cases never produce, because they always pair an alias
+		// with its canonical form.
+		{"restriction_two_aliases_of_one_token_collide_rejected", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"adapt"}, []string{"derivative"})}
+		})},
+		// Case folding alone, with no alias in sight: the axis that folds DOWN, and
+		// the axis that folds UP and registers no aliases at all.
+		{"restriction_function_case_collides_rejected", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"CRAWL"}, []string{"crawl"})}
+		})},
+		{"restriction_geography_case_collides_rejected", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindGeography, []string{"us"}, []string{"US"})}
+		})},
+		// An axis with no canonicalisation rule at all. The check still runs there:
+		// the fold returns the token unchanged and the comparison is plain equality,
+		// which is the only tier a term meets on a server that never asked for the
+		// wire tier.
+		{"restriction_other_axis_exact_duplicate_rejected", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindOther, []string{"custom-use"}, []string{"custom-use"})}
+		})},
+		// The RFC 8259 trim is part of the fold, so it can collide two spellings too.
+		// Only a direct caller can reach this: the wire pattern forbids whitespace in
+		// a token, so an entry carrying it never gets as far as the ingest tier.
+		{"restriction_padded_token_collides_after_trim_rejected", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{" crawl "}, []string{"crawl"})}
+		})},
+		// The other side of the rule: folding must not invent a collision.
+		{"restriction_disjoint_after_fold_accepted", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"scrape"}, []string{"ai-train"})}
+		})},
+		{"restriction_namespaced_tokens_disjoint_accepted", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindOther, []string{"acme:read"}, []string{"acme:write"})}
+		})},
+		// Scan order, both across restrictions and within one. A term with more than
+		// one collision reports exactly one, and which one is not left to chance.
+		{"restriction_second_restriction_collides_rejected", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{
+				ltRestriction(ltKindFunction, []string{"ai-train"}, []string{"search"}),
+				ltRestriction(ltKindUserType, []string{"personal"}, []string{"individual"}),
+			}
+		})},
+		{"restriction_collision_reports_first_permitted_site", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction,
+				[]string{"tdm", "scrape"}, []string{"crawl", "text-and-data-mining"})}
+		})},
+		// Precedence against the checks that run before it.
+		{"quota_metric_checked_before_restriction_collision", ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+			x.Quotas = []*rampv1.Quota{{Metric: "frobnications", Limit: 10, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}}
+			x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"scrape"}, []string{"crawl"})}
+		})},
 	}
+
+	// One case per REGISTERED ALIAS, derived from the generated vocabulary rather
+	// than listed, so an alias added to the proto brings its vector with it and the
+	// obligation to cover every alias pair cannot quietly rot. Each pairs the alias
+	// under permitted with its registered form under prohibited: two strings the
+	// wire tier reads as disjoint and the fold reads as one token. GEOGRAPHY is
+	// absent because it registers no aliases — its collisions are the case-folding
+	// ones above.
+	for _, axis := range []struct {
+		name    string
+		kind    rampv1.RestrictionKind
+		aliases map[string]string
+	}{
+		{"function", ltKindFunction, functiontokens.Aliases},
+		{"user_type", ltKindUserType, usertypes.Aliases},
+	} {
+		for _, alias := range ltSortedAliases(axis.aliases) {
+			canonical := axis.aliases[alias]
+			cases = append(cases, validateCase{
+				fmt.Sprintf("restriction_alias_%s_%s_collides_rejected", axis.name, ltCaseToken(alias)),
+				ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+					x.Restrictions = []*rampv1.Restriction{ltRestriction(axis.kind, []string{alias}, []string{canonical})}
+				}),
+			})
+		}
+	}
+
 	out := make([]ltValidateVector, 0, len(cases))
 	for _, c := range cases {
 		warnings, err := ValidateLicenseTerm(c.term) // REAL face
@@ -596,6 +701,14 @@ func buildLTEntryVectors(t *testing.T) []ltEntryVector {
 			e.Path = "x"
 			e.Terms[0] = ltEnumerated(ltPerUnitPricing("frobnications"), nil)
 		})},
+		// The ingest tier catching what the wire tier cleared. The entry is
+		// wire-conformant — two different strings — so the boundary rule reports
+		// nothing and the reject arrives with an entry-relative path.
+		{"term_reject_restriction_canonical_disjoint", entry(func(e *rampv1.ResourceEntry) {
+			e.Terms[0] = ltEnumerated(ltFreePricing(), func(x *rampv1.LicenseTerm) {
+				x.Restrictions = []*rampv1.Restriction{ltRestriction(ltKindFunction, []string{"scrape"}, []string{"crawl"})}
+			})
+		})},
 		{"no_terms_accepted", entry(func(e *rampv1.ResourceEntry) { e.Terms = nil })},
 	}
 	celIDs := ltCrossFieldRuleIDs(t)
@@ -611,7 +724,8 @@ func buildLTEntryVectors(t *testing.T) []ltEntryVector {
 			CrossFieldRules: []string{}, TermRules: []ltFinding{}, Warnings: ltWarningsOf(verdict.Warnings)}
 		for _, viol := range verdict.Violations {
 			switch {
-			case viol.Rule == RulePricingUnitRegistered || viol.Rule == RuleQuotaMetricRegistered:
+			case viol.Rule == RulePricingUnitRegistered || viol.Rule == RuleQuotaMetricRegistered ||
+				viol.Rule == RuleRestrictionCanonicalDisjoint:
 				v.TermRules = append(v.TermRules, ltFindingOf(viol.Rule, viol.Path, viol.Token, viol.Message))
 			case celIDs[viol.Rule]:
 				v.CrossFieldRules = append(v.CrossFieldRules, viol.Rule)

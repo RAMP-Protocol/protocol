@@ -23,7 +23,8 @@ import (
 // structural and cross-field rules, applied to the request as received. The
 // ingest tier runs over the CANONICALISED terms: restriction tokens are folded
 // and alias-resolved to their registered form, then a bare Pricing.unit or
-// Quota.metric that is not a registered token is rejected, while an
+// Quota.metric that is not a registered token is rejected, as is a restriction
+// whose permitted and prohibited lists name one token once folded, while an
 // unregistered restriction token and an OBLIGATION_KIND_OTHER obligation
 // without detail are accepted with a warning that reaches
 // PushResourcesResponse.warnings.
@@ -55,6 +56,13 @@ const (
 	// RuleQuotaMetricRegistered rejects a bare Quota.metric that is not a
 	// registered quota token.
 	RuleQuotaMetricRegistered = "quota.metric.registered"
+	// RuleRestrictionCanonicalDisjoint rejects a restriction whose permitted and
+	// prohibited lists name the same token once both are canonicalised. The wire
+	// tier's rule compares the tokens AS WRITTEN, so two accepted spellings of one
+	// token — an alias beside its registered form, or two spellings differing only
+	// in ASCII case — pass it and collide only after the fold. This is that
+	// property read on the values the fold produces.
+	RuleRestrictionCanonicalDisjoint = "restriction.canonical_disjoint"
 	// RuleRestrictionTokenRegistered warns about a bare restriction token that is
 	// not registered on its axis. The term is accepted: the restriction
 	// vocabulary is open and forward-compatible, and under scope-only projection
@@ -150,7 +158,9 @@ func KnownRestrictionToken(kind rampv1.RestrictionKind, token string) bool {
 // form in place, on every axis that carries a canonicalisation rule. It touches
 // nothing else — Pricing.unit and Quota.metric are exact registry values, scopes
 // are matched verbatim — and is nil-safe and idempotent. Run it before
-// ValidateLicenseTerm, which assumes canonical tokens.
+// ValidateLicenseTerm, whose checks read canonical tokens — all but the
+// disjointness check, which folds what it compares and so reaches the same
+// verdict on either form.
 func NormalizeLicenseTerm(term *rampv1.LicenseTerm) {
 	for _, r := range term.GetRestrictions() {
 		kind := r.GetKind()
@@ -174,18 +184,29 @@ func NormalizeResourceEntry(entry *rampv1.ResourceEntry) {
 	}
 }
 
-// ValidateLicenseTerm runs the ingest-tier checks over one already-canonical
-// term. It returns a *RuleViolation as the error for a hard reject — a bare
-// Pricing.unit or Quota.metric that is not a registered token, pricing checked
-// first and the first offending quota winning — and, when the term is accepted,
-// the warnings it would carry: one per unregistered bare restriction token, in
+// ValidateLicenseTerm runs the ingest-tier checks over one term. It returns a
+// *RuleViolation as the error for a hard reject, in a fixed order: a bare
+// Pricing.unit that is not a registered token, then the first offending quota
+// metric, then the first restriction whose permitted and prohibited lists name
+// one token once canonicalised. When the term is accepted it returns the
+// warnings it would carry: one per unregistered bare restriction token, in
 // restriction order with permitted before prohibited, then one per
 // OBLIGATION_KIND_OTHER obligation without detail. Empty and vendor-namespaced
 // (containing ":") tokens are never membership-checked.
 //
+// Every check but one reads the term as ALREADY CANONICAL, which is what
+// NormalizeLicenseTerm produces. The exception is the disjointness check, which
+// folds what it compares: it exists because a rule that compares spellings
+// answers a question about tokens, so a rule written to close that gap must not
+// in turn assume its own caller folded first.
+//
 // The wire tier is not re-run here: token format, PER_UNIT⇒unit, FREE⇒rate 0,
-// one restriction per kind, permitted∩prohibited and the presence rules are
-// protovalidate's, and ValidateResourceEntry composes the two tiers.
+// one restriction per kind and the presence rules are protovalidate's, and
+// ValidateResourceEntry composes the two tiers. Disjointness is the one property
+// BOTH tiers assert, over different values — permitted∩prohibited over the tokens
+// as written, and the rule below over the tokens the fold produces — so a term
+// the first clears can still fail the second, and a term that fails both is
+// reported by both.
 func ValidateLicenseTerm(term *rampv1.LicenseTerm) ([]RuleWarning, error) {
 	if unit := term.GetPricing().GetUnit(); bareUnregistered(unit, pricingunits.IsRegistered) {
 		return nil, &RuleViolation{
@@ -203,6 +224,11 @@ func ValidateLicenseTerm(term *rampv1.LicenseTerm) ([]RuleWarning, error) {
 				Token:   metric,
 				Message: fmt.Sprintf("quota metric \"%s\" is not a registered quota token", metric),
 			}
+		}
+	}
+	for i, r := range term.GetRestrictions() {
+		if v := canonicalDisjointViolation(i, r); v != nil {
+			return nil, v
 		}
 	}
 	var warnings []RuleWarning
@@ -282,6 +308,53 @@ func ValidateResourceEntry(entry *rampv1.ResourceEntry) EntryVerdict {
 		}
 	}
 	return verdict
+}
+
+// canonicalDisjointViolation returns the violation for the first permitted token
+// of r whose canonical form is also the canonical form of one of its prohibited
+// tokens, or nil when the two lists name no token in common. The permitted list
+// decides the order, so a restriction carrying several collisions always answers
+// the same way.
+//
+// It canonicalises what it compares rather than trusting r to have been
+// normalised, and it runs on EVERY axis. On an axis with no canonicalisation
+// rule the fold returns the token unchanged, so the check degenerates to plain
+// equality — which is what it must do on a server that never asked for the wire
+// tier, where this is the only tier a pushed term meets.
+//
+// The finding names the CANONICAL token and not the spellings that produced it.
+// Naming the spellings would make the message depend on whether the caller had
+// folded first — the Exchange has, a direct caller has not — and the message is
+// wire-visible and pinned byte-for-byte across the three SDKs. Path locates the
+// permitted element; the prohibited one is the entry that folds to the same token.
+//
+// The prohibited list is folded once into a set, so the cost is one fold per
+// token rather than one per pair: both lists are capped at 64, and a pairwise
+// walk would fold four thousand times per restriction.
+func canonicalDisjointViolation(i int, r *rampv1.Restriction) *RuleViolation {
+	prohibited := r.GetProhibited()
+	permitted := r.GetPermitted()
+	if len(prohibited) == 0 || len(permitted) == 0 {
+		return nil
+	}
+	kind := r.GetKind()
+	banned := make(map[string]struct{}, len(prohibited))
+	for _, tok := range prohibited {
+		banned[CanonicalRestrictionToken(kind, tok)] = struct{}{}
+	}
+	for j, tok := range permitted {
+		canon := CanonicalRestrictionToken(kind, tok)
+		if _, ok := banned[canon]; !ok {
+			continue
+		}
+		return &RuleViolation{
+			Rule:    RuleRestrictionCanonicalDisjoint,
+			Path:    fmt.Sprintf("restrictions[%d].permitted[%d]", i, j),
+			Token:   canon,
+			Message: fmt.Sprintf("restriction token %q is both permitted and prohibited after canonicalisation", canon),
+		}
+	}
+	return nil
 }
 
 // restrictionTokenWarning returns the warning for one restriction token, or

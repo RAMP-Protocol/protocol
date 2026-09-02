@@ -109,3 +109,64 @@ func TestValidateResourceEntry_ReportsBothTiersWithEntryPaths(t *testing.T) {
 		t.Errorf("want both the wire-tier path violation and the ingest-tier term violation, got %+v", verdict.Violations)
 	}
 }
+
+// The disjointness check is the one ingest-tier rule that does not read its input
+// as already canonical, so the property worth pinning here is that folding first
+// changes nothing: the Exchange normalises in place before it validates, a
+// publisher's pre-check does not, and both must reach the same verdict. The value
+// table for the rule lives in the shared corpus.
+func TestValidateLicenseTerm_CanonicalDisjointIsIndifferentToFoldingFirst(t *testing.T) {
+	raw := func() *rampv1.LicenseTerm {
+		return &rampv1.LicenseTerm{Restrictions: []*rampv1.Restriction{{
+			Kind:       rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION,
+			Permitted:  []string{"scrape"},
+			Prohibited: []string{"crawl"},
+		}}}
+	}
+	before := raw()
+	_, errBefore := helpers.ValidateLicenseTerm(before)
+	normalized := raw()
+	helpers.NormalizeLicenseTerm(normalized)
+	_, errAfter := helpers.ValidateLicenseTerm(normalized)
+
+	var rv *helpers.RuleViolation
+	if !errors.As(errBefore, &rv) {
+		t.Fatalf("unfolded term: error is %T, want *helpers.RuleViolation", errBefore)
+	}
+	if rv.Rule != helpers.RuleRestrictionCanonicalDisjoint || rv.Token != "crawl" {
+		t.Errorf("violation = %+v", *rv)
+	}
+	if errAfter == nil {
+		t.Fatal("folded term: expected the same violation, got none")
+	}
+	if rv.Rule != helpers.RuleRestrictionCanonicalDisjoint {
+		t.Errorf("rule = %q", rv.Rule)
+	}
+	if errBefore.Error() == errAfter.Error() {
+		return
+	}
+	t.Errorf("the verdict depends on whether the caller folded first:\n  raw:    %s\n  folded: %s",
+		errBefore.Error(), errAfter.Error())
+}
+
+// Folding rewrites restriction TOKENS and nothing else, so the sibling rule that
+// counts restrictions per kind cannot be created or destroyed by it. That is
+// assumed by the split between the tiers; assert it rather than believe it.
+func TestNormalizeLicenseTerm_LeavesRestrictionKindAlone(t *testing.T) {
+	term := &rampv1.LicenseTerm{Restrictions: []*rampv1.Restriction{
+		{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"SCRAPE"}},
+		{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_GEOGRAPHY, Permitted: []string{"us"}},
+		{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_USER_TYPE, Prohibited: []string{"Personal"}},
+		{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_OTHER, Permitted: []string{"Left-Alone"}},
+	}}
+	want := make([]rampv1.RestrictionKind, len(term.Restrictions))
+	for i, r := range term.Restrictions {
+		want[i] = r.GetKind()
+	}
+	helpers.NormalizeLicenseTerm(term)
+	for i, r := range term.Restrictions {
+		if r.GetKind() != want[i] {
+			t.Errorf("restrictions[%d].kind = %v, want %v", i, r.GetKind(), want[i])
+		}
+	}
+}
