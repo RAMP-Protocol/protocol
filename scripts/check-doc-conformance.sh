@@ -107,17 +107,19 @@ patterns=(
   # PUBLIC key; the CloudFront-native path uses RSA, verified by the CDN. No
   # implementation ever used HMAC and no secret ever reaches a delivery endpoint.
   # These are the retired phrasings of that claim. The bare token "HMAC" stays
-  # legal: report tokens are genuinely HMAC-hashed, and a doc may cite HMAC as a
-  # rejected alternative.
+  # legal on purpose: a page may name HMAC as the alternative this scheme
+  # rejects, and the changelog entry above does exactly that. Only the phrasings
+  # that assert HMAC IS the scheme are denied.
   'HMAC-SHA256 signed URL' 'HMAC signed URL' 'HMAC-signed URL' 'URL HMAC'
-  'HMAC canonicalization' 'HMAC [Cc]anonicalization' 'hmac-sha256-'
+  'HMAC [Cc]anonicalization' 'hmac-sha256-' 'hex for HMAC' 'HMAC verification'
   'HMAC secret' 'hmacSecret' 'HMAC_SECRET' 'CDNGenericHMAC' 'Generic HMAC'
-  'Exchange.CDN shared secret' 'shared secret between Exchange and CDN'
+  'Exchange.{1,8}CDN shared secret' 'shared secret between Exchange and CDN'
+  'signingMode' '"hmac"'
   # The signed URL carries no transaction-id parameter and no `expires`; the
   # parameters are agent_id, exp, kid and sig, and reconciliation joins on
   # signed_url_hash. Anchored to the URL forms so the patterns do NOT collide
   # with the legitimate slog field name `txn_id` in Go samples.
-  '&txn_id=' '?txn_id=' 'txn_id=txn-' 'baseURL.nexpires'
+  '&txn_id=' '[?]txn_id=' 'txn_id=txn-' 'baseURL.nexpires'
 )
 
 # Files where naming a removed identifier is legitimate (they record history).
@@ -145,8 +147,23 @@ for f in "$proto_ramp" "$event_types" "$auth"; do
   [ -f "$f" ] || { echo "::error::check-doc-conformance: required file missing (renamed? update this script): $f"; status=1; }
 done
 
+# A pattern that does not compile can never match, so it reports clean forever.
+# `?txn_id=` shipped exactly that way. BSD grep -- the one on the macOS runner --
+# rejects a leading `?` with "repetition-operator operand invalid" and exits 2,
+# which `2>/dev/null` hid and `|| true` swallowed, so the pattern was dead there
+# and nobody could see it. GNU grep accepts the same pattern, so a Linux-only
+# check never notices. Compile every pattern against empty input first: exit 0 or
+# 1 means it compiled, 2 or more means it did not and the run fails.
+assert_ere() {
+  printf '' | grep -E -- "$1" >/dev/null 2>&1
+  [ "$?" -lt 2 ] && return 0
+  echo "::error::check-doc-conformance: pattern is not a valid ERE, so it can never match: $1"
+  return 1
+}
+
 # --- 1. Denylist: removed/renamed identifiers must not reappear -------------
 for p in "${patterns[@]}"; do
+  assert_ere "$p" || { status=1; continue; }
   hits=$(grep -rEn -- "$p" "${roots[@]}" 2>/dev/null | grep -Ev "$exclude_re" || true)
   if [ -n "$hits" ]; then
     echo "::error::removed/renamed identifier still present: ${p}"
@@ -176,6 +193,7 @@ vocab=(
 )
 for entry in "${vocab[@]}"; do
   p=${entry%%#*}; canon=${entry#*#}
+  assert_ere "$p" || { status=1; continue; }
   hits=$(grep -rEn -- "$p" "${roots[@]}" 2>/dev/null | grep -Ev "$exclude_re" || true)
   if [ -n "$hits" ]; then
     echo "::error::non-canonical role vocabulary (prose) — use '${canon}' (Requester/Provider are the standard role terms):"
