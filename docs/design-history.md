@@ -1070,7 +1070,8 @@ A pushed entry passes two tiers at the Exchange. The wire tier is protovalidate:
 applied to the request exactly as received. The ingest tier runs afterwards, over the
 canonicalised terms: restriction tokens are folded and alias-resolved to their
 registered form, then a bare `Pricing.unit` or `Quota.metric` that is not a registered
-token is rejected, while an unregistered restriction token and an `OBLIGATION_KIND_OTHER`
+token is rejected, as is a restriction whose permitted and prohibited lists name one
+token once folded, while an unregistered restriction token and an `OBLIGATION_KIND_OTHER`
 obligation without detail are accepted and reported in `PushResourcesResponse.warnings`.
 The first tier was always in the contract. The second lived only inside the reference
 Exchange, so a publisher learned what it would say by pushing and reading the refusal.
@@ -1169,6 +1170,14 @@ rather than stopping at the first. Suppression was considered and rejected on a 
 ground — the server binding defaults to validation off, so on a mount that never asks
 for the wire tier the ingest check is the only one a pushed term meets, and a rule that
 stayed silent because "the boundary already caught it" would catch nothing there.
+
+One boundary of that argument is worth stating, because the contract's own sentence
+invites the stronger reading. Both disjointness rules are scoped to a single
+`Restriction`; what makes one restriction the whole of an axis is
+`license_term.one_restriction_per_kind`, which is a wire-tier rule. Split the two lists
+across two restrictions of one kind and neither disjointness rule sees a collision. So a
+mount without the wire tier gains the second READING of the rule, not the per-axis
+property — the property has always been held jointly, and this change does not move it.
 
 ## A catalog client is its own constructor
 

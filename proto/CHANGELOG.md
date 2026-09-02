@@ -6,9 +6,9 @@
 the canonicalised tokens (`restriction.canonical_disjoint`; SDK behaviour change
 plus a comment clarification, no wire change).** `restriction.permitted_prohibited_disjoint`
 runs at the wire tier, over the request exactly as received, so it compares token
-SPELLINGS. Ten restriction tokens have more than one accepted spelling — `scrape`
-is a registered alias of `crawl`, `adapt` and `derivative` both mean `modify`,
-`personal` means `individual` — and every axis also folds ASCII case. A term naming
+SPELLINGS. Ten registered aliases resolve to eight distinct restriction tokens —
+`scrape` is a registered alias of `crawl`, `adapt` and `derivative` both mean
+`modify`, `personal` means `individual` — and every axis also folds ASCII case. A term naming
 one spelling under `permitted` and another under `prohibited` therefore passed the
 boundary check and became, once the ingest tier folded it, a stored term with the
 same token in both lists.
