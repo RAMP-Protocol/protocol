@@ -73,7 +73,35 @@ type CallError struct {
 	Status int    // HTTP status when the peer answered; 0 otherwise
 	Reason string // the peer's own refusal token when it sent one
 	Detail *rampv1.ErrorDetail
-	Err    error
+	// PeerMessage is the developer message the peer put on its TYPED reason, when
+	// it sent one. Empty otherwise.
+	//
+	// It is a field rather than something to recover from Error()'s rendering
+	// because a reason rendered into prose cannot be read back out without
+	// parsing it, and a layer that has to do that is a layer that will get it
+	// wrong. It sits BESIDE Reason rather than in it: Reason is the peer's
+	// machine token, and putting prose there was a mistake this SDK has already
+	// made once and reverted.
+	//
+	// It is deliberately NOT filled from the transport envelope when there is no
+	// typed detail. An answer that did not come from a RAMP service — a draining
+	// load balancer, a proxy's own page — carries no message of its own, and the
+	// text a transport synthesizes for it is that transport's, not the peer's:
+	// connect-go writes "502 Bad Gateway" where a fetch-based client writes
+	// nothing, so carrying it would make this field's value a property of the
+	// language rather than of the answer. That text is still reachable through
+	// the cause, where it reads as what it is.
+	//
+	// NON-AUTHORITATIVE, and the contract says so of the field it comes from.
+	// Branch on Kind or on the typed reason, never on this text. It is also
+	// UNBOUNDED — the contract calls it an easy existence oracle and places the
+	// no-secrets duty on the server, so a consumer that renders it to a log line
+	// or to an agent bounds it there, where the audience is known. This SDK does
+	// not bound it, for the same reason it does not bound Detail.Message:
+	// truncating a peer's only account of why a call failed is a decision that
+	// belongs to whoever displays it.
+	PeerMessage string
+	Err         error
 }
 
 func (e *CallError) Error() string {
@@ -150,6 +178,7 @@ func sendError(op string, err error) error {
 	out.Reason = cerr.Code().String()
 	if detail, ok := errorDetailFromConnect(cerr); ok {
 		out.Detail = detail
+		out.PeerMessage = detail.GetMessage()
 	}
 	return out
 }

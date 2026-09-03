@@ -37,6 +37,11 @@ func ClockWindow(now func() time.Time, ttl time.Duration) Window {
 // Safe for concurrent RoundTrips: the running maximum is held in an atomic
 // updated by compare-and-swap. To adapt an application clock interface with a
 // Now() method, pass the method value: MonotonicWindow(clk.Now, ttl).
+//
+// ONE INSTANCE PER CLIENT, never one per call. The running maximum is the whole
+// mechanism: a window minted per request starts from zero, cannot see the
+// previous signature, and provides exactly none of the uniqueness it was chosen
+// for — while still looking correct at the call site.
 func MonotonicWindow(now func() time.Time, ttl time.Duration) Window {
 	var lastExpires atomic.Int64
 	return func() (int64, int64) {
