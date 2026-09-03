@@ -8,6 +8,27 @@ and protocol history, see [`proto/CHANGELOG.md`](https://github.com/RAMP-Protoco
 
 ## Unreleased
 
+**`TransactionRequest.agent_request_acceptance` adds an agent-signed proof of
+the complete ordered request set (additive wire change).** The agent signs the
+ordered list of `(offer signature, exchange)` references it committed to, plus
+the requester and the idempotency key, with the same detached-Ed25519
+convention `AgentAcceptance` uses. When a Broker projects a mixed-Exchange
+request into per-Exchange subrequests it forwards the envelope unchanged, and
+each Exchange requires its subrequest to be the complete in-order projection of
+the signed set addressed to itself before creating or serving request-level
+idempotency state. That is what stops a relay from consuming an agent's
+idempotency key with a removed, appended, reordered, or valid-subset-first
+request — a property the RFC 9421 forwarding-signature stack does not provide,
+since a projected subrequest is a new HTTP request its sender authors and signs
+(see [Projected execute
+requests](/protocol/authentication/#projected-execute-requests)).
+
+The field is optional for wire compatibility: an older client that omits it
+keeps per-item execution semantics and gets no request-level claim. The signed
+item list is capped at 256 entries, the same ceiling a discovery query's `uris`
+list carries, and verifiers bound their own work to that cap before rendering
+the payload to canonical form.
+
 **A term is now checked for permitted/prohibited disjointness a second time, over
 the canonicalised tokens (`restriction.canonical_disjoint`; SDK behaviour change
 plus a comment clarification, no wire change).** `restriction.permitted_prohibited_disjoint`

@@ -21,7 +21,11 @@ import type { z } from "zod";
 
 import { clockWindow, type Window } from "../core/window.ts";
 import { fromWireOffer } from "../core/wire-canon.ts";
-import { signOfferAcceptance, ACCEPTANCE_SIGNATURE_ALGORITHM } from "../src/acceptance.ts";
+import {
+  signOfferAcceptance,
+  signRequestAcceptance,
+  ACCEPTANCE_SIGNATURE_ALGORITHM,
+} from "../src/acceptance.ts";
 import { redactUserinfo } from "../src/host-ref.ts";
 import { isBareDomain } from "../src/hosts.ts";
 import { generateIdempotencyKey } from "../src/idempotency.ts";
@@ -500,6 +504,9 @@ async function execute(
 			? opts.idempotencyKey
 			: generateIdempotencyKey();
 	const requester = r.opts.requester;
+	const requesterId = stringField(requester, "id");
+	const requesterDomain = stringField(requester, "domain");
+	const requestItems = [{ offerSig, exchange: stringField(wire, "exchange") }];
 	// The acceptance covers the offer, the requester and the idempotency key, so a retry
 	// that pins the same key reproduces byte-identical acceptance bytes. That is the
 	// deliberate-replay semantic, not an accident.
@@ -508,14 +515,25 @@ async function execute(
 		signature = await signOfferAcceptance(
 			{
 				offerSig,
-				requesterId: stringField(requester, "id"),
-				requesterDomain: stringField(requester, "domain"),
+				requesterId,
+				requesterDomain,
 				idempotencyKey: key,
 			},
 			r.opts.signer.privKey,
 		);
 	} catch (cause) {
 		throw new RampCallError({ kind: "not_signable", op, cause });
+	}
+	let requestSignature: string | undefined;
+	if (requestItems[0]!.exchange !== "") {
+		try {
+			requestSignature = await signRequestAcceptance(
+				{ items: requestItems, requesterId, requesterDomain, idempotencyKey: key },
+				r.opts.signer.privKey,
+			);
+		} catch (cause) {
+			throw new RampCallError({ kind: "not_signable", op, cause });
+		}
 	}
 	// Items-only wire shape: a single offer is the degenerate 1-element items list, each
 	// item reflecting its signed Offer back exactly as received at discovery. The
@@ -534,6 +552,20 @@ async function execute(
 				},
 			},
 		],
+		...(requestSignature === undefined
+			? {} : { agent_request_acceptance: {
+			payload: {
+				items: requestItems.map((item) => ({
+					offer_sig: item.offerSig,
+					exchange: item.exchange,
+				})),
+				requester_id: requesterId,
+				requester_domain: requesterDomain,
+				idempotency_key: key,
+			},
+			signature: requestSignature,
+			signature_algorithm: ACCEPTANCE_SIGNATURE_ALGORITHM,
+		} }),
 	};
 	validateRequest(op, request, TransactionRequestSchema, r.opts.validation ?? "strict");
 	const raw = await call(

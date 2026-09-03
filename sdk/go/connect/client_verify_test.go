@@ -125,7 +125,11 @@ func newOfferFixture(t *testing.T) offerFixture {
 // rejected on freshness grounds.
 func sampleOffer(id string) *rampv1.Offer {
 	return &rampv1.Offer{
-		OfferId:   id,
+		OfferId: id,
+		// A wire-valid offer always names its exchange, and the execute path
+		// signs a request acceptance only for offers that do — leaving this
+		// empty would route every test around the production branch.
+		Exchange:  "exchange.test",
 		ExpiresAt: timestampProto(time.Now().Add(1 * time.Hour)),
 		Pricing:   &rampv1.Pricing{Rate: "0.05", Currency: "USD"},
 	}

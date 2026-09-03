@@ -369,6 +369,13 @@ func (c *Client) Execute(ctx context.Context, offer core.VerifiedOffer, opts ...
 			},
 		}},
 	}
+	if offer.Offer().GetExchange() != "" {
+		requestAcceptance, signErr := helpers.SignRequestAcceptanceWith(ctx, signer, req)
+		if signErr != nil {
+			return nil, &CallError{Kind: CallNotSignable, Op: op, Err: signErr}
+		}
+		req.AgentRequestAcceptance = requestAcceptance
+	}
 	resp, err := c.rpc.ExecuteTransaction(ctx, connectrpc.NewRequest(req))
 	if err != nil {
 		return nil, sendError(op, err)

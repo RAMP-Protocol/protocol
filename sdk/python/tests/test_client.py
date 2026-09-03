@@ -385,6 +385,47 @@ def test_execute_sends_the_reflected_offer_and_a_verifying_acceptance(face: Face
         requester_domain=REQUESTER["domain"],
         idempotency_key="idem-1",
     )
+    # The request-level acceptance travels beside the per-item one. The wire
+    # payload must spell exactly what was signed, and the signature must verify
+    # the way a receiving Exchange would check it.
+    from ramp_sdk.core import verify_request_acceptance_jcs
+
+    request_acceptance = body["agent_request_acceptance"]
+    assert request_acceptance["payload"] == {
+        "items": [{"offer_sig": offer["signature"], "exchange": "exchange.test"}],
+        "requester_id": REQUESTER["id"],
+        "requester_domain": REQUESTER["domain"],
+        "idempotency_key": "idem-1",
+    }
+    assert request_acceptance["signature_algorithm"] == "EdDSA"
+    assert verify_request_acceptance_jcs(
+        pubkey_b64=base64.b64encode(agent_public).decode(),
+        signature_hex=request_acceptance["signature"],
+        items=[(offer["signature"], "exchange.test")],
+        requester_id=REQUESTER["id"],
+        requester_domain=REQUESTER["domain"],
+        idempotency_key="idem-1",
+    )
+
+
+@pytest.mark.parametrize("face", FACES, ids=_IDS)
+def test_execute_omits_request_acceptance_when_the_offer_names_no_exchange(face: Face) -> None:
+    # An offer with no exchange cannot appear in a request-acceptance item (the
+    # item requires a recipient), so the client sends the request without the
+    # field. A wire-valid offer always names its exchange, so this path exists
+    # only for offers that bypass the strict checks — surfaced here the same way
+    # the unsigned-offer test does, through a verification-off Verifier, with
+    # request validation off for the same reason.
+    offer, _public = _signed_offer(exchange="")
+    surfaced = Verifier(
+        mode=Mode.OFF, resolver=StaticOfferKeyResolver({}), now=lambda: _NOW
+    ).sort([offer]).verified[0]
+    rec = Recorder({"ver": "1.0"})
+    client = face.client(_config(validation="off"), rec)
+
+    face.run(client.execute(surfaced, idempotency_key="idem-1"))
+
+    assert "agent_request_acceptance" not in rec.body()
 
 
 @pytest.mark.parametrize("face", FACES, ids=_IDS)

@@ -48,9 +48,12 @@ from .core import (
     Verifier,
     canonical_offer_payload,
     jcs_acceptance_payload,
+    jcs_request_acceptance_payload,
     sign_offer_acceptance_jcs,
     sign_offer_jcs,
+    sign_request_acceptance_jcs,
     verify_offer_acceptance_jcs,
+    verify_request_acceptance_jcs,
 )
 from .crossfield import cross_field_rule_ids
 from .errordetail import (
@@ -259,6 +262,7 @@ __all__ = [
     "is_bare_host",
     "is_safe_schema_pattern",
     "jcs_acceptance_payload",
+    "jcs_request_acceptance_payload",
     "known_restriction_token",
     "monotonic_window",
     "normalize_license_term",
@@ -275,6 +279,7 @@ __all__ = [
     "sign_offer_acceptance",
     "sign_offer_acceptance_jcs",
     "sign_offer_jcs",
+    "sign_request_acceptance_jcs",
     "sign_request",
     "thumbprint",
     "transaction_denial_detail",
@@ -287,6 +292,7 @@ __all__ = [
     "verify_multisig_request_server",
     "verify_offer_acceptance",
     "verify_offer_acceptance_jcs",
+    "verify_request_acceptance_jcs",
     "verify_request",
     "verify_request_server",
     "wba_directory_url",

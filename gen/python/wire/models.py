@@ -45,6 +45,23 @@ class AgentAcceptancePayload(WireModel):
     )
 
 
+class AgentRequestAcceptanceItem(WireModel):
+    exchange: constr(min_length=1)
+    offer_sig: constr(min_length=1)
+
+
+class AgentRequestAcceptancePayload(WireModel):
+    idempotency_key: str | None = ''
+    items: list[AgentRequestAcceptanceItem] | None = Field(
+        None,
+        description="Complete original request order, before Broker fan-out. Capped at 256 —\n the same ceiling a discovery query's uris list carries, so one request\n can reference at most one offer per queried URI at the query cap. The Go\n verification helper enforces the same bound itself before doing any\n canonicalization work, because a verifier may run with wire validation\n off and the canonical rendering of an unbounded list is the expensive\n step an unauthenticated caller could otherwise buy for free.",
+        max_length=256,
+        min_length=1,
+    )
+    requester_domain: str | None = ''
+    requester_id: str | None = ''
+
+
 class AuthMethod(Enum):
     AUTH_METHOD_GNAP = 'AUTH_METHOD_GNAP'
     AUTH_METHOD_OAUTH_DPOP = 'AUTH_METHOD_OAUTH_DPOP'
@@ -1172,6 +1189,20 @@ class AcceptableRestriction(WireModel):
     )
 
 
+class AgentRequestAcceptance(WireModel):
+    payload: AgentRequestAcceptancePayload = Field(
+        ...,
+        description='The signed payload is carried because a projected subrequest does not carry\n offers addressed to other Exchanges and therefore cannot reconstruct the\n original complete set by itself.',
+    )
+    signature: constr(min_length=1) = Field(
+        ...,
+        description='Hex-encoded detached Ed25519 signature over the canonical payload bytes.',
+    )
+    signature_algorithm: str | None = Field(
+        '', description='Signature algorithm; "EdDSA" for Ed25519.'
+    )
+
+
 class AttributionDetail(WireModel):
     displayed_url: str | None = Field(
         None, description='URL displayed to the user as the attribution link.'
@@ -2037,6 +2068,10 @@ class TransactionItem(WireModel):
 
 
 class TransactionRequest(WireModel):
+    agent_request_acceptance: AgentRequestAcceptance | None = Field(
+        None,
+        description='Optional for wire compatibility. When present, an Exchange verifies this\n before creating or serving request-level idempotency state. A Broker MUST\n forward it unchanged on every projected subrequest. Older clients that omit\n it retain per-item execution semantics but receive no request-level claim.',
+    )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
         None,

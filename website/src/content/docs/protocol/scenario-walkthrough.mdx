@@ -731,6 +731,12 @@ The request body is identical to the direct case; the forwarding chain lives in 
      keyid thumbprint in the Exchange's configured key set (Signature-Agent
      stays the agent's directory)
    - Ed25519 verify each hop's signature -> pass
+2c. Verify `agent_request_acceptance` when the request carries it (this example
+   omits the optional field): Ed25519 verify the signed request set against the
+   requester's published agent key, then require this request's items to be the
+   complete in-order projection addressed to this Exchange. This runs before
+   the idempotency check — see
+   [Projected execute requests](/protocol/authentication/#projected-execute-requests)
 3. Check idempotency: tx-claude-001 not seen before -> proceed
 4. Verify offer signature:
    - Ed25519 verify exchange_signature on offer -> pass

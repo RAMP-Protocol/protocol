@@ -314,7 +314,7 @@ This is ongoing verification, not just onboarding. Providers can revoke authoriz
 
 ## ExecuteTransaction
 
-The critical path. Stateless offer verification — no offer storage or re-resolution. A request carries one or more `items` (items-only model): each item presents the FULL signed offer it was issued, and the Exchange verifies that presented offer against its own offer-signing key. A single offer is the degenerate 1-element `items` list. Per item the pipeline is: validate -> verify the presented offer's signature (Ed25519 default) -> check idempotency -> authorize billing -> write transaction log -> sign URL -> respond.
+The critical path. Stateless offer verification — no offer storage or re-resolution. A request carries one or more `items` (items-only model): each item presents the FULL signed offer it was issued, and the Exchange verifies that presented offer against its own offer-signing key. A single offer is the degenerate 1-element `items` list. Per item the pipeline is: validate -> verify the presented offer's signature (Ed25519 default) -> check idempotency -> authorize billing -> write transaction log -> sign URL -> respond. Before the idempotency check, a request that carries `agent_request_acceptance` has that set claim verified first — the signature, and that this request's items are the complete in-order projection of the signed set addressed to this Exchange (see [Projected execute requests](/protocol/authentication/#projected-execute-requests)). Idempotency state is never created or served for a request whose set claim failed.
 
 ```mermaid
 sequenceDiagram

@@ -134,3 +134,78 @@ export async function verifyOfferAcceptance(
 		return false;
 	}
 }
+
+export interface RequestAcceptanceItemInput {
+	offerSig: string;
+	exchange: string;
+}
+
+export interface RequestAcceptanceInput {
+	items: RequestAcceptanceItemInput[];
+	requesterId: string;
+	requesterDomain: string;
+	idempotencyKey: string;
+}
+
+/** Canonical JCS(protojson(...)) bytes for the complete ordered execute set. */
+export function requestAcceptancePayload(
+	input: RequestAcceptanceInput,
+): Uint8Array<ArrayBuffer> {
+	if (input.items.length === 0) {
+		throw new Error("ramp/acceptance: request acceptance requires at least one item");
+	}
+	const items = input.items.map((item, index) => {
+		if (item.offerSig === "") {
+			throw new Error(
+				`ramp/acceptance: request item ${index} has an empty offer signature`,
+			);
+		}
+		if (item.exchange === "") {
+			throw new Error(`ramp/acceptance: request item ${index} has an empty exchange`);
+		}
+		return { offer_sig: item.offerSig, exchange: item.exchange };
+	});
+	const payload: Record<string, unknown> = {
+		items,
+		requester_id: input.requesterId,
+		requester_domain: input.requesterDomain,
+		idempotency_key: input.idempotencyKey,
+	};
+	const obj = Object.fromEntries(
+		Object.entries(payload).filter(([, value]) => value !== ""),
+	);
+	const jcs = canonicalize(obj);
+	if (jcs === undefined) {
+		throw new Error("ramp/acceptance: request payload is not JSON-serializable");
+	}
+	return utf8Bytes(jcs);
+}
+
+export async function signRequestAcceptance(
+	input: RequestAcceptanceInput,
+	privateKey: CryptoKey,
+): Promise<string> {
+	const payload = requestAcceptancePayload(input);
+	const sig = new Uint8Array(await crypto.subtle.sign("Ed25519", privateKey, payload));
+	return bytesToHex(sig);
+}
+
+export async function verifyRequestAcceptance(
+	input: RequestAcceptanceInput,
+	signatureHex: string,
+	publicKey: CryptoKey,
+): Promise<boolean> {
+	let payload: Uint8Array<ArrayBuffer>;
+	try {
+		payload = requestAcceptancePayload(input);
+	} catch {
+		return false;
+	}
+	const signature = hexToBytes(signatureHex);
+	if (signature === undefined) return false;
+	try {
+		return await crypto.subtle.verify("Ed25519", publicKey, signature, payload);
+	} catch {
+		return false;
+	}
+}
