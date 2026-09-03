@@ -55,6 +55,30 @@ var ErrEndpointRefused = errors.New("resolvers: well-known manifest advertises a
 type wellKnownDoc struct {
 	jose.JSONWebKeySet
 	Endpoint string `json:"endpoint"`
+
+	// Role, terms_digest and the account_registration block are read by the
+	// registration-requirements face alone. They ride in this shared projection
+	// because one fetch decodes the whole document and a second struct over the
+	// same bytes would be a second place for the member names to drift.
+	//
+	// NONE of them is ever cached: the endpoint cache stores the endpoint string
+	// and nothing else, so a caller cannot reach a stale digest through any face
+	// in this package. That is a property the terms_digest rule depends on — see
+	// WellKnownRequirementsReader.
+	Role                json.RawMessage      `json:"role"`
+	TermsDigest         *string              `json:"terms_digest"`
+	AccountRegistration *accountRegistration `json:"account_registration"`
+}
+
+// accountRegistration is the manifest block describing how to open an account.
+// Only data_schema is read; field 2 is reserved in the contract for a future web
+// registration mode, which this SDK does not act on.
+type accountRegistration struct {
+	// DataSchema is kept as raw bytes because every cap the registration-schema
+	// rules state is defined over the bytes AS SERVED. Decoding and re-encoding
+	// would change the length the size cap measures and the number formatting the
+	// canonical form pins.
+	DataSchema json.RawMessage `json:"data_schema"`
 }
 
 // fetchWellKnownDoc GETs url and decodes the well-known manifest. It is the one
