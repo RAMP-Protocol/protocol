@@ -122,6 +122,19 @@ func (o *Broker) Execute(ctx context.Context, offer *rampv1.Offer, req *rampv1.D
 }
 ```
 
+### Mixed-Exchange commits: fan-out is projection
+
+When the agent commits to offers from **more than one** Exchange in one go, there is still no new RPC: the flow is `Resolve` for discovery, then one `ExecuteTransaction` per Exchange named in the chosen set. What holds the set together is `TransactionRequest.agent_request_acceptance` — a detached Ed25519 signature by the **agent** over the complete ordered list of `(offer signature, exchange)` references plus the requester and the idempotency key.
+
+The sequence:
+
+1. The agent (the holder of the signing key) commits to the whole chosen set at once: it signs one `AgentRequestAcceptance` covering every selected offer, in order, across all Exchanges.
+2. Whoever executes — the agent directly, or the Broker on its behalf — sends one `ExecuteTransaction` to each Exchange in the set. Each subrequest carries only the items addressed to that Exchange, plus the **unchanged** acceptance envelope, plus the same idempotency key.
+3. Each per-Exchange subrequest is a new HTTP request its sender authors and RFC 9421-signs. When the Broker executes, the Broker is the authenticated wire caller of every subrequest; the agent's authorization travels in the body as the detached acceptance signatures, which survive projection because they never depended on the HTTP envelope. See [Projected execute requests](/protocol/authentication/#projected-execute-requests) for who signs what and how the Exchange resolves the acceptance verification key.
+4. Each Exchange verifies the acceptance signature and requires its subrequest to equal the complete in-order projection of the signed set addressed to itself — so the Broker cannot drop, reorder, append, or split the items for that Exchange without being refused.
+
+A single-Exchange commit is the degenerate case: the projection is the whole set, and the SDK clients attach the acceptance there too.
+
 ## Request Signing and the Forwarding Signature Stack
 
 RAMP uses a two-layer signing model: the **agent's request signature** proves who originated the request, and the **forwarding signature stack** proves which intermediaries forwarded it.

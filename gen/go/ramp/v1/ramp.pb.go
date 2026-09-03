@@ -4564,6 +4564,240 @@ func (x *AgentAcceptance) GetSignatureAlgorithm() string {
 	return ""
 }
 
+// AgentRequestAcceptance — the agent's topology-independent authorization of
+// one complete ordered execute set. A Broker forwards this envelope unchanged
+// when it projects a mixed-Exchange request into per-Exchange subrequests.
+// Each receiving Exchange verifies the signature, then requires its subrequest
+// to equal the complete in-order projection of payload.items whose exchange
+// names that Exchange. This is what makes removal, append, and reorder visible
+// before request-level idempotency state is claimed.
+//
+// A projected subrequest is a NEW HTTP request its sender authors. The party
+// that projects — a Broker, or the agent itself when it splits its own
+// mixed-Exchange set — computes that subrequest's Content-Digest and signs it
+// with its own RFC 9421 request signature. The agent's original RFC 9421
+// signature covered the body the agent sent and does not travel with a
+// projected body; that is expected, not a gap, and it is why this proof
+// exists: like AgentAcceptance, it is a detached body signature that stays
+// valid however the request travels. The hop-signature stack applies only to
+// requests forwarded byte-for-byte. If a delegation rides the request, the
+// holder-binding rule is unchanged — the wire signer must be the delegation's
+// terminal holder — so a Broker may project a delegated request only when the
+// agent has delegated to the Broker's key.
+//
+// The verification key is the agent key published for the requester the signed
+// payload names. payload.requester_domain must equal the request's
+// requester.domain, and the Exchange accepts the signature only if it verifies
+// against an Ed25519 key currently valid in that domain's WBA directory
+// ({requester_domain}/.well-known/http-message-signatures-directory), fetched
+// under the same SSRF discipline as every directory fetch. The envelope
+// carries no keyid, so the verifier tries the currently-valid Ed25519 keys of
+// that directory; rotation overlap keeps that set small. When the requester
+// itself signed the arriving request, the request-signing key the Exchange
+// already resolved is that key, and no second fetch is needed. A signature
+// that verifies against a key the requester's domain publishes is what turns
+// the claimed requester identity into an authenticated one.
+type AgentRequestAcceptance struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The signed payload is carried because a projected subrequest does not carry
+	// offers addressed to other Exchanges and therefore cannot reconstruct the
+	// original complete set by itself.
+	Payload *AgentRequestAcceptancePayload `protobuf:"bytes,1,opt,name=payload,proto3" json:"payload,omitempty"`
+	// Hex-encoded detached Ed25519 signature over the canonical payload bytes.
+	Signature string `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
+	// Signature algorithm; "EdDSA" for Ed25519.
+	SignatureAlgorithm string `protobuf:"bytes,3,opt,name=signature_algorithm,json=signatureAlgorithm,proto3" json:"signature_algorithm,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *AgentRequestAcceptance) Reset() {
+	*x = AgentRequestAcceptance{}
+	mi := &file_ramp_v1_ramp_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentRequestAcceptance) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentRequestAcceptance) ProtoMessage() {}
+
+func (x *AgentRequestAcceptance) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_v1_ramp_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentRequestAcceptance.ProtoReflect.Descriptor instead.
+func (*AgentRequestAcceptance) Descriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *AgentRequestAcceptance) GetPayload() *AgentRequestAcceptancePayload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *AgentRequestAcceptance) GetSignature() string {
+	if x != nil {
+		return x.Signature
+	}
+	return ""
+}
+
+func (x *AgentRequestAcceptance) GetSignatureAlgorithm() string {
+	if x != nil {
+		return x.SignatureAlgorithm
+	}
+	return ""
+}
+
+// AgentRequestAcceptanceItem is the minimum reference needed to authorize an
+// offer's membership, order, and fan-out destination without repeating the
+// full Offer in every projected subrequest. Offer.signature transitively binds
+// the full offer, including its exchange field; the explicit exchange lets a
+// recipient derive which signed references must appear in its projection.
+type AgentRequestAcceptanceItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OfferSig      string                 `protobuf:"bytes,1,opt,name=offer_sig,json=offerSig,proto3" json:"offer_sig,omitempty"`
+	Exchange      string                 `protobuf:"bytes,2,opt,name=exchange,proto3" json:"exchange,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentRequestAcceptanceItem) Reset() {
+	*x = AgentRequestAcceptanceItem{}
+	mi := &file_ramp_v1_ramp_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentRequestAcceptanceItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentRequestAcceptanceItem) ProtoMessage() {}
+
+func (x *AgentRequestAcceptanceItem) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_v1_ramp_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentRequestAcceptanceItem.ProtoReflect.Descriptor instead.
+func (*AgentRequestAcceptanceItem) Descriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *AgentRequestAcceptanceItem) GetOfferSig() string {
+	if x != nil {
+		return x.OfferSig
+	}
+	return ""
+}
+
+func (x *AgentRequestAcceptanceItem) GetExchange() string {
+	if x != nil {
+		return x.Exchange
+	}
+	return ""
+}
+
+// AgentRequestAcceptancePayload fixes the field set signed by an
+// AgentRequestAcceptance. Its canonical bytes are
+// JCS(protojson(AgentRequestAcceptancePayload)) using the canonical-signing
+// rules defined on Offer.signature.
+type AgentRequestAcceptancePayload struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Complete original request order, before Broker fan-out. Capped at 256 —
+	// the same ceiling a discovery query's uris list carries, so one request
+	// can reference at most one offer per queried URI at the query cap. The Go
+	// verification helper enforces the same bound itself before doing any
+	// canonicalization work, because a verifier may run with wire validation
+	// off and the canonical rendering of an unbounded list is the expensive
+	// step an unauthenticated caller could otherwise buy for free.
+	Items           []*AgentRequestAcceptanceItem `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	RequesterId     string                        `protobuf:"bytes,2,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
+	RequesterDomain string                        `protobuf:"bytes,3,opt,name=requester_domain,json=requesterDomain,proto3" json:"requester_domain,omitempty"`
+	IdempotencyKey  string                        `protobuf:"bytes,4,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *AgentRequestAcceptancePayload) Reset() {
+	*x = AgentRequestAcceptancePayload{}
+	mi := &file_ramp_v1_ramp_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentRequestAcceptancePayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentRequestAcceptancePayload) ProtoMessage() {}
+
+func (x *AgentRequestAcceptancePayload) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_v1_ramp_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentRequestAcceptancePayload.ProtoReflect.Descriptor instead.
+func (*AgentRequestAcceptancePayload) Descriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *AgentRequestAcceptancePayload) GetItems() []*AgentRequestAcceptanceItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *AgentRequestAcceptancePayload) GetRequesterId() string {
+	if x != nil {
+		return x.RequesterId
+	}
+	return ""
+}
+
+func (x *AgentRequestAcceptancePayload) GetRequesterDomain() string {
+	if x != nil {
+		return x.RequesterDomain
+	}
+	return ""
+}
+
+func (x *AgentRequestAcceptancePayload) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
 // AgentAcceptancePayload — the canonical signing structure for AgentAcceptance.
 // It is NEVER sent on the wire; it exists solely so the signer (SDK) and the
 // verifier (Exchange) derive BYTE-IDENTICAL signed bytes from the same proto
@@ -4601,7 +4835,7 @@ type AgentAcceptancePayload struct {
 
 func (x *AgentAcceptancePayload) Reset() {
 	*x = AgentAcceptancePayload{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[19]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4613,7 +4847,7 @@ func (x *AgentAcceptancePayload) String() string {
 func (*AgentAcceptancePayload) ProtoMessage() {}
 
 func (x *AgentAcceptancePayload) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[19]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4626,7 +4860,7 @@ func (x *AgentAcceptancePayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentAcceptancePayload.ProtoReflect.Descriptor instead.
 func (*AgentAcceptancePayload) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{19}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *AgentAcceptancePayload) GetOfferSig() string {
@@ -4684,6 +4918,11 @@ type TransactionRequest struct {
 	// presented bytes against its own key — stateless, self-contained bearer
 	// tokens, with no reconstruct-from-catalog.
 	Items []*TransactionItem `protobuf:"bytes,7,rep,name=items,proto3" json:"items,omitempty"`
+	// Optional for wire compatibility. When present, an Exchange verifies this
+	// before creating or serving request-level idempotency state. A Broker MUST
+	// forward it unchanged on every projected subrequest. Older clients that omit
+	// it retain per-item execution semantics but receive no request-level claim.
+	AgentRequestAcceptance *AgentRequestAcceptance `protobuf:"bytes,8,opt,name=agent_request_acceptance,json=agentRequestAcceptance,proto3,oneof" json:"agent_request_acceptance,omitempty"`
 	// Extension point
 	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
@@ -4697,7 +4936,7 @@ type TransactionRequest struct {
 
 func (x *TransactionRequest) Reset() {
 	*x = TransactionRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[20]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4709,7 +4948,7 @@ func (x *TransactionRequest) String() string {
 func (*TransactionRequest) ProtoMessage() {}
 
 func (x *TransactionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[20]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4722,7 +4961,7 @@ func (x *TransactionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionRequest.ProtoReflect.Descriptor instead.
 func (*TransactionRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{20}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *TransactionRequest) GetVer() string {
@@ -4749,6 +4988,13 @@ func (x *TransactionRequest) GetRequester() *Requester {
 func (x *TransactionRequest) GetItems() []*TransactionItem {
 	if x != nil {
 		return x.Items
+	}
+	return nil
+}
+
+func (x *TransactionRequest) GetAgentRequestAcceptance() *AgentRequestAcceptance {
+	if x != nil {
+		return x.AgentRequestAcceptance
 	}
 	return nil
 }
@@ -4787,7 +5033,7 @@ type TransactionItem struct {
 
 func (x *TransactionItem) Reset() {
 	*x = TransactionItem{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[21]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4799,7 +5045,7 @@ func (x *TransactionItem) String() string {
 func (*TransactionItem) ProtoMessage() {}
 
 func (x *TransactionItem) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[21]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4812,7 +5058,7 @@ func (x *TransactionItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionItem.ProtoReflect.Descriptor instead.
 func (*TransactionItem) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{21}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *TransactionItem) GetOffer() *Offer {
@@ -4866,7 +5112,7 @@ type TransactionResponse struct {
 
 func (x *TransactionResponse) Reset() {
 	*x = TransactionResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[22]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4878,7 +5124,7 @@ func (x *TransactionResponse) String() string {
 func (*TransactionResponse) ProtoMessage() {}
 
 func (x *TransactionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[22]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4891,7 +5137,7 @@ func (x *TransactionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionResponse.ProtoReflect.Descriptor instead.
 func (*TransactionResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{22}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *TransactionResponse) GetVer() string {
@@ -4985,7 +5231,7 @@ type TransactionResultItem struct {
 
 func (x *TransactionResultItem) Reset() {
 	*x = TransactionResultItem{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[23]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4997,7 +5243,7 @@ func (x *TransactionResultItem) String() string {
 func (*TransactionResultItem) ProtoMessage() {}
 
 func (x *TransactionResultItem) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[23]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5010,7 +5256,7 @@ func (x *TransactionResultItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionResultItem.ProtoReflect.Descriptor instead.
 func (*TransactionResultItem) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{23}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *TransactionResultItem) GetOfferId() string {
@@ -5117,7 +5363,7 @@ type Cost struct {
 
 func (x *Cost) Reset() {
 	*x = Cost{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[24]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5129,7 +5375,7 @@ func (x *Cost) String() string {
 func (*Cost) ProtoMessage() {}
 
 func (x *Cost) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[24]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5142,7 +5388,7 @@ func (x *Cost) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Cost.ProtoReflect.Descriptor instead.
 func (*Cost) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{24}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *Cost) GetAmount() string {
@@ -5202,7 +5448,7 @@ type PushResourcesRequest struct {
 
 func (x *PushResourcesRequest) Reset() {
 	*x = PushResourcesRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[25]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5214,7 +5460,7 @@ func (x *PushResourcesRequest) String() string {
 func (*PushResourcesRequest) ProtoMessage() {}
 
 func (x *PushResourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[25]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5227,7 +5473,7 @@ func (x *PushResourcesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PushResourcesRequest.ProtoReflect.Descriptor instead.
 func (*PushResourcesRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{25}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *PushResourcesRequest) GetVer() string {
@@ -5372,7 +5618,7 @@ type ResourceEntry struct {
 
 func (x *ResourceEntry) Reset() {
 	*x = ResourceEntry{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[26]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5384,7 +5630,7 @@ func (x *ResourceEntry) String() string {
 func (*ResourceEntry) ProtoMessage() {}
 
 func (x *ResourceEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[26]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5397,7 +5643,7 @@ func (x *ResourceEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceEntry.ProtoReflect.Descriptor instead.
 func (*ResourceEntry) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{26}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ResourceEntry) GetDomain() string {
@@ -5550,7 +5796,7 @@ type PushResourcesResponse struct {
 
 func (x *PushResourcesResponse) Reset() {
 	*x = PushResourcesResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[27]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5562,7 +5808,7 @@ func (x *PushResourcesResponse) String() string {
 func (*PushResourcesResponse) ProtoMessage() {}
 
 func (x *PushResourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[27]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5575,7 +5821,7 @@ func (x *PushResourcesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PushResourcesResponse.ProtoReflect.Descriptor instead.
 func (*PushResourcesResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{27}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *PushResourcesResponse) GetVer() string {
@@ -5642,7 +5888,7 @@ type RemoveResourcesRequest struct {
 
 func (x *RemoveResourcesRequest) Reset() {
 	*x = RemoveResourcesRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[28]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5654,7 +5900,7 @@ func (x *RemoveResourcesRequest) String() string {
 func (*RemoveResourcesRequest) ProtoMessage() {}
 
 func (x *RemoveResourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[28]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5667,7 +5913,7 @@ func (x *RemoveResourcesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveResourcesRequest.ProtoReflect.Descriptor instead.
 func (*RemoveResourcesRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{28}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *RemoveResourcesRequest) GetVer() string {
@@ -5711,7 +5957,7 @@ type RemoveResourcesResponse struct {
 
 func (x *RemoveResourcesResponse) Reset() {
 	*x = RemoveResourcesResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[29]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5723,7 +5969,7 @@ func (x *RemoveResourcesResponse) String() string {
 func (*RemoveResourcesResponse) ProtoMessage() {}
 
 func (x *RemoveResourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[29]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5736,7 +5982,7 @@ func (x *RemoveResourcesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveResourcesResponse.ProtoReflect.Descriptor instead.
 func (*RemoveResourcesResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{29}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *RemoveResourcesResponse) GetVer() string {
@@ -5771,7 +6017,7 @@ type RefreshCatalogRequest struct {
 
 func (x *RefreshCatalogRequest) Reset() {
 	*x = RefreshCatalogRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[30]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5783,7 +6029,7 @@ func (x *RefreshCatalogRequest) String() string {
 func (*RefreshCatalogRequest) ProtoMessage() {}
 
 func (x *RefreshCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[30]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5796,7 +6042,7 @@ func (x *RefreshCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshCatalogRequest.ProtoReflect.Descriptor instead.
 func (*RefreshCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{30}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *RefreshCatalogRequest) GetVer() string {
@@ -5833,7 +6079,7 @@ type RefreshCatalogResponse struct {
 
 func (x *RefreshCatalogResponse) Reset() {
 	*x = RefreshCatalogResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[31]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5845,7 +6091,7 @@ func (x *RefreshCatalogResponse) String() string {
 func (*RefreshCatalogResponse) ProtoMessage() {}
 
 func (x *RefreshCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[31]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5858,7 +6104,7 @@ func (x *RefreshCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshCatalogResponse.ProtoReflect.Descriptor instead.
 func (*RefreshCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{31}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *RefreshCatalogResponse) GetVer() string {
@@ -5900,7 +6146,7 @@ type ReportingObligation struct {
 
 func (x *ReportingObligation) Reset() {
 	*x = ReportingObligation{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[32]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5912,7 +6158,7 @@ func (x *ReportingObligation) String() string {
 func (*ReportingObligation) ProtoMessage() {}
 
 func (x *ReportingObligation) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[32]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5925,7 +6171,7 @@ func (x *ReportingObligation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportingObligation.ProtoReflect.Descriptor instead.
 func (*ReportingObligation) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{32}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ReportingObligation) GetRequired() bool {
@@ -6016,7 +6262,7 @@ type UsageReport struct {
 
 func (x *UsageReport) Reset() {
 	*x = UsageReport{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[33]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6028,7 +6274,7 @@ func (x *UsageReport) String() string {
 func (*UsageReport) ProtoMessage() {}
 
 func (x *UsageReport) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[33]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6041,7 +6287,7 @@ func (x *UsageReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageReport.ProtoReflect.Descriptor instead.
 func (*UsageReport) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{33}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *UsageReport) GetVer() string {
@@ -6129,7 +6375,7 @@ type AttributionDetail struct {
 
 func (x *AttributionDetail) Reset() {
 	*x = AttributionDetail{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[34]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6141,7 +6387,7 @@ func (x *AttributionDetail) String() string {
 func (*AttributionDetail) ProtoMessage() {}
 
 func (x *AttributionDetail) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[34]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6154,7 +6400,7 @@ func (x *AttributionDetail) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttributionDetail.ProtoReflect.Descriptor instead.
 func (*AttributionDetail) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{34}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *AttributionDetail) GetDisplayedUrl() string {
@@ -6208,7 +6454,7 @@ type Usage struct {
 
 func (x *Usage) Reset() {
 	*x = Usage{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[35]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6220,7 +6466,7 @@ func (x *Usage) String() string {
 func (*Usage) ProtoMessage() {}
 
 func (x *Usage) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[35]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6233,7 +6479,7 @@ func (x *Usage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Usage.ProtoReflect.Descriptor instead.
 func (*Usage) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{35}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *Usage) GetFunction() []string {
@@ -6300,7 +6546,7 @@ type UsageAsset struct {
 
 func (x *UsageAsset) Reset() {
 	*x = UsageAsset{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[36]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6312,7 +6558,7 @@ func (x *UsageAsset) String() string {
 func (*UsageAsset) ProtoMessage() {}
 
 func (x *UsageAsset) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[36]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6325,7 +6571,7 @@ func (x *UsageAsset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageAsset.ProtoReflect.Descriptor instead.
 func (*UsageAsset) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{36}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *UsageAsset) GetUri() string {
@@ -6376,7 +6622,7 @@ type UsageReportResponse struct {
 
 func (x *UsageReportResponse) Reset() {
 	*x = UsageReportResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[37]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6388,7 +6634,7 @@ func (x *UsageReportResponse) String() string {
 func (*UsageReportResponse) ProtoMessage() {}
 
 func (x *UsageReportResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[37]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6401,7 +6647,7 @@ func (x *UsageReportResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageReportResponse.ProtoReflect.Descriptor instead.
 func (*UsageReportResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{37}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *UsageReportResponse) GetVer() string {
@@ -6487,7 +6733,7 @@ type DiscoveryRequest struct {
 
 func (x *DiscoveryRequest) Reset() {
 	*x = DiscoveryRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[38]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6499,7 +6745,7 @@ func (x *DiscoveryRequest) String() string {
 func (*DiscoveryRequest) ProtoMessage() {}
 
 func (x *DiscoveryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[38]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6512,7 +6758,7 @@ func (x *DiscoveryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoveryRequest.ProtoReflect.Descriptor instead.
 func (*DiscoveryRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{38}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *DiscoveryRequest) GetVer() string {
@@ -6640,7 +6886,7 @@ type RequestConstraints struct {
 
 func (x *RequestConstraints) Reset() {
 	*x = RequestConstraints{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[39]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6652,7 +6898,7 @@ func (x *RequestConstraints) String() string {
 func (*RequestConstraints) ProtoMessage() {}
 
 func (x *RequestConstraints) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[39]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6665,7 +6911,7 @@ func (x *RequestConstraints) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestConstraints.ProtoReflect.Descriptor instead.
 func (*RequestConstraints) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{39}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *RequestConstraints) GetExchanges() []string {
@@ -6781,7 +7027,7 @@ type JsonWebKey struct {
 
 func (x *JsonWebKey) Reset() {
 	*x = JsonWebKey{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[40]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6793,7 +7039,7 @@ func (x *JsonWebKey) String() string {
 func (*JsonWebKey) ProtoMessage() {}
 
 func (x *JsonWebKey) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[40]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6806,7 +7052,7 @@ func (x *JsonWebKey) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JsonWebKey.ProtoReflect.Descriptor instead.
 func (*JsonWebKey) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{40}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *JsonWebKey) GetKty() string {
@@ -7057,7 +7303,7 @@ type AccountRegistration struct {
 
 func (x *AccountRegistration) Reset() {
 	*x = AccountRegistration{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[41]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7069,7 +7315,7 @@ func (x *AccountRegistration) String() string {
 func (*AccountRegistration) ProtoMessage() {}
 
 func (x *AccountRegistration) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[41]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7082,7 +7328,7 @@ func (x *AccountRegistration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AccountRegistration.ProtoReflect.Descriptor instead.
 func (*AccountRegistration) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{41}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *AccountRegistration) GetDataSchema() *structpb.Struct {
@@ -7220,7 +7466,7 @@ type WellKnownManifest struct {
 
 func (x *WellKnownManifest) Reset() {
 	*x = WellKnownManifest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[42]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7232,7 +7478,7 @@ func (x *WellKnownManifest) String() string {
 func (*WellKnownManifest) ProtoMessage() {}
 
 func (x *WellKnownManifest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[42]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7245,7 +7491,7 @@ func (x *WellKnownManifest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WellKnownManifest.ProtoReflect.Descriptor instead.
 func (*WellKnownManifest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{42}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *WellKnownManifest) GetVer() string {
@@ -7472,7 +7718,7 @@ type WBAFile struct {
 
 func (x *WBAFile) Reset() {
 	*x = WBAFile{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[43]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7484,7 +7730,7 @@ func (x *WBAFile) String() string {
 func (*WBAFile) ProtoMessage() {}
 
 func (x *WBAFile) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[43]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7497,7 +7743,7 @@ func (x *WBAFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WBAFile.ProtoReflect.Descriptor instead.
 func (*WBAFile) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{43}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *WBAFile) GetKeys() []*JsonWebKey {
@@ -7536,7 +7782,7 @@ type KeyRevocationList struct {
 
 func (x *KeyRevocationList) Reset() {
 	*x = KeyRevocationList{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[44]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7548,7 +7794,7 @@ func (x *KeyRevocationList) String() string {
 func (*KeyRevocationList) ProtoMessage() {}
 
 func (x *KeyRevocationList) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[44]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7561,7 +7807,7 @@ func (x *KeyRevocationList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyRevocationList.ProtoReflect.Descriptor instead.
 func (*KeyRevocationList) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{44}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *KeyRevocationList) GetAsOf() *timestamppb.Timestamp {
@@ -7594,7 +7840,7 @@ type CatalogContributor struct {
 
 func (x *CatalogContributor) Reset() {
 	*x = CatalogContributor{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[45]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7606,7 +7852,7 @@ func (x *CatalogContributor) String() string {
 func (*CatalogContributor) ProtoMessage() {}
 
 func (x *CatalogContributor) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[45]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7619,7 +7865,7 @@ func (x *CatalogContributor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogContributor.ProtoReflect.Descriptor instead.
 func (*CatalogContributor) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{45}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *CatalogContributor) GetDomain() string {
@@ -7659,7 +7905,7 @@ type AuthorizedExchange struct {
 
 func (x *AuthorizedExchange) Reset() {
 	*x = AuthorizedExchange{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[46]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7671,7 +7917,7 @@ func (x *AuthorizedExchange) String() string {
 func (*AuthorizedExchange) ProtoMessage() {}
 
 func (x *AuthorizedExchange) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[46]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7684,7 +7930,7 @@ func (x *AuthorizedExchange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizedExchange.ProtoReflect.Descriptor instead.
 func (*AuthorizedExchange) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{46}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *AuthorizedExchange) GetDomain() string {
@@ -7769,7 +8015,7 @@ type DiscoveryResponse struct {
 
 func (x *DiscoveryResponse) Reset() {
 	*x = DiscoveryResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[47]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7781,7 +8027,7 @@ func (x *DiscoveryResponse) String() string {
 func (*DiscoveryResponse) ProtoMessage() {}
 
 func (x *DiscoveryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[47]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7794,7 +8040,7 @@ func (x *DiscoveryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoveryResponse.ProtoReflect.Descriptor instead.
 func (*DiscoveryResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{47}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *DiscoveryResponse) GetVer() string {
@@ -7886,7 +8132,7 @@ type DisputeRequest struct {
 
 func (x *DisputeRequest) Reset() {
 	*x = DisputeRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[48]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7898,7 +8144,7 @@ func (x *DisputeRequest) String() string {
 func (*DisputeRequest) ProtoMessage() {}
 
 func (x *DisputeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[48]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7911,7 +8157,7 @@ func (x *DisputeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisputeRequest.ProtoReflect.Descriptor instead.
 func (*DisputeRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{48}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *DisputeRequest) GetVer() string {
@@ -8034,7 +8280,7 @@ type DisputeResponse struct {
 
 func (x *DisputeResponse) Reset() {
 	*x = DisputeResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[49]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8046,7 +8292,7 @@ func (x *DisputeResponse) String() string {
 func (*DisputeResponse) ProtoMessage() {}
 
 func (x *DisputeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[49]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8059,7 +8305,7 @@ func (x *DisputeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisputeResponse.ProtoReflect.Descriptor instead.
 func (*DisputeResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{49}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *DisputeResponse) GetVer() string {
@@ -8139,7 +8385,7 @@ type DomainVerificationRequest struct {
 
 func (x *DomainVerificationRequest) Reset() {
 	*x = DomainVerificationRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[50]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8151,7 +8397,7 @@ func (x *DomainVerificationRequest) String() string {
 func (*DomainVerificationRequest) ProtoMessage() {}
 
 func (x *DomainVerificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[50]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8164,7 +8410,7 @@ func (x *DomainVerificationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainVerificationRequest.ProtoReflect.Descriptor instead.
 func (*DomainVerificationRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{50}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *DomainVerificationRequest) GetVer() string {
@@ -8235,7 +8481,7 @@ type DomainVerificationChallenge struct {
 
 func (x *DomainVerificationChallenge) Reset() {
 	*x = DomainVerificationChallenge{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[51]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8247,7 +8493,7 @@ func (x *DomainVerificationChallenge) String() string {
 func (*DomainVerificationChallenge) ProtoMessage() {}
 
 func (x *DomainVerificationChallenge) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[51]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8260,7 +8506,7 @@ func (x *DomainVerificationChallenge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainVerificationChallenge.ProtoReflect.Descriptor instead.
 func (*DomainVerificationChallenge) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{51}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *DomainVerificationChallenge) GetVer() string {
@@ -8352,7 +8598,7 @@ type DomainVerificationConfirmation struct {
 
 func (x *DomainVerificationConfirmation) Reset() {
 	*x = DomainVerificationConfirmation{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[52]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8364,7 +8610,7 @@ func (x *DomainVerificationConfirmation) String() string {
 func (*DomainVerificationConfirmation) ProtoMessage() {}
 
 func (x *DomainVerificationConfirmation) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[52]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8377,7 +8623,7 @@ func (x *DomainVerificationConfirmation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainVerificationConfirmation.ProtoReflect.Descriptor instead.
 func (*DomainVerificationConfirmation) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{52}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *DomainVerificationConfirmation) GetVer() string {
@@ -8459,7 +8705,7 @@ type DomainVerificationResult struct {
 
 func (x *DomainVerificationResult) Reset() {
 	*x = DomainVerificationResult{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[53]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8471,7 +8717,7 @@ func (x *DomainVerificationResult) String() string {
 func (*DomainVerificationResult) ProtoMessage() {}
 
 func (x *DomainVerificationResult) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[53]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8484,7 +8730,7 @@ func (x *DomainVerificationResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainVerificationResult.ProtoReflect.Descriptor instead.
 func (*DomainVerificationResult) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{53}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *DomainVerificationResult) GetVer() string {
@@ -8672,7 +8918,7 @@ type RegisterRequest struct {
 
 func (x *RegisterRequest) Reset() {
 	*x = RegisterRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[54]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8684,7 +8930,7 @@ func (x *RegisterRequest) String() string {
 func (*RegisterRequest) ProtoMessage() {}
 
 func (x *RegisterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[54]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8697,7 +8943,7 @@ func (x *RegisterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterRequest.ProtoReflect.Descriptor instead.
 func (*RegisterRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{54}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *RegisterRequest) GetVer() string {
@@ -8768,7 +9014,7 @@ type RegisterResponse struct {
 
 func (x *RegisterResponse) Reset() {
 	*x = RegisterResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[55]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8780,7 +9026,7 @@ func (x *RegisterResponse) String() string {
 func (*RegisterResponse) ProtoMessage() {}
 
 func (x *RegisterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[55]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8793,7 +9039,7 @@ func (x *RegisterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterResponse.ProtoReflect.Descriptor instead.
 func (*RegisterResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{55}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *RegisterResponse) GetVer() string {
@@ -8855,7 +9101,7 @@ type GetAccountStatusRequest struct {
 
 func (x *GetAccountStatusRequest) Reset() {
 	*x = GetAccountStatusRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[56]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8867,7 +9113,7 @@ func (x *GetAccountStatusRequest) String() string {
 func (*GetAccountStatusRequest) ProtoMessage() {}
 
 func (x *GetAccountStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[56]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8880,7 +9126,7 @@ func (x *GetAccountStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAccountStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetAccountStatusRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{56}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *GetAccountStatusRequest) GetVer() string {
@@ -8959,7 +9205,7 @@ type GetAccountStatusResponse struct {
 
 func (x *GetAccountStatusResponse) Reset() {
 	*x = GetAccountStatusResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[57]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8971,7 +9217,7 @@ func (x *GetAccountStatusResponse) String() string {
 func (*GetAccountStatusResponse) ProtoMessage() {}
 
 func (x *GetAccountStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[57]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8984,7 +9230,7 @@ func (x *GetAccountStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAccountStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetAccountStatusResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{57}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *GetAccountStatusResponse) GetVer() string {
@@ -9067,7 +9313,7 @@ type ErrorDetail struct {
 
 func (x *ErrorDetail) Reset() {
 	*x = ErrorDetail{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[58]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9079,7 +9325,7 @@ func (x *ErrorDetail) String() string {
 func (*ErrorDetail) ProtoMessage() {}
 
 func (x *ErrorDetail) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[58]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9092,7 +9338,7 @@ func (x *ErrorDetail) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorDetail.ProtoReflect.Descriptor instead.
 func (*ErrorDetail) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{58}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *ErrorDetail) GetMessage() string {
@@ -9275,7 +9521,7 @@ type TransactionDenial struct {
 
 func (x *TransactionDenial) Reset() {
 	*x = TransactionDenial{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[59]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9287,7 +9533,7 @@ func (x *TransactionDenial) String() string {
 func (*TransactionDenial) ProtoMessage() {}
 
 func (x *TransactionDenial) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[59]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9300,7 +9546,7 @@ func (x *TransactionDenial) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionDenial.ProtoReflect.Descriptor instead.
 func (*TransactionDenial) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{59}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *TransactionDenial) GetReason() DenialReason {
@@ -9346,7 +9592,7 @@ type CatalogRejection struct {
 
 func (x *CatalogRejection) Reset() {
 	*x = CatalogRejection{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[60]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9358,7 +9604,7 @@ func (x *CatalogRejection) String() string {
 func (*CatalogRejection) ProtoMessage() {}
 
 func (x *CatalogRejection) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[60]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9371,7 +9617,7 @@ func (x *CatalogRejection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogRejection.ProtoReflect.Descriptor instead.
 func (*CatalogRejection) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{60}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *CatalogRejection) GetReason() CatalogRejectionReason {
@@ -9403,7 +9649,7 @@ type RegistrationFailure struct {
 
 func (x *RegistrationFailure) Reset() {
 	*x = RegistrationFailure{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[61]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9415,7 +9661,7 @@ func (x *RegistrationFailure) String() string {
 func (*RegistrationFailure) ProtoMessage() {}
 
 func (x *RegistrationFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[61]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9428,7 +9674,7 @@ func (x *RegistrationFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegistrationFailure.ProtoReflect.Descriptor instead.
 func (*RegistrationFailure) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{61}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *RegistrationFailure) GetReason() RegistrationFailureReason {
@@ -9466,7 +9712,7 @@ type RegistrationFieldError struct {
 
 func (x *RegistrationFieldError) Reset() {
 	*x = RegistrationFieldError{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[62]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9478,7 +9724,7 @@ func (x *RegistrationFieldError) String() string {
 func (*RegistrationFieldError) ProtoMessage() {}
 
 func (x *RegistrationFieldError) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[62]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9491,7 +9737,7 @@ func (x *RegistrationFieldError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegistrationFieldError.ProtoReflect.Descriptor instead.
 func (*RegistrationFieldError) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{62}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *RegistrationFieldError) GetPath() string {
@@ -9519,7 +9765,7 @@ type DisputeFailure struct {
 
 func (x *DisputeFailure) Reset() {
 	*x = DisputeFailure{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[63]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9531,7 +9777,7 @@ func (x *DisputeFailure) String() string {
 func (*DisputeFailure) ProtoMessage() {}
 
 func (x *DisputeFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[63]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9544,7 +9790,7 @@ func (x *DisputeFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisputeFailure.ProtoReflect.Descriptor instead.
 func (*DisputeFailure) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{63}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *DisputeFailure) GetReason() DisputeFailureReason {
@@ -9565,7 +9811,7 @@ type DomainVerificationFailure struct {
 
 func (x *DomainVerificationFailure) Reset() {
 	*x = DomainVerificationFailure{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[64]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9577,7 +9823,7 @@ func (x *DomainVerificationFailure) String() string {
 func (*DomainVerificationFailure) ProtoMessage() {}
 
 func (x *DomainVerificationFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[64]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9590,7 +9836,7 @@ func (x *DomainVerificationFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainVerificationFailure.ProtoReflect.Descriptor instead.
 func (*DomainVerificationFailure) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{64}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *DomainVerificationFailure) GetReason() DomainVerificationFailureReason {
@@ -9611,7 +9857,7 @@ type RetrievalAuthFailure struct {
 
 func (x *RetrievalAuthFailure) Reset() {
 	*x = RetrievalAuthFailure{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[65]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9623,7 +9869,7 @@ func (x *RetrievalAuthFailure) String() string {
 func (*RetrievalAuthFailure) ProtoMessage() {}
 
 func (x *RetrievalAuthFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[65]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9636,7 +9882,7 @@ func (x *RetrievalAuthFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetrievalAuthFailure.ProtoReflect.Descriptor instead.
 func (*RetrievalAuthFailure) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{65}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *RetrievalAuthFailure) GetReason() RetrievalAuthFailureReason {
@@ -9657,7 +9903,7 @@ type UsageReportRejection struct {
 
 func (x *UsageReportRejection) Reset() {
 	*x = UsageReportRejection{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[66]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9669,7 +9915,7 @@ func (x *UsageReportRejection) String() string {
 func (*UsageReportRejection) ProtoMessage() {}
 
 func (x *UsageReportRejection) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[66]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9682,7 +9928,7 @@ func (x *UsageReportRejection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageReportRejection.ProtoReflect.Descriptor instead.
 func (*UsageReportRejection) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{66}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *UsageReportRejection) GetReason() UsageReportRejectionReason {
@@ -9935,20 +10181,34 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\a_issuer\"i\n" +
 	"\x0fAgentAcceptance\x12%\n" +
 	"\tsignature\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsignature\x12/\n" +
-	"\x13signature_algorithm\x18\x02 \x01(\tR\x12signatureAlgorithm\"\xac\x01\n" +
+	"\x13signature_algorithm\x18\x02 \x01(\tR\x12signatureAlgorithm\"\xba\x01\n" +
+	"\x16AgentRequestAcceptance\x12H\n" +
+	"\apayload\x18\x01 \x01(\v2&.ramp.v1.AgentRequestAcceptancePayloadB\x06\xbaH\x03\xc8\x01\x01R\apayload\x12%\n" +
+	"\tsignature\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsignature\x12/\n" +
+	"\x13signature_algorithm\x18\x03 \x01(\tR\x12signatureAlgorithm\"g\n" +
+	"\x1aAgentRequestAcceptanceItem\x12$\n" +
+	"\toffer_sig\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bofferSig\x12#\n" +
+	"\bexchange\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bexchange\"\xde\x01\n" +
+	"\x1dAgentRequestAcceptancePayload\x12F\n" +
+	"\x05items\x18\x01 \x03(\v2#.ramp.v1.AgentRequestAcceptanceItemB\v\xbaH\b\x92\x01\x05\b\x01\x10\x80\x02R\x05items\x12!\n" +
+	"\frequester_id\x18\x02 \x01(\tR\vrequesterId\x12)\n" +
+	"\x10requester_domain\x18\x03 \x01(\tR\x0frequesterDomain\x12'\n" +
+	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\"\xac\x01\n" +
 	"\x16AgentAcceptancePayload\x12\x1b\n" +
 	"\toffer_sig\x18\x01 \x01(\tR\bofferSig\x12!\n" +
 	"\frequester_id\x18\x02 \x01(\tR\vrequesterId\x12)\n" +
 	"\x10requester_domain\x18\x03 \x01(\tR\x0frequesterDomain\x12'\n" +
-	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\"\x95\x02\n" +
+	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\"\x92\x03\n" +
 	"\x12TransactionRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x123\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x0eidempotencyKey\x120\n" +
 	"\trequester\x18\x04 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x128\n" +
-	"\x05items\x18\a \x03(\v2\x18.ramp.v1.TransactionItemB\b\xbaH\x05\x92\x01\x02\b\x01R\x05items\x12)\n" +
+	"\x05items\x18\a \x03(\v2\x18.ramp.v1.TransactionItemB\b\xbaH\x05\x92\x01\x02\b\x01R\x05items\x12^\n" +
+	"\x18agent_request_acceptance\x18\b \x01(\v2\x1f.ramp.v1.AgentRequestAcceptanceH\x00R\x16agentRequestAcceptance\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\x9e\x01\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x1b\n" +
+	"\x19_agent_request_acceptance\"\x9e\x01\n" +
 	"\x0fTransactionItem\x12,\n" +
 	"\x05offer\x18\x03 \x01(\v2\x0e.ramp.v1.OfferB\x06\xbaH\x03\xc8\x01\x01R\x05offer\x12H\n" +
 	"\x10agent_acceptance\x18\x04 \x01(\v2\x18.ramp.v1.AgentAcceptanceH\x00R\x0fagentAcceptance\x88\x01\x01B\x13\n" +
@@ -10629,7 +10889,7 @@ func file_ramp_v1_ramp_proto_rawDescGZIP() []byte {
 }
 
 var file_ramp_v1_ramp_proto_enumTypes = make([]protoimpl.EnumInfo, 28)
-var file_ramp_v1_ramp_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
+var file_ramp_v1_ramp_proto_msgTypes = make([]protoimpl.MessageInfo, 71)
 var file_ramp_v1_ramp_proto_goTypes = []any{
 	(DiscoveryMethod)(0),                   // 0: ramp.v1.DiscoveryMethod
 	(OfferAbsenceReason)(0),                // 1: ramp.v1.OfferAbsenceReason
@@ -10678,92 +10938,95 @@ var file_ramp_v1_ramp_proto_goTypes = []any{
 	(*Requester)(nil),                      // 44: ramp.v1.Requester
 	(*Delegation)(nil),                     // 45: ramp.v1.Delegation
 	(*AgentAcceptance)(nil),                // 46: ramp.v1.AgentAcceptance
-	(*AgentAcceptancePayload)(nil),         // 47: ramp.v1.AgentAcceptancePayload
-	(*TransactionRequest)(nil),             // 48: ramp.v1.TransactionRequest
-	(*TransactionItem)(nil),                // 49: ramp.v1.TransactionItem
-	(*TransactionResponse)(nil),            // 50: ramp.v1.TransactionResponse
-	(*TransactionResultItem)(nil),          // 51: ramp.v1.TransactionResultItem
-	(*Cost)(nil),                           // 52: ramp.v1.Cost
-	(*PushResourcesRequest)(nil),           // 53: ramp.v1.PushResourcesRequest
-	(*ResourceEntry)(nil),                  // 54: ramp.v1.ResourceEntry
-	(*PushResourcesResponse)(nil),          // 55: ramp.v1.PushResourcesResponse
-	(*RemoveResourcesRequest)(nil),         // 56: ramp.v1.RemoveResourcesRequest
-	(*RemoveResourcesResponse)(nil),        // 57: ramp.v1.RemoveResourcesResponse
-	(*RefreshCatalogRequest)(nil),          // 58: ramp.v1.RefreshCatalogRequest
-	(*RefreshCatalogResponse)(nil),         // 59: ramp.v1.RefreshCatalogResponse
-	(*ReportingObligation)(nil),            // 60: ramp.v1.ReportingObligation
-	(*UsageReport)(nil),                    // 61: ramp.v1.UsageReport
-	(*AttributionDetail)(nil),              // 62: ramp.v1.AttributionDetail
-	(*Usage)(nil),                          // 63: ramp.v1.Usage
-	(*UsageAsset)(nil),                     // 64: ramp.v1.UsageAsset
-	(*UsageReportResponse)(nil),            // 65: ramp.v1.UsageReportResponse
-	(*DiscoveryRequest)(nil),               // 66: ramp.v1.DiscoveryRequest
-	(*RequestConstraints)(nil),             // 67: ramp.v1.RequestConstraints
-	(*JsonWebKey)(nil),                     // 68: ramp.v1.JsonWebKey
-	(*AccountRegistration)(nil),            // 69: ramp.v1.AccountRegistration
-	(*WellKnownManifest)(nil),              // 70: ramp.v1.WellKnownManifest
-	(*WBAFile)(nil),                        // 71: ramp.v1.WBAFile
-	(*KeyRevocationList)(nil),              // 72: ramp.v1.KeyRevocationList
-	(*CatalogContributor)(nil),             // 73: ramp.v1.CatalogContributor
-	(*AuthorizedExchange)(nil),             // 74: ramp.v1.AuthorizedExchange
-	(*DiscoveryResponse)(nil),              // 75: ramp.v1.DiscoveryResponse
-	(*DisputeRequest)(nil),                 // 76: ramp.v1.DisputeRequest
-	(*DisputeResponse)(nil),                // 77: ramp.v1.DisputeResponse
-	(*DomainVerificationRequest)(nil),      // 78: ramp.v1.DomainVerificationRequest
-	(*DomainVerificationChallenge)(nil),    // 79: ramp.v1.DomainVerificationChallenge
-	(*DomainVerificationConfirmation)(nil), // 80: ramp.v1.DomainVerificationConfirmation
-	(*DomainVerificationResult)(nil),       // 81: ramp.v1.DomainVerificationResult
-	(*RegisterRequest)(nil),                // 82: ramp.v1.RegisterRequest
-	(*RegisterResponse)(nil),               // 83: ramp.v1.RegisterResponse
-	(*GetAccountStatusRequest)(nil),        // 84: ramp.v1.GetAccountStatusRequest
-	(*GetAccountStatusResponse)(nil),       // 85: ramp.v1.GetAccountStatusResponse
-	(*ErrorDetail)(nil),                    // 86: ramp.v1.ErrorDetail
-	(*TransactionDenial)(nil),              // 87: ramp.v1.TransactionDenial
-	(*CatalogRejection)(nil),               // 88: ramp.v1.CatalogRejection
-	(*RegistrationFailure)(nil),            // 89: ramp.v1.RegistrationFailure
-	(*RegistrationFieldError)(nil),         // 90: ramp.v1.RegistrationFieldError
-	(*DisputeFailure)(nil),                 // 91: ramp.v1.DisputeFailure
-	(*DomainVerificationFailure)(nil),      // 92: ramp.v1.DomainVerificationFailure
-	(*RetrievalAuthFailure)(nil),           // 93: ramp.v1.RetrievalAuthFailure
-	(*UsageReportRejection)(nil),           // 94: ramp.v1.UsageReportRejection
-	nil,                                    // 95: ramp.v1.ErrorDetail.MetadataEntry
-	(*durationpb.Duration)(nil),            // 96: google.protobuf.Duration
-	(*structpb.Struct)(nil),                // 97: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),          // 98: google.protobuf.Timestamp
+	(*AgentRequestAcceptance)(nil),         // 47: ramp.v1.AgentRequestAcceptance
+	(*AgentRequestAcceptanceItem)(nil),     // 48: ramp.v1.AgentRequestAcceptanceItem
+	(*AgentRequestAcceptancePayload)(nil),  // 49: ramp.v1.AgentRequestAcceptancePayload
+	(*AgentAcceptancePayload)(nil),         // 50: ramp.v1.AgentAcceptancePayload
+	(*TransactionRequest)(nil),             // 51: ramp.v1.TransactionRequest
+	(*TransactionItem)(nil),                // 52: ramp.v1.TransactionItem
+	(*TransactionResponse)(nil),            // 53: ramp.v1.TransactionResponse
+	(*TransactionResultItem)(nil),          // 54: ramp.v1.TransactionResultItem
+	(*Cost)(nil),                           // 55: ramp.v1.Cost
+	(*PushResourcesRequest)(nil),           // 56: ramp.v1.PushResourcesRequest
+	(*ResourceEntry)(nil),                  // 57: ramp.v1.ResourceEntry
+	(*PushResourcesResponse)(nil),          // 58: ramp.v1.PushResourcesResponse
+	(*RemoveResourcesRequest)(nil),         // 59: ramp.v1.RemoveResourcesRequest
+	(*RemoveResourcesResponse)(nil),        // 60: ramp.v1.RemoveResourcesResponse
+	(*RefreshCatalogRequest)(nil),          // 61: ramp.v1.RefreshCatalogRequest
+	(*RefreshCatalogResponse)(nil),         // 62: ramp.v1.RefreshCatalogResponse
+	(*ReportingObligation)(nil),            // 63: ramp.v1.ReportingObligation
+	(*UsageReport)(nil),                    // 64: ramp.v1.UsageReport
+	(*AttributionDetail)(nil),              // 65: ramp.v1.AttributionDetail
+	(*Usage)(nil),                          // 66: ramp.v1.Usage
+	(*UsageAsset)(nil),                     // 67: ramp.v1.UsageAsset
+	(*UsageReportResponse)(nil),            // 68: ramp.v1.UsageReportResponse
+	(*DiscoveryRequest)(nil),               // 69: ramp.v1.DiscoveryRequest
+	(*RequestConstraints)(nil),             // 70: ramp.v1.RequestConstraints
+	(*JsonWebKey)(nil),                     // 71: ramp.v1.JsonWebKey
+	(*AccountRegistration)(nil),            // 72: ramp.v1.AccountRegistration
+	(*WellKnownManifest)(nil),              // 73: ramp.v1.WellKnownManifest
+	(*WBAFile)(nil),                        // 74: ramp.v1.WBAFile
+	(*KeyRevocationList)(nil),              // 75: ramp.v1.KeyRevocationList
+	(*CatalogContributor)(nil),             // 76: ramp.v1.CatalogContributor
+	(*AuthorizedExchange)(nil),             // 77: ramp.v1.AuthorizedExchange
+	(*DiscoveryResponse)(nil),              // 78: ramp.v1.DiscoveryResponse
+	(*DisputeRequest)(nil),                 // 79: ramp.v1.DisputeRequest
+	(*DisputeResponse)(nil),                // 80: ramp.v1.DisputeResponse
+	(*DomainVerificationRequest)(nil),      // 81: ramp.v1.DomainVerificationRequest
+	(*DomainVerificationChallenge)(nil),    // 82: ramp.v1.DomainVerificationChallenge
+	(*DomainVerificationConfirmation)(nil), // 83: ramp.v1.DomainVerificationConfirmation
+	(*DomainVerificationResult)(nil),       // 84: ramp.v1.DomainVerificationResult
+	(*RegisterRequest)(nil),                // 85: ramp.v1.RegisterRequest
+	(*RegisterResponse)(nil),               // 86: ramp.v1.RegisterResponse
+	(*GetAccountStatusRequest)(nil),        // 87: ramp.v1.GetAccountStatusRequest
+	(*GetAccountStatusResponse)(nil),       // 88: ramp.v1.GetAccountStatusResponse
+	(*ErrorDetail)(nil),                    // 89: ramp.v1.ErrorDetail
+	(*TransactionDenial)(nil),              // 90: ramp.v1.TransactionDenial
+	(*CatalogRejection)(nil),               // 91: ramp.v1.CatalogRejection
+	(*RegistrationFailure)(nil),            // 92: ramp.v1.RegistrationFailure
+	(*RegistrationFieldError)(nil),         // 93: ramp.v1.RegistrationFieldError
+	(*DisputeFailure)(nil),                 // 94: ramp.v1.DisputeFailure
+	(*DomainVerificationFailure)(nil),      // 95: ramp.v1.DomainVerificationFailure
+	(*RetrievalAuthFailure)(nil),           // 96: ramp.v1.RetrievalAuthFailure
+	(*UsageReportRejection)(nil),           // 97: ramp.v1.UsageReportRejection
+	nil,                                    // 98: ramp.v1.ErrorDetail.MetadataEntry
+	(*durationpb.Duration)(nil),            // 99: google.protobuf.Duration
+	(*structpb.Struct)(nil),                // 100: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),          // 101: google.protobuf.Timestamp
 }
 var file_ramp_v1_ramp_proto_depIdxs = []int32{
 	3,   // 0: ramp.v1.AcceptableRestriction.axis:type_name -> ramp.v1.RestrictionKind
 	44,  // 1: ramp.v1.ResourceQuery.requester:type_name -> ramp.v1.Requester
 	28,  // 2: ramp.v1.ResourceQuery.acceptable_restrictions:type_name -> ramp.v1.AcceptableRestriction
-	96,  // 3: ramp.v1.ResourceQuery.deadline:type_name -> google.protobuf.Duration
-	97,  // 4: ramp.v1.ResourceQuery.ext:type_name -> google.protobuf.Struct
+	99,  // 3: ramp.v1.ResourceQuery.deadline:type_name -> google.protobuf.Duration
+	100, // 4: ramp.v1.ResourceQuery.ext:type_name -> google.protobuf.Struct
 	34,  // 5: ramp.v1.ResourceResponse.offers:type_name -> ramp.v1.Offer
 	31,  // 6: ramp.v1.ResourceResponse.offer_groups:type_name -> ramp.v1.OfferGroup
 	32,  // 7: ramp.v1.ResourceResponse.rate_limit:type_name -> ramp.v1.RateLimitInfo
-	97,  // 8: ramp.v1.ResourceResponse.ext:type_name -> google.protobuf.Struct
+	100, // 8: ramp.v1.ResourceResponse.ext:type_name -> google.protobuf.Struct
 	34,  // 9: ramp.v1.OfferGroup.offers:type_name -> ramp.v1.Offer
 	0,   // 10: ramp.v1.OfferGroup.discovery_method:type_name -> ramp.v1.DiscoveryMethod
 	1,   // 11: ramp.v1.OfferGroup.absence_reason:type_name -> ramp.v1.OfferAbsenceReason
 	3,   // 12: ramp.v1.OfferGroup.restriction_filters:type_name -> ramp.v1.RestrictionKind
-	98,  // 13: ramp.v1.RateLimitInfo.reset_at:type_name -> google.protobuf.Timestamp
-	96,  // 14: ramp.v1.RateLimitInfo.window:type_name -> google.protobuf.Duration
-	98,  // 15: ramp.v1.SubscriptionQuotaInfo.resets_at:type_name -> google.protobuf.Timestamp
+	101, // 13: ramp.v1.RateLimitInfo.reset_at:type_name -> google.protobuf.Timestamp
+	99,  // 14: ramp.v1.RateLimitInfo.window:type_name -> google.protobuf.Duration
+	101, // 15: ramp.v1.SubscriptionQuotaInfo.resets_at:type_name -> google.protobuf.Timestamp
 	43,  // 16: ramp.v1.Offer.pricing:type_name -> ramp.v1.Pricing
 	9,   // 17: ramp.v1.Offer.delivery_method:type_name -> ramp.v1.DeliveryMethod
-	60,  // 18: ramp.v1.Offer.reporting:type_name -> ramp.v1.ReportingObligation
-	98,  // 19: ramp.v1.Offer.expires_at:type_name -> google.protobuf.Timestamp
+	63,  // 18: ramp.v1.Offer.reporting:type_name -> ramp.v1.ReportingObligation
+	101, // 19: ramp.v1.Offer.expires_at:type_name -> google.protobuf.Timestamp
 	35,  // 20: ramp.v1.Offer.identity:type_name -> ramp.v1.ResourceIdentity
 	36,  // 21: ramp.v1.Offer.attestations:type_name -> ramp.v1.ResourceAttestation
-	98,  // 22: ramp.v1.Offer.data_as_of:type_name -> google.protobuf.Timestamp
+	101, // 22: ramp.v1.Offer.data_as_of:type_name -> google.protobuf.Timestamp
 	33,  // 23: ramp.v1.Offer.subscription_quota:type_name -> ramp.v1.SubscriptionQuotaInfo
 	42,  // 24: ramp.v1.Offer.previews:type_name -> ramp.v1.Preview
 	41,  // 25: ramp.v1.Offer.terms:type_name -> ramp.v1.LicenseTerm
-	97,  // 26: ramp.v1.Offer.ext:type_name -> google.protobuf.Struct
+	100, // 26: ramp.v1.Offer.ext:type_name -> google.protobuf.Struct
 	12,  // 27: ramp.v1.ResourceIdentity.resource_mutability:type_name -> ramp.v1.ResourceMutability
 	11,  // 28: ramp.v1.ResourceIdentity.c2pa_status:type_name -> ramp.v1.C2PAStatus
-	97,  // 29: ramp.v1.ResourceIdentity.ext:type_name -> google.protobuf.Struct
-	98,  // 30: ramp.v1.ResourceAttestation.attested_at:type_name -> google.protobuf.Timestamp
-	97,  // 31: ramp.v1.ResourceAttestation.claims:type_name -> google.protobuf.Struct
+	100, // 29: ramp.v1.ResourceIdentity.ext:type_name -> google.protobuf.Struct
+	101, // 30: ramp.v1.ResourceAttestation.attested_at:type_name -> google.protobuf.Timestamp
+	100, // 31: ramp.v1.ResourceAttestation.claims:type_name -> google.protobuf.Struct
 	3,   // 32: ramp.v1.Restriction.kind:type_name -> ramp.v1.RestrictionKind
 	4,   // 33: ramp.v1.Quota.window:type_name -> ramp.v1.QuotaWindow
 	5,   // 34: ramp.v1.Obligation.kind:type_name -> ramp.v1.ObligationKind
@@ -10779,133 +11042,136 @@ var file_ramp_v1_ramp_proto_depIdxs = []int32{
 	8,   // 44: ramp.v1.Pricing.metering:type_name -> ramp.v1.PricingMetering
 	10,  // 45: ramp.v1.Requester.type:type_name -> ramp.v1.RequesterType
 	45,  // 46: ramp.v1.Requester.delegation:type_name -> ramp.v1.Delegation
-	97,  // 47: ramp.v1.Requester.ext:type_name -> google.protobuf.Struct
-	98,  // 48: ramp.v1.Delegation.expires_at:type_name -> google.protobuf.Timestamp
-	96,  // 49: ramp.v1.Delegation.quota_period:type_name -> google.protobuf.Duration
-	97,  // 50: ramp.v1.Delegation.ext:type_name -> google.protobuf.Struct
-	44,  // 51: ramp.v1.TransactionRequest.requester:type_name -> ramp.v1.Requester
-	49,  // 52: ramp.v1.TransactionRequest.items:type_name -> ramp.v1.TransactionItem
-	97,  // 53: ramp.v1.TransactionRequest.ext:type_name -> google.protobuf.Struct
-	34,  // 54: ramp.v1.TransactionItem.offer:type_name -> ramp.v1.Offer
-	46,  // 55: ramp.v1.TransactionItem.agent_acceptance:type_name -> ramp.v1.AgentAcceptance
-	51,  // 56: ramp.v1.TransactionResponse.items:type_name -> ramp.v1.TransactionResultItem
-	52,  // 57: ramp.v1.TransactionResponse.total_cost:type_name -> ramp.v1.Cost
-	33,  // 58: ramp.v1.TransactionResponse.subscription_quota:type_name -> ramp.v1.SubscriptionQuotaInfo
-	97,  // 59: ramp.v1.TransactionResponse.ext:type_name -> google.protobuf.Struct
-	52,  // 60: ramp.v1.TransactionResultItem.cost:type_name -> ramp.v1.Cost
-	52,  // 61: ramp.v1.TransactionResultItem.subscription_unit_value:type_name -> ramp.v1.Cost
-	13,  // 62: ramp.v1.TransactionResultItem.denial_reason:type_name -> ramp.v1.DenialReason
-	3,   // 63: ramp.v1.TransactionResultItem.restriction_mismatches:type_name -> ramp.v1.RestrictionKind
-	98,  // 64: ramp.v1.TransactionResultItem.expires_at:type_name -> google.protobuf.Timestamp
-	9,   // 65: ramp.v1.TransactionResultItem.delivery_method:type_name -> ramp.v1.DeliveryMethod
-	60,  // 66: ramp.v1.TransactionResultItem.reporting_obligation:type_name -> ramp.v1.ReportingObligation
-	54,  // 67: ramp.v1.PushResourcesRequest.entries:type_name -> ramp.v1.ResourceEntry
-	97,  // 68: ramp.v1.PushResourcesRequest.ext:type_name -> google.protobuf.Struct
-	14,  // 69: ramp.v1.ResourceEntry.source:type_name -> ramp.v1.IngestionSource
-	98,  // 70: ramp.v1.ResourceEntry.provenance_timestamp:type_name -> google.protobuf.Timestamp
-	36,  // 71: ramp.v1.ResourceEntry.attestations:type_name -> ramp.v1.ResourceAttestation
-	41,  // 72: ramp.v1.ResourceEntry.terms:type_name -> ramp.v1.LicenseTerm
-	12,  // 73: ramp.v1.ResourceEntry.resource_mutability:type_name -> ramp.v1.ResourceMutability
-	97,  // 74: ramp.v1.ResourceEntry.ext:type_name -> google.protobuf.Struct
-	97,  // 75: ramp.v1.PushResourcesResponse.ext:type_name -> google.protobuf.Struct
-	96,  // 76: ramp.v1.ReportingObligation.window:type_name -> google.protobuf.Duration
-	97,  // 77: ramp.v1.ReportingObligation.ext:type_name -> google.protobuf.Struct
-	63,  // 78: ramp.v1.UsageReport.usage:type_name -> ramp.v1.Usage
-	98,  // 79: ramp.v1.UsageReport.timestamp:type_name -> google.protobuf.Timestamp
-	64,  // 80: ramp.v1.UsageReport.assets:type_name -> ramp.v1.UsageAsset
-	97,  // 81: ramp.v1.UsageReport.ext:type_name -> google.protobuf.Struct
-	15,  // 82: ramp.v1.AttributionDetail.format:type_name -> ramp.v1.CitationFormat
-	62,  // 83: ramp.v1.Usage.attribution:type_name -> ramp.v1.AttributionDetail
-	97,  // 84: ramp.v1.UsageReportResponse.ext:type_name -> google.protobuf.Struct
-	44,  // 85: ramp.v1.DiscoveryRequest.requester:type_name -> ramp.v1.Requester
-	28,  // 86: ramp.v1.DiscoveryRequest.acceptable_restrictions:type_name -> ramp.v1.AcceptableRestriction
-	67,  // 87: ramp.v1.DiscoveryRequest.constraints:type_name -> ramp.v1.RequestConstraints
-	97,  // 88: ramp.v1.DiscoveryRequest.search_filters:type_name -> google.protobuf.Struct
-	97,  // 89: ramp.v1.DiscoveryRequest.ext:type_name -> google.protobuf.Struct
-	52,  // 90: ramp.v1.RequestConstraints.max_price:type_name -> ramp.v1.Cost
-	9,   // 91: ramp.v1.RequestConstraints.delivery_preference:type_name -> ramp.v1.DeliveryMethod
-	52,  // 92: ramp.v1.RequestConstraints.period_budget:type_name -> ramp.v1.Cost
-	96,  // 93: ramp.v1.RequestConstraints.budget_period:type_name -> google.protobuf.Duration
-	96,  // 94: ramp.v1.RequestConstraints.max_data_age:type_name -> google.protobuf.Duration
-	97,  // 95: ramp.v1.AccountRegistration.data_schema:type_name -> google.protobuf.Struct
-	16,  // 96: ramp.v1.WellKnownManifest.role:type_name -> ramp.v1.Role
-	74,  // 97: ramp.v1.WellKnownManifest.exchanges:type_name -> ramp.v1.AuthorizedExchange
-	73,  // 98: ramp.v1.WellKnownManifest.catalog_contributors:type_name -> ramp.v1.CatalogContributor
-	7,   // 99: ramp.v1.WellKnownManifest.pricing_models_supported:type_name -> ramp.v1.PricingModel
-	9,   // 100: ramp.v1.WellKnownManifest.delivery_methods_supported:type_name -> ramp.v1.DeliveryMethod
-	18,  // 101: ramp.v1.WellKnownManifest.supported_auth_methods:type_name -> ramp.v1.AuthMethod
-	69,  // 102: ramp.v1.WellKnownManifest.account_registration:type_name -> ramp.v1.AccountRegistration
-	97,  // 103: ramp.v1.WellKnownManifest.ext:type_name -> google.protobuf.Struct
-	68,  // 104: ramp.v1.WBAFile.keys:type_name -> ramp.v1.JsonWebKey
-	98,  // 105: ramp.v1.KeyRevocationList.as_of:type_name -> google.protobuf.Timestamp
-	17,  // 106: ramp.v1.AuthorizedExchange.relationship:type_name -> ramp.v1.ProviderRelationship
-	97,  // 107: ramp.v1.AuthorizedExchange.ext:type_name -> google.protobuf.Struct
-	31,  // 108: ramp.v1.DiscoveryResponse.offer_groups:type_name -> ramp.v1.OfferGroup
-	1,   // 109: ramp.v1.DiscoveryResponse.absence_reason:type_name -> ramp.v1.OfferAbsenceReason
-	97,  // 110: ramp.v1.DiscoveryResponse.ext:type_name -> google.protobuf.Struct
-	19,  // 111: ramp.v1.DisputeRequest.reason:type_name -> ramp.v1.DisputeReason
-	97,  // 112: ramp.v1.DisputeRequest.ext:type_name -> google.protobuf.Struct
-	96,  // 113: ramp.v1.DisputeResponse.estimated_resolution:type_name -> google.protobuf.Duration
-	20,  // 114: ramp.v1.DisputeResponse.status:type_name -> ramp.v1.DisputeStatus
-	21,  // 115: ramp.v1.DisputeResponse.resolution:type_name -> ramp.v1.ResolutionType
-	97,  // 116: ramp.v1.DisputeResponse.ext:type_name -> google.protobuf.Struct
-	97,  // 117: ramp.v1.DomainVerificationRequest.ext:type_name -> google.protobuf.Struct
-	98,  // 118: ramp.v1.DomainVerificationChallenge.expires_at:type_name -> google.protobuf.Timestamp
-	97,  // 119: ramp.v1.DomainVerificationChallenge.ext:type_name -> google.protobuf.Struct
-	97,  // 120: ramp.v1.DomainVerificationConfirmation.ext:type_name -> google.protobuf.Struct
-	98,  // 121: ramp.v1.DomainVerificationResult.valid_until:type_name -> google.protobuf.Timestamp
-	97,  // 122: ramp.v1.DomainVerificationResult.ext:type_name -> google.protobuf.Struct
-	97,  // 123: ramp.v1.RegisterRequest.registration_data:type_name -> google.protobuf.Struct
-	97,  // 124: ramp.v1.RegisterRequest.ext:type_name -> google.protobuf.Struct
-	97,  // 125: ramp.v1.RegisterResponse.ext:type_name -> google.protobuf.Struct
-	97,  // 126: ramp.v1.GetAccountStatusRequest.ext:type_name -> google.protobuf.Struct
-	97,  // 127: ramp.v1.GetAccountStatusResponse.ext:type_name -> google.protobuf.Struct
-	95,  // 128: ramp.v1.ErrorDetail.metadata:type_name -> ramp.v1.ErrorDetail.MetadataEntry
-	87,  // 129: ramp.v1.ErrorDetail.transaction_denial:type_name -> ramp.v1.TransactionDenial
-	88,  // 130: ramp.v1.ErrorDetail.catalog_rejection:type_name -> ramp.v1.CatalogRejection
-	89,  // 131: ramp.v1.ErrorDetail.registration_failure:type_name -> ramp.v1.RegistrationFailure
-	91,  // 132: ramp.v1.ErrorDetail.dispute_failure:type_name -> ramp.v1.DisputeFailure
-	92,  // 133: ramp.v1.ErrorDetail.domain_verification_failure:type_name -> ramp.v1.DomainVerificationFailure
-	93,  // 134: ramp.v1.ErrorDetail.retrieval_auth_failure:type_name -> ramp.v1.RetrievalAuthFailure
-	94,  // 135: ramp.v1.ErrorDetail.usage_report_rejection:type_name -> ramp.v1.UsageReportRejection
-	13,  // 136: ramp.v1.TransactionDenial.reason:type_name -> ramp.v1.DenialReason
-	3,   // 137: ramp.v1.TransactionDenial.restriction_mismatches:type_name -> ramp.v1.RestrictionKind
-	22,  // 138: ramp.v1.CatalogRejection.reason:type_name -> ramp.v1.CatalogRejectionReason
-	23,  // 139: ramp.v1.RegistrationFailure.reason:type_name -> ramp.v1.RegistrationFailureReason
-	90,  // 140: ramp.v1.RegistrationFailure.field_errors:type_name -> ramp.v1.RegistrationFieldError
-	24,  // 141: ramp.v1.DisputeFailure.reason:type_name -> ramp.v1.DisputeFailureReason
-	25,  // 142: ramp.v1.DomainVerificationFailure.reason:type_name -> ramp.v1.DomainVerificationFailureReason
-	26,  // 143: ramp.v1.RetrievalAuthFailure.reason:type_name -> ramp.v1.RetrievalAuthFailureReason
-	27,  // 144: ramp.v1.UsageReportRejection.reason:type_name -> ramp.v1.UsageReportRejectionReason
-	29,  // 145: ramp.v1.ExchangeService.DiscoverResources:input_type -> ramp.v1.ResourceQuery
-	48,  // 146: ramp.v1.ExchangeService.ExecuteTransaction:input_type -> ramp.v1.TransactionRequest
-	61,  // 147: ramp.v1.ExchangeService.ReportUsage:input_type -> ramp.v1.UsageReport
-	76,  // 148: ramp.v1.ExchangeService.DisputeTransaction:input_type -> ramp.v1.DisputeRequest
-	78,  // 149: ramp.v1.ExchangeService.RequestDomainVerification:input_type -> ramp.v1.DomainVerificationRequest
-	80,  // 150: ramp.v1.ExchangeService.ConfirmDomainVerification:input_type -> ramp.v1.DomainVerificationConfirmation
-	82,  // 151: ramp.v1.ExchangeService.Register:input_type -> ramp.v1.RegisterRequest
-	84,  // 152: ramp.v1.ExchangeService.GetAccountStatus:input_type -> ramp.v1.GetAccountStatusRequest
-	53,  // 153: ramp.v1.CatalogService.PushResources:input_type -> ramp.v1.PushResourcesRequest
-	56,  // 154: ramp.v1.CatalogService.RemoveResources:input_type -> ramp.v1.RemoveResourcesRequest
-	58,  // 155: ramp.v1.CatalogService.RefreshCatalog:input_type -> ramp.v1.RefreshCatalogRequest
-	66,  // 156: ramp.v1.BrokerService.Resolve:input_type -> ramp.v1.DiscoveryRequest
-	30,  // 157: ramp.v1.ExchangeService.DiscoverResources:output_type -> ramp.v1.ResourceResponse
-	50,  // 158: ramp.v1.ExchangeService.ExecuteTransaction:output_type -> ramp.v1.TransactionResponse
-	65,  // 159: ramp.v1.ExchangeService.ReportUsage:output_type -> ramp.v1.UsageReportResponse
-	77,  // 160: ramp.v1.ExchangeService.DisputeTransaction:output_type -> ramp.v1.DisputeResponse
-	79,  // 161: ramp.v1.ExchangeService.RequestDomainVerification:output_type -> ramp.v1.DomainVerificationChallenge
-	81,  // 162: ramp.v1.ExchangeService.ConfirmDomainVerification:output_type -> ramp.v1.DomainVerificationResult
-	83,  // 163: ramp.v1.ExchangeService.Register:output_type -> ramp.v1.RegisterResponse
-	85,  // 164: ramp.v1.ExchangeService.GetAccountStatus:output_type -> ramp.v1.GetAccountStatusResponse
-	55,  // 165: ramp.v1.CatalogService.PushResources:output_type -> ramp.v1.PushResourcesResponse
-	57,  // 166: ramp.v1.CatalogService.RemoveResources:output_type -> ramp.v1.RemoveResourcesResponse
-	59,  // 167: ramp.v1.CatalogService.RefreshCatalog:output_type -> ramp.v1.RefreshCatalogResponse
-	75,  // 168: ramp.v1.BrokerService.Resolve:output_type -> ramp.v1.DiscoveryResponse
-	157, // [157:169] is the sub-list for method output_type
-	145, // [145:157] is the sub-list for method input_type
-	145, // [145:145] is the sub-list for extension type_name
-	145, // [145:145] is the sub-list for extension extendee
-	0,   // [0:145] is the sub-list for field type_name
+	100, // 47: ramp.v1.Requester.ext:type_name -> google.protobuf.Struct
+	101, // 48: ramp.v1.Delegation.expires_at:type_name -> google.protobuf.Timestamp
+	99,  // 49: ramp.v1.Delegation.quota_period:type_name -> google.protobuf.Duration
+	100, // 50: ramp.v1.Delegation.ext:type_name -> google.protobuf.Struct
+	49,  // 51: ramp.v1.AgentRequestAcceptance.payload:type_name -> ramp.v1.AgentRequestAcceptancePayload
+	48,  // 52: ramp.v1.AgentRequestAcceptancePayload.items:type_name -> ramp.v1.AgentRequestAcceptanceItem
+	44,  // 53: ramp.v1.TransactionRequest.requester:type_name -> ramp.v1.Requester
+	52,  // 54: ramp.v1.TransactionRequest.items:type_name -> ramp.v1.TransactionItem
+	47,  // 55: ramp.v1.TransactionRequest.agent_request_acceptance:type_name -> ramp.v1.AgentRequestAcceptance
+	100, // 56: ramp.v1.TransactionRequest.ext:type_name -> google.protobuf.Struct
+	34,  // 57: ramp.v1.TransactionItem.offer:type_name -> ramp.v1.Offer
+	46,  // 58: ramp.v1.TransactionItem.agent_acceptance:type_name -> ramp.v1.AgentAcceptance
+	54,  // 59: ramp.v1.TransactionResponse.items:type_name -> ramp.v1.TransactionResultItem
+	55,  // 60: ramp.v1.TransactionResponse.total_cost:type_name -> ramp.v1.Cost
+	33,  // 61: ramp.v1.TransactionResponse.subscription_quota:type_name -> ramp.v1.SubscriptionQuotaInfo
+	100, // 62: ramp.v1.TransactionResponse.ext:type_name -> google.protobuf.Struct
+	55,  // 63: ramp.v1.TransactionResultItem.cost:type_name -> ramp.v1.Cost
+	55,  // 64: ramp.v1.TransactionResultItem.subscription_unit_value:type_name -> ramp.v1.Cost
+	13,  // 65: ramp.v1.TransactionResultItem.denial_reason:type_name -> ramp.v1.DenialReason
+	3,   // 66: ramp.v1.TransactionResultItem.restriction_mismatches:type_name -> ramp.v1.RestrictionKind
+	101, // 67: ramp.v1.TransactionResultItem.expires_at:type_name -> google.protobuf.Timestamp
+	9,   // 68: ramp.v1.TransactionResultItem.delivery_method:type_name -> ramp.v1.DeliveryMethod
+	63,  // 69: ramp.v1.TransactionResultItem.reporting_obligation:type_name -> ramp.v1.ReportingObligation
+	57,  // 70: ramp.v1.PushResourcesRequest.entries:type_name -> ramp.v1.ResourceEntry
+	100, // 71: ramp.v1.PushResourcesRequest.ext:type_name -> google.protobuf.Struct
+	14,  // 72: ramp.v1.ResourceEntry.source:type_name -> ramp.v1.IngestionSource
+	101, // 73: ramp.v1.ResourceEntry.provenance_timestamp:type_name -> google.protobuf.Timestamp
+	36,  // 74: ramp.v1.ResourceEntry.attestations:type_name -> ramp.v1.ResourceAttestation
+	41,  // 75: ramp.v1.ResourceEntry.terms:type_name -> ramp.v1.LicenseTerm
+	12,  // 76: ramp.v1.ResourceEntry.resource_mutability:type_name -> ramp.v1.ResourceMutability
+	100, // 77: ramp.v1.ResourceEntry.ext:type_name -> google.protobuf.Struct
+	100, // 78: ramp.v1.PushResourcesResponse.ext:type_name -> google.protobuf.Struct
+	99,  // 79: ramp.v1.ReportingObligation.window:type_name -> google.protobuf.Duration
+	100, // 80: ramp.v1.ReportingObligation.ext:type_name -> google.protobuf.Struct
+	66,  // 81: ramp.v1.UsageReport.usage:type_name -> ramp.v1.Usage
+	101, // 82: ramp.v1.UsageReport.timestamp:type_name -> google.protobuf.Timestamp
+	67,  // 83: ramp.v1.UsageReport.assets:type_name -> ramp.v1.UsageAsset
+	100, // 84: ramp.v1.UsageReport.ext:type_name -> google.protobuf.Struct
+	15,  // 85: ramp.v1.AttributionDetail.format:type_name -> ramp.v1.CitationFormat
+	65,  // 86: ramp.v1.Usage.attribution:type_name -> ramp.v1.AttributionDetail
+	100, // 87: ramp.v1.UsageReportResponse.ext:type_name -> google.protobuf.Struct
+	44,  // 88: ramp.v1.DiscoveryRequest.requester:type_name -> ramp.v1.Requester
+	28,  // 89: ramp.v1.DiscoveryRequest.acceptable_restrictions:type_name -> ramp.v1.AcceptableRestriction
+	70,  // 90: ramp.v1.DiscoveryRequest.constraints:type_name -> ramp.v1.RequestConstraints
+	100, // 91: ramp.v1.DiscoveryRequest.search_filters:type_name -> google.protobuf.Struct
+	100, // 92: ramp.v1.DiscoveryRequest.ext:type_name -> google.protobuf.Struct
+	55,  // 93: ramp.v1.RequestConstraints.max_price:type_name -> ramp.v1.Cost
+	9,   // 94: ramp.v1.RequestConstraints.delivery_preference:type_name -> ramp.v1.DeliveryMethod
+	55,  // 95: ramp.v1.RequestConstraints.period_budget:type_name -> ramp.v1.Cost
+	99,  // 96: ramp.v1.RequestConstraints.budget_period:type_name -> google.protobuf.Duration
+	99,  // 97: ramp.v1.RequestConstraints.max_data_age:type_name -> google.protobuf.Duration
+	100, // 98: ramp.v1.AccountRegistration.data_schema:type_name -> google.protobuf.Struct
+	16,  // 99: ramp.v1.WellKnownManifest.role:type_name -> ramp.v1.Role
+	77,  // 100: ramp.v1.WellKnownManifest.exchanges:type_name -> ramp.v1.AuthorizedExchange
+	76,  // 101: ramp.v1.WellKnownManifest.catalog_contributors:type_name -> ramp.v1.CatalogContributor
+	7,   // 102: ramp.v1.WellKnownManifest.pricing_models_supported:type_name -> ramp.v1.PricingModel
+	9,   // 103: ramp.v1.WellKnownManifest.delivery_methods_supported:type_name -> ramp.v1.DeliveryMethod
+	18,  // 104: ramp.v1.WellKnownManifest.supported_auth_methods:type_name -> ramp.v1.AuthMethod
+	72,  // 105: ramp.v1.WellKnownManifest.account_registration:type_name -> ramp.v1.AccountRegistration
+	100, // 106: ramp.v1.WellKnownManifest.ext:type_name -> google.protobuf.Struct
+	71,  // 107: ramp.v1.WBAFile.keys:type_name -> ramp.v1.JsonWebKey
+	101, // 108: ramp.v1.KeyRevocationList.as_of:type_name -> google.protobuf.Timestamp
+	17,  // 109: ramp.v1.AuthorizedExchange.relationship:type_name -> ramp.v1.ProviderRelationship
+	100, // 110: ramp.v1.AuthorizedExchange.ext:type_name -> google.protobuf.Struct
+	31,  // 111: ramp.v1.DiscoveryResponse.offer_groups:type_name -> ramp.v1.OfferGroup
+	1,   // 112: ramp.v1.DiscoveryResponse.absence_reason:type_name -> ramp.v1.OfferAbsenceReason
+	100, // 113: ramp.v1.DiscoveryResponse.ext:type_name -> google.protobuf.Struct
+	19,  // 114: ramp.v1.DisputeRequest.reason:type_name -> ramp.v1.DisputeReason
+	100, // 115: ramp.v1.DisputeRequest.ext:type_name -> google.protobuf.Struct
+	99,  // 116: ramp.v1.DisputeResponse.estimated_resolution:type_name -> google.protobuf.Duration
+	20,  // 117: ramp.v1.DisputeResponse.status:type_name -> ramp.v1.DisputeStatus
+	21,  // 118: ramp.v1.DisputeResponse.resolution:type_name -> ramp.v1.ResolutionType
+	100, // 119: ramp.v1.DisputeResponse.ext:type_name -> google.protobuf.Struct
+	100, // 120: ramp.v1.DomainVerificationRequest.ext:type_name -> google.protobuf.Struct
+	101, // 121: ramp.v1.DomainVerificationChallenge.expires_at:type_name -> google.protobuf.Timestamp
+	100, // 122: ramp.v1.DomainVerificationChallenge.ext:type_name -> google.protobuf.Struct
+	100, // 123: ramp.v1.DomainVerificationConfirmation.ext:type_name -> google.protobuf.Struct
+	101, // 124: ramp.v1.DomainVerificationResult.valid_until:type_name -> google.protobuf.Timestamp
+	100, // 125: ramp.v1.DomainVerificationResult.ext:type_name -> google.protobuf.Struct
+	100, // 126: ramp.v1.RegisterRequest.registration_data:type_name -> google.protobuf.Struct
+	100, // 127: ramp.v1.RegisterRequest.ext:type_name -> google.protobuf.Struct
+	100, // 128: ramp.v1.RegisterResponse.ext:type_name -> google.protobuf.Struct
+	100, // 129: ramp.v1.GetAccountStatusRequest.ext:type_name -> google.protobuf.Struct
+	100, // 130: ramp.v1.GetAccountStatusResponse.ext:type_name -> google.protobuf.Struct
+	98,  // 131: ramp.v1.ErrorDetail.metadata:type_name -> ramp.v1.ErrorDetail.MetadataEntry
+	90,  // 132: ramp.v1.ErrorDetail.transaction_denial:type_name -> ramp.v1.TransactionDenial
+	91,  // 133: ramp.v1.ErrorDetail.catalog_rejection:type_name -> ramp.v1.CatalogRejection
+	92,  // 134: ramp.v1.ErrorDetail.registration_failure:type_name -> ramp.v1.RegistrationFailure
+	94,  // 135: ramp.v1.ErrorDetail.dispute_failure:type_name -> ramp.v1.DisputeFailure
+	95,  // 136: ramp.v1.ErrorDetail.domain_verification_failure:type_name -> ramp.v1.DomainVerificationFailure
+	96,  // 137: ramp.v1.ErrorDetail.retrieval_auth_failure:type_name -> ramp.v1.RetrievalAuthFailure
+	97,  // 138: ramp.v1.ErrorDetail.usage_report_rejection:type_name -> ramp.v1.UsageReportRejection
+	13,  // 139: ramp.v1.TransactionDenial.reason:type_name -> ramp.v1.DenialReason
+	3,   // 140: ramp.v1.TransactionDenial.restriction_mismatches:type_name -> ramp.v1.RestrictionKind
+	22,  // 141: ramp.v1.CatalogRejection.reason:type_name -> ramp.v1.CatalogRejectionReason
+	23,  // 142: ramp.v1.RegistrationFailure.reason:type_name -> ramp.v1.RegistrationFailureReason
+	93,  // 143: ramp.v1.RegistrationFailure.field_errors:type_name -> ramp.v1.RegistrationFieldError
+	24,  // 144: ramp.v1.DisputeFailure.reason:type_name -> ramp.v1.DisputeFailureReason
+	25,  // 145: ramp.v1.DomainVerificationFailure.reason:type_name -> ramp.v1.DomainVerificationFailureReason
+	26,  // 146: ramp.v1.RetrievalAuthFailure.reason:type_name -> ramp.v1.RetrievalAuthFailureReason
+	27,  // 147: ramp.v1.UsageReportRejection.reason:type_name -> ramp.v1.UsageReportRejectionReason
+	29,  // 148: ramp.v1.ExchangeService.DiscoverResources:input_type -> ramp.v1.ResourceQuery
+	51,  // 149: ramp.v1.ExchangeService.ExecuteTransaction:input_type -> ramp.v1.TransactionRequest
+	64,  // 150: ramp.v1.ExchangeService.ReportUsage:input_type -> ramp.v1.UsageReport
+	79,  // 151: ramp.v1.ExchangeService.DisputeTransaction:input_type -> ramp.v1.DisputeRequest
+	81,  // 152: ramp.v1.ExchangeService.RequestDomainVerification:input_type -> ramp.v1.DomainVerificationRequest
+	83,  // 153: ramp.v1.ExchangeService.ConfirmDomainVerification:input_type -> ramp.v1.DomainVerificationConfirmation
+	85,  // 154: ramp.v1.ExchangeService.Register:input_type -> ramp.v1.RegisterRequest
+	87,  // 155: ramp.v1.ExchangeService.GetAccountStatus:input_type -> ramp.v1.GetAccountStatusRequest
+	56,  // 156: ramp.v1.CatalogService.PushResources:input_type -> ramp.v1.PushResourcesRequest
+	59,  // 157: ramp.v1.CatalogService.RemoveResources:input_type -> ramp.v1.RemoveResourcesRequest
+	61,  // 158: ramp.v1.CatalogService.RefreshCatalog:input_type -> ramp.v1.RefreshCatalogRequest
+	69,  // 159: ramp.v1.BrokerService.Resolve:input_type -> ramp.v1.DiscoveryRequest
+	30,  // 160: ramp.v1.ExchangeService.DiscoverResources:output_type -> ramp.v1.ResourceResponse
+	53,  // 161: ramp.v1.ExchangeService.ExecuteTransaction:output_type -> ramp.v1.TransactionResponse
+	68,  // 162: ramp.v1.ExchangeService.ReportUsage:output_type -> ramp.v1.UsageReportResponse
+	80,  // 163: ramp.v1.ExchangeService.DisputeTransaction:output_type -> ramp.v1.DisputeResponse
+	82,  // 164: ramp.v1.ExchangeService.RequestDomainVerification:output_type -> ramp.v1.DomainVerificationChallenge
+	84,  // 165: ramp.v1.ExchangeService.ConfirmDomainVerification:output_type -> ramp.v1.DomainVerificationResult
+	86,  // 166: ramp.v1.ExchangeService.Register:output_type -> ramp.v1.RegisterResponse
+	88,  // 167: ramp.v1.ExchangeService.GetAccountStatus:output_type -> ramp.v1.GetAccountStatusResponse
+	58,  // 168: ramp.v1.CatalogService.PushResources:output_type -> ramp.v1.PushResourcesResponse
+	60,  // 169: ramp.v1.CatalogService.RemoveResources:output_type -> ramp.v1.RemoveResourcesResponse
+	62,  // 170: ramp.v1.CatalogService.RefreshCatalog:output_type -> ramp.v1.RefreshCatalogResponse
+	78,  // 171: ramp.v1.BrokerService.Resolve:output_type -> ramp.v1.DiscoveryResponse
+	160, // [160:172] is the sub-list for method output_type
+	148, // [148:160] is the sub-list for method input_type
+	148, // [148:148] is the sub-list for extension type_name
+	148, // [148:148] is the sub-list for extension extendee
+	0,   // [0:148] is the sub-list for field type_name
 }
 
 func init() { file_ramp_v1_ramp_proto_init() }
@@ -10928,28 +11194,29 @@ func file_ramp_v1_ramp_proto_init() {
 	file_ramp_v1_ramp_proto_msgTypes[15].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[16].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[17].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[21].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[22].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[23].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[24].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[25].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[26].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[32].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[34].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[27].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[29].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[35].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[36].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[37].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[38].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[39].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[41].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[42].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[43].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[47].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[48].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[49].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[45].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[46].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[50].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[51].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[52].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[53].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[54].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[55].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[56].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[57].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[58].OneofWrappers = []any{
+	file_ramp_v1_ramp_proto_msgTypes[60].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[61].OneofWrappers = []any{
 		(*ErrorDetail_TransactionDenial)(nil),
 		(*ErrorDetail_CatalogRejection)(nil),
 		(*ErrorDetail_RegistrationFailure)(nil),
@@ -10958,14 +11225,14 @@ func file_ramp_v1_ramp_proto_init() {
 		(*ErrorDetail_RetrievalAuthFailure)(nil),
 		(*ErrorDetail_UsageReportRejection)(nil),
 	}
-	file_ramp_v1_ramp_proto_msgTypes[59].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[62].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ramp_v1_ramp_proto_rawDesc), len(file_ramp_v1_ramp_proto_rawDesc)),
 			NumEnums:      28,
-			NumMessages:   68,
+			NumMessages:   71,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

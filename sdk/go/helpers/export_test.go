@@ -7,3 +7,9 @@ import "github.com/santhosh-tekuri/jsonschema/v6"
 // surface and never reaches the API-parity gate — the loader is an implementation
 // detail that only a test needs to reach past the scan to exercise.
 func RefusingSchemaLoaderForTest() jsonschema.URLLoader { return refusingSchemaLoader{} }
+
+// MaxRequestAcceptanceItemsForTest exposes the canonicalization item cap so the
+// external test binary can pin it to the wire rule on
+// AgentRequestAcceptancePayload.items. Declared in a _test.go file, so it never
+// reaches the API-parity gate.
+const MaxRequestAcceptanceItemsForTest = maxRequestAcceptanceItems

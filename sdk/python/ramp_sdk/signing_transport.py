@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ramp_sdk.core import sign_offer_acceptance_jcs
+from ramp_sdk.core import sign_request_acceptance_jcs
 from ramp_sdk.httpsig import sign_request
 from ramp_sdk.pop import sign_agent_binding
 from ramp_sdk.window import Window, clock_window
@@ -109,6 +110,23 @@ class SigningTransport:
         return sign_offer_acceptance_jcs(
             seed=self._signer_seed,
             offer_sig=offer_sig,
+            requester_id=requester_id,
+            requester_domain=requester_domain,
+            idempotency_key=idempotency_key,
+        )
+
+    def sign_request_acceptance(
+        self,
+        *,
+        items: list[tuple[str, str]],
+        requester_id: str,
+        requester_domain: str,
+        idempotency_key: str,
+    ) -> tuple[str, str]:
+        """Sign the complete ordered execute set with the request-signing key."""
+        return sign_request_acceptance_jcs(
+            seed=self._signer_seed,
+            items=items,
             requester_id=requester_id,
             requester_domain=requester_domain,
             idempotency_key=idempotency_key,

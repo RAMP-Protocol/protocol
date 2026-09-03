@@ -40,9 +40,12 @@ agent's identity (`agent_identity_hash`) and needs no return-path relay.
 
 ## Canonical signing: JCS over proto-JSON, not deterministic protobuf
 
-The two signed RAMP payloads that cover a protobuf message — `Offer.signature` and
-the agent's `AgentAcceptance.signature` — originally covered deterministic protobuf
-*binary*: marshal the message with deterministic field order, sign those bytes. We
+Three signed RAMP payloads cover a protobuf message: `Offer.signature`, the
+agent's `AgentAcceptance.signature`, and the agent's
+`AgentRequestAcceptance.signature` — the request-set proof, added later and born
+directly onto the settled form. The first two originally covered deterministic
+protobuf *binary*: marshal the message with deterministic field order, sign
+those bytes. We
 reversed that and moved both onto RFC 8785 JCS over canonical proto-JSON,
 `JCS(protojson(msg with the signature fields cleared))`, under one pinned
 proto-JSON option set (snake_case field names, enums as name strings, unpopulated
@@ -78,15 +81,18 @@ One clause of that pinned option set carries more weight than it looks.
 with an empty value — so the canonical bytes for an empty string field are never the
 bytes for a populated one. Go inherits that from `protojson` for free. A port that
 assembles the JSON object by hand does not, and has to enumerate the omission for
-every field or it signs bytes Go never produces. The acceptance payload is the one
-place the Python and TS ports hand-build the object — Go renders the
-`AgentAcceptancePayload` message through the same protojson canonicalizer as the
-offer — and it is exactly where the divergence
+every field or it signs bytes Go never produces. The acceptance payloads are the
+places the Python and TS ports hand-build the object — both
+`AgentAcceptancePayload` and `AgentRequestAcceptancePayload`, the latter down to
+each entry of its nested `items` list — while Go renders both messages through
+the same protojson canonicalizer as the offer. The original acceptance payload
+is exactly where the divergence
 appeared: Python and TS dropped an empty `requester_domain` but emitted an empty
 `requester_id`, which is wire-valid because `Requester.id` carries no `min_len`. Such
 a mismatch fails closed, but it falsifies the byte-equivalence the canonical-bytes
 accessors promise, so the shared corpus now carries a vector that holds every port to
-the omission.
+the omission, and the request-acceptance vectors pin the same invariant for the
+second hand-built payload.
 
 The two reversals left a consequence worth naming, because it is the reason the
 canonical bytes are a first-class SDK export rather than an internal detail. A
@@ -95,8 +101,10 @@ re-derives the bytes at verification time has silently pinned an *already-signed
 payload to whatever canonicalization the SDK implements *later* — the failure would
 surface as "the signature does not verify", indistinguishable from "it was never
 signed". So all three SDKs expose the exact signed bytes as a public accessor
-(`CanonicalOfferBytes` / `CanonicalAcceptanceBytes` in Go, `canonical_offer_payload`
-/ `jcs_acceptance_payload` in Python, `canonicalOfferPayload` / `acceptancePayload`
+(`CanonicalOfferBytes` / `CanonicalAcceptanceBytes` /
+`CanonicalRequestAcceptanceBytes` in Go, `canonical_offer_payload` /
+`jcs_acceptance_payload` / `jcs_request_acceptance_payload` in Python,
+`canonicalOfferPayload` / `acceptancePayload` / `requestAcceptancePayload`
 in TS). A party keeping evidence stores those bytes and re-verifies against them
 verbatim, rather than trusting a future canonicalizer to reproduce the past.
 
@@ -432,6 +440,18 @@ top-level-versus-items mismatch to police. That last exemption is why
 `Offer.exchange` became presence-enforced rather than staying a plain unvalidated
 string: an empty value is unroutable, and the swap-protection its signature is
 supposed to provide is vacuous when the signed bytes carry no recipient at all.
+
+`AgentRequestAcceptanceItem.exchange` does not reopen that exemption. It is a
+signed **projection index**, not an audience field: the binding audience
+statement for a transaction stays `Offer.exchange` inside each Exchange-signed
+offer, and the item's copy exists so a recipient of a projected subrequest can
+derive which signed references must appear in its own projection without
+holding the offers addressed to other Exchanges. The
+top-level-versus-items-mismatch objection that killed a top-level audience
+field does not apply, because the projection check itself polices the copy:
+every forwarded offer must name the verifying Exchange, and every reference
+whose `exchange` names it must be present, in order, so a disagreement between
+the two spellings of the recipient is a refusal, not a latent inconsistency.
 
 ## The audience match is exact; the endpoint rule is not
 

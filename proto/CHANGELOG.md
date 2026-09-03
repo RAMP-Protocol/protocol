@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+**`TransactionRequest.agent_request_acceptance` adds an agent-signed complete
+ordered request-set proof (additive wire change).** The proof signs ordered
+`(offer_sig, exchange)` references plus requester and idempotency key using the
+same RFC 8785 JCS / detached Ed25519 convention as `AgentAcceptance`. A Broker
+forwards the envelope unchanged while projecting a mixed-Exchange request; each
+Exchange can then require the exact in-order projection addressed to itself
+before creating or serving request-level idempotency state. This prevents a
+relay from consuming an agent's key with an appended, removed, reordered, or
+valid-subset-first request.
+
+The field is optional for wire compatibility. The Go, Python, and TypeScript
+SDK clients emit it for valid routed offers, and all three signing/verifying
+faces are pinned to shared cross-language canonicalization and ordering vectors.
+
+The payload's item list is capped at 256 entries (`repeated.max_items`, the
+same ceiling a discovery query's `uris` list carries). The Go verification
+helper enforces the same bound itself and decodes and size-checks the Ed25519
+signature before rendering the payload to canonical JSON, because a verifier
+may run with wire validation off and the canonical rendering of an unbounded
+caller-controlled list is the expensive step. A test pins the helper's bound to
+the wire rule so the two cannot drift. The projection check also refuses an
+empty subrequest outright: without that, a request carrying zero items for an
+Exchange the signed set never names would compare zero against zero and report
+a verified projection.
+
+Who authenticates a projected subrequest is now written down. A projected
+subrequest is a new HTTP request its sender authors and RFC 9421-signs — a
+Broker, or the agent itself when it splits its own mixed-Exchange set. The
+agent's original HTTP signature covered the body the agent sent and does not
+travel with a projected body; the detached body signatures (`agent_acceptance`
+per item, `agent_request_acceptance` for the set) are what carry the agent's
+authorization across projection, which is why they exist. The Exchange resolves
+the acceptance verification key from the WBA directory of the requester domain
+the signed payload names, which must equal the request's `requester.domain`;
+when the requester itself signed the arriving request, that is the
+request-signing key already resolved. Holder binding for delegations still
+matches the wire signer, so a Broker may project a delegated request only when
+the agent has delegated to the Broker's key.
+
 **Signed delivery URLs are documented as Ed25519 signed by the Exchange and
 verified with its published public key, not HMAC-SHA256 over a shared secret
 (documentation correction; no wire change).** Since the initial public snapshot

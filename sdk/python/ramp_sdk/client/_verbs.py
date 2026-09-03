@@ -342,13 +342,35 @@ def plan_execute(
     # The acceptance covers the offer, the requester and the idempotency key, so a retry
     # that pins the same key reproduces byte-identical acceptance bytes. That is the
     # deliberate-replay semantic, not an accident.
+    requester_id = _str_field(cfg.requester, "id")
+    requester_domain = _str_field(cfg.requester, "domain")
+    exchange = _str_field(wire, "exchange")
+    request_items = [(offer_sig, exchange)]
+    request_acceptance: dict[str, Any] | None = None
     try:
         signature, _algorithm = cfg.signer.sign_offer_acceptance(
             offer_sig=offer_sig,
-            requester_id=_str_field(cfg.requester, "id"),
-            requester_domain=_str_field(cfg.requester, "domain"),
+            requester_id=requester_id,
+            requester_domain=requester_domain,
             idempotency_key=key,
         )
+        if exchange != "":
+            request_signature, _request_algorithm = cfg.signer.sign_request_acceptance(
+                items=request_items,
+                requester_id=requester_id,
+                requester_domain=requester_domain,
+                idempotency_key=key,
+            )
+            request_acceptance = {
+                "payload": {
+                    "items": [{"offer_sig": offer_sig, "exchange": exchange}],
+                    "requester_id": requester_id,
+                    "requester_domain": requester_domain,
+                    "idempotency_key": key,
+                },
+                "signature": request_signature,
+                "signature_algorithm": ACCEPTANCE_SIGNATURE_ALGORITHM,
+            }
     except Exception as exc:  # custody can fail any way it likes
         raise CallError(CallErrorKind.NOT_SIGNABLE, op, cause=exc) from exc
     # Items-only wire shape: a single offer is the degenerate 1-element items list, each
@@ -369,6 +391,8 @@ def plan_execute(
             }
         ],
     }
+    if request_acceptance is not None:
+        sent["agent_request_acceptance"] = request_acceptance
     validate_request(op, sent, TransactionRequest, cfg.validation)
     return _plan(cfg, _Route(op, cfg.base_url, EXCHANGE_SERVICE, "ExecuteTransaction"), sent)
 
