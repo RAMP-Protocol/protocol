@@ -51,14 +51,15 @@ export interface RegistrationRequirements {
   verdict: SchemaVerdict;
 }
 
-/** The registration-requirements face. */
-export interface RegistrationRequirementsReader {
+/** The well-known registration-requirements face, named for the concrete reader
+ * the oracle exposes (`resolvers.WellKnownRequirementsReader`). */
+export interface WellKnownRequirementsReader {
   resolveRegistrationRequirements(exchange: string): Promise<RegistrationRequirements>;
 }
 
 /** Options for the reader. `ttlMs` and `now` are deliberately absent: it caches
  * nothing, so it has no freshness to compute. */
-export interface RegistrationRequirementsOptions {
+export interface WellKnownRequirementsOptions {
   fetch?: FetchLike;
   /** Trust allowlist consulted BEFORE the fetch. A domain it rejects never
    * reaches the network. */
@@ -69,9 +70,9 @@ export interface RegistrationRequirementsOptions {
 }
 
 /** Read registration requirements from an Exchange's own well-known manifest. */
-export function createRegistrationRequirementsReader(
-  opts: RegistrationRequirementsOptions = {},
-): RegistrationRequirementsReader {
+export function createWellKnownRequirementsReader(
+  opts: WellKnownRequirementsOptions = {},
+): WellKnownRequirementsReader {
   const fetchFn: FetchLike = opts.fetch ?? defaultFetch;
   const scheme = opts.scheme && opts.scheme !== "" ? opts.scheme : "https";
   const allow = opts.allow;

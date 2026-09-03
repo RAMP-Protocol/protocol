@@ -35,7 +35,7 @@ type clientConfig struct {
 	signWindow     core.Window
 	signatureAgent string
 	endpoints      EndpointResolver
-	requirements   resolvers.RegistrationRequirementsReader
+	requirements   RegistrationRequirementsReader
 	guardedBase    *http.Transport
 	connectOpts    []connectrpc.ClientOption
 	fetchTimeout   time.Duration
@@ -257,7 +257,7 @@ func WithEndpointResolver(r EndpointResolver) ClientOption {
 // deliberately no option to supply a digest or a schema directly — a caller that
 // wants to manage its own requirements sets RegisterRequest.terms_digest, which
 // suppresses the read and says so on the message the signature covers.
-func WithRegistrationRequirements(r resolvers.RegistrationRequirementsReader) ClientOption {
+func WithRegistrationRequirements(r RegistrationRequirementsReader) ClientOption {
 	return func(c *clientConfig) { c.requirements = r }
 }
 
@@ -346,7 +346,7 @@ func (c clientConfig) resolveEndpointResolver() EndpointResolver {
 // Defaulted rather than required because a registration that leaves terms_digest
 // unset needs one to be conformant at all, and a client that silently sent no
 // digest would earn a refusal the caller could not diagnose from this side.
-func (c clientConfig) resolveRequirementsReader() resolvers.RegistrationRequirementsReader {
+func (c clientConfig) resolveRequirementsReader() RegistrationRequirementsReader {
 	if c.requirements != nil {
 		return c.requirements
 	}

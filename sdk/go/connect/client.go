@@ -39,7 +39,7 @@ type Client struct {
 	// requirements reads what an Exchange asks of a registration. It holds no
 	// document cache, which the terms-digest rule depends on — see
 	// WithRegistrationRequirements.
-	requirements resolvers.RegistrationRequirementsReader
+	requirements RegistrationRequirementsReader
 	// fetcher is the content leg. It dials, so it lives one tier down.
 	fetcher *resolvers.ContentFetcher
 }

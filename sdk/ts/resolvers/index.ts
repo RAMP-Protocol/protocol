@@ -29,10 +29,10 @@ export {
 	type OfferDirectoryFetch,
 } from "./offer-key-cache.ts";
 export {
-	createRegistrationRequirementsReader,
+	createWellKnownRequirementsReader,
 	type RegistrationRequirements,
-	type RegistrationRequirementsOptions,
-	type RegistrationRequirementsReader,
+	type WellKnownRequirementsOptions,
+	type WellKnownRequirementsReader,
 } from "./registration-requirements.ts";
 export { allowedScheme, blockedAddress } from "./ssrf.ts";
 export { createStaticKeyResolver, type StaticKeyResolver } from "./static.ts";

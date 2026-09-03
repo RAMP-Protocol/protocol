@@ -41,8 +41,10 @@ from ramp_sdk.resolvers import _ssrf, guarded_client
 if TYPE_CHECKING:
     from wire.models import (
         DisputeResponse,
+        GetAccountStatusResponse,
         PushResourcesResponse,
         RefreshCatalogResponse,
+        RegisterResponse,
         RemoveResourcesResponse,
         TransactionResponse,
         UsageReportResponse,
@@ -170,6 +172,16 @@ class Client(_Face):
         plan = _verbs.plan_dispute(self._config, request, idempotency_key)
         status, body = self._send(plan)
         return _verbs.finish_dispute(plan, status, body)
+
+    def register(self, request: dict[str, Any]) -> RegisterResponse:
+        plan = _verbs.plan_register(self._config, request)
+        status, body = self._send(plan)
+        return _verbs.finish_register(plan, status, body)
+
+    def get_account_status(self, request: dict[str, Any]) -> GetAccountStatusResponse:
+        plan = _verbs.plan_get_account_status(self._config, request)
+        status, body = self._send(plan)
+        return _verbs.finish_get_account_status(plan, status, body)
 
     def fetch(self, signed_url: str) -> Content:
         headers, timeout, max_bytes = _fetch_inputs(self._config, signed_url)

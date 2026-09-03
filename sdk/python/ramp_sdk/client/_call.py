@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
     from ramp_sdk.signing_transport import SigningTransport
+from ramp_sdk.window import Window
 
 #: Caps the response body a single RAMP call will read.
 #:
@@ -81,6 +82,7 @@ def prepare(
     *,
     signer: SigningTransport | None,
     request_id: Callable[[], str] | None,
+    sign_window: Window | None = None,
 ) -> tuple[bytes, dict[str, str]]:
     """Render one request to the bytes that are both signed and sent.
 
@@ -104,7 +106,7 @@ def prepare(
     if signer is not None:
         try:
             signed = signer.sign_outbound(
-                method="POST", url=url, body=body, authorization=""
+                method="POST", url=url, body=body, authorization="", window=sign_window
             )
         except Exception as exc:  # custody can fail any way it likes
             # NOT_SIGNABLE, matching what the content leg answers for the same missing

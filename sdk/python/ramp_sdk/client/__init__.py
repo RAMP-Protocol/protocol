@@ -60,13 +60,15 @@ from .content import (
     transport_failure,
 )
 from .errors import NOT_CANONICAL_WIRE_NAMING, CallError, CallErrorKind
-from .route import EndpointResolver
+from .route import EndpointResolver, RegistrationRequirementsReader
 
 if TYPE_CHECKING:
     from wire.models import (
         DisputeResponse,
+        GetAccountStatusResponse,
         PushResourcesResponse,
         RefreshCatalogResponse,
+        RegisterResponse,
         RemoveResourcesResponse,
         TransactionResponse,
         UsageReportResponse,
@@ -89,6 +91,7 @@ __all__ = [
     "ClientConfig",
     "Content",
     "EndpointResolver",
+    "RegistrationRequirementsReader",
     "Validation",
 ]
 
@@ -247,6 +250,31 @@ class Client(_Face):
         )
         status, body = await self._send(plan)
         return _verbs.finish_dispute(plan, status, body)
+
+    async def register(self, request: dict[str, Any]) -> RegisterResponse:
+        """Create this agent's account at the Exchange the request names.
+
+        Takes no idempotency key: the message carries none, because registering again
+        returns the same account handle. The plan runs in a thread because it signs and,
+        when the caller left ``terms_digest`` unset, reads the Exchange's published
+        requirements from a freshly fetched manifest.
+        """
+        plan = await asyncio.to_thread(_verbs.plan_register, self._config, request)
+        status, body = await self._send(plan)
+        return _verbs.finish_register(plan, status, body)
+
+    async def get_account_status(
+        self, request: dict[str, Any]
+    ) -> GetAccountStatusResponse:
+        """Read whether this agent's account at the named Exchange is active.
+
+        An empty ``billing_ref`` in the answer is a NORMAL answer: no account there yet.
+        """
+        plan = await asyncio.to_thread(
+            _verbs.plan_get_account_status, self._config, request
+        )
+        status, body = await self._send(plan)
+        return _verbs.finish_get_account_status(plan, status, body)
 
     async def fetch(self, signed_url: str) -> Content:
         """Retrieve the content a signed delivery URL names, presenting proof of

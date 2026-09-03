@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  createRegistrationRequirementsReader,
+  createWellKnownRequirementsReader,
   ExchangeNotPermitted,
   ManifestNotExchange,
 } from "../resolvers/index.ts";
@@ -25,7 +25,7 @@ function manifest(extra: Record<string, unknown> = {}, role: unknown = "ROLE_EXC
 const reader = (body: string, allow?: (d: string) => boolean) => {
   const s = serve(body);
   return {
-    r: createRegistrationRequirementsReader({
+    r: createWellKnownRequirementsReader({
       fetch: s.fetch,
       scheme: "http",
       ...(allow !== undefined ? { allow } : {}),

@@ -78,6 +78,24 @@ class CallError(Exception):
         self.reason = reason
         #: The typed protocol reason when there is one.
         self.detail = detail
+        #: The developer message the peer put on its TYPED reason, when it sent one;
+        #: ``""`` otherwise.
+        #:
+        #: A field rather than something to recover from the rendered string, because a
+        #: reason rendered into prose cannot be read back out without parsing it. It sits
+        #: BESIDE ``reason`` rather than in it: ``reason`` is the peer's machine token.
+        #:
+        #: Deliberately NOT filled from the transport envelope when there is no typed
+        #: detail. An answer that did not come from a RAMP service carries no message of
+        #: its own, and the text a transport synthesizes for one is that transport's —
+        #: connect-go writes a status line where this client writes nothing — so carrying
+        #: it would make the value a property of the language rather than of the answer.
+        #: That text stays reachable through ``cause``.
+        #:
+        #: NON-AUTHORITATIVE and UNBOUNDED — the contract says both of the field it comes
+        #: from. Branch on ``kind`` or on the typed reason, never on this text, and bound
+        #: it before rendering it to a log line or an agent.
+        self.peer_message = detail.message if detail is not None and detail.message else ""
         self.cause = cause
         super().__init__(_render(kind, op, status, reason, cause))
 

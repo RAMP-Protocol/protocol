@@ -58,14 +58,6 @@ type RegistrationRequirements struct {
 	Verdict helpers.SchemaVerdict
 }
 
-// RegistrationRequirementsReader reads an Exchange's published registration
-// requirements. It is an interface so the client package can accept one without
-// depending on this constructor, and so a test can drive registration without
-// standing up a manifest server.
-type RegistrationRequirementsReader interface {
-	ResolveRegistrationRequirements(ctx context.Context, exchange string) (RegistrationRequirements, error)
-}
-
 // WellKnownRequirementsReader reads registration requirements out of an
 // Exchange's own /.well-known/ramp.json.
 //

@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 134 symbols at cross-language parity · 16 documented divergences · 183 Go-idiomatic exclusions · 35 conformance corpora, each tri-replayed.
+**At a glance:** 139 symbols at cross-language parity · 17 documented divergences · 184 Go-idiomatic exclusions · 35 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -126,19 +126,23 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `DefaultMaxContentBytes` | `DEFAULT_MAX_CONTENT_BYTES` | `DEFAULT_MAX_CONTENT_BYTES` |
 | `ErrDirectoryUnavailable` | `DirectoryUnavailableError` | `DirectoryUnavailable` |
 | `ErrEndpointRefused` | `EndpointRefusedError` | `EndpointRefused` |
+| `ErrExchangeNotPermitted` | `ExchangeNotPermittedError` | `ExchangeNotPermitted` |
 | `ErrKeyExpired` | `KeyExpiredError` | `KeyExpired` |
 | `ErrKeyRevoked` | `KeyRevokedError` | `KeyRevoked` |
+| `ErrManifestNotExchange` | `ManifestNotExchangeError` | `ManifestNotExchange` |
 | `ErrNoEndpoint` | `NoEndpointError` | `NoEndpoint` |
 | `ErrRevocationUnevaluated` | `RevocationUnevaluatedError` | `RevocationUnevaluated` |
 | `ErrUnknownKey` | `UnknownKeyError` | `UnknownKey` |
 | `NewGuardedClientFromEnv` | `guarded_client` | `guardedFetchFromEnv` |
 | `OfferDirectoryFetcher` | `DirectoryFetch` | `OfferDirectoryFetch` |
+| `RegistrationRequirements` | `RegistrationRequirements` | `RegistrationRequirements` |
 | `SSRFGuard` | `ssrf_guard` | `ssrfGuard` |
 | `WBADirectoryPath` | `WBA_DIRECTORY_PATH` | `WBA_DIRECTORY_PATH` |
 | `WBADirectoryURL` | `wba_directory_url` | `wbaDirectoryURL` |
 | `WBAKeyResolver` | `WBAKeyResolver` | `WBAKeyResolver` |
 | `WellKnownEndpointResolver` | `WellKnownEndpointResolver` | `WellKnownEndpointResolver` |
 | `WellKnownKeyResolver` | `WellKnownKeyResolver` | `WellKnownKeyResolver` |
+| `WellKnownRequirementsReader` | `WellKnownRequirementsReader` | `WellKnownRequirementsReader` |
 
 ### core — L2 composition (verifier, signing transport, windows, replay)
 
@@ -171,6 +175,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `DefaultMaxRPCReadBytes` | `DEFAULT_MAX_RPC_READ_BYTES` | `DEFAULT_MAX_RPC_READ_BYTES` |
 | `EndpointResolver` | `EndpointResolver` | `EndpointResolver` |
 | `ErrorDetailFrom` | `error_detail_from` | `errorDetailFrom` |
+| `RegistrationRequirementsReader` | `RegistrationRequirementsReader` | `RegistrationRequirementsReader` |
 | `Validation` | `Validation` | `Validation` |
 
 ### connectserver — server-verify handler binding
@@ -205,6 +210,7 @@ Deliberate, reason-backed asymmetries. The allowlist is **shrink-only** — a ne
 | `resolvers.NewWBAKeyResolver` | — | `createWBAKeyResolver` | Go NewWBAKeyResolver factory folds into the Python class constructor (WBAKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWBAKeyResolver factory. |
 | `resolvers.NewWellKnownEndpointResolver` | — | `createWellKnownEndpointResolver` | Go NewWellKnownEndpointResolver factory folds into the Python class constructor (WellKnownEndpointResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWellKnownEndpointResolver factory. |
 | `resolvers.NewWellKnownKeyResolver` | — | `createWellKnownKeyResolver` | Go NewWellKnownKeyResolver factory folds into the Python class constructor (WellKnownKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWellKnownKeyResolver factory. |
+| `resolvers.NewWellKnownRequirementsReader` | — | `createWellKnownRequirementsReader` | Go NewWellKnownRequirementsReader factory folds into the Python class constructor (WellKnownRequirementsReader(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWellKnownRequirementsReader factory. |
 | `resolvers.WBAKeyResolverOptions` | — | `WBAKeyResolverOptions` | Go options struct / TS options object folds into Python constructor keyword arguments (WBAKeyResolver(...)); idiomatic Python has no separate options type. |
 | `resolvers.WellKnownOptions` | — | `WellKnownOptions` | Go options struct (shared by the well-known key/endpoint resolvers) / TS options object folds into Python constructor keyword arguments (WellKnownKeyResolver(...) / WellKnownEndpointResolver(...)); idiomatic Python has no separate options type. |
 
@@ -239,6 +245,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `connect.WithMaxContentBytes` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithOfferKey` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithProofWindow` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithRegistrationRequirements` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithRequestIDFunc` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithRequester` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithSignWindow` | Go functional-option builder; py/ts pass options via kwargs/options objects. |

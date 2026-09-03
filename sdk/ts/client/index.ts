@@ -56,10 +56,10 @@ import { type Content, fetchContent } from "./content.ts";
 import { malformed, notSent, RampCallError } from "./errors.ts";
 import { checkRegistrationData } from "../src/regschema.ts";
 import {
-	createRegistrationRequirementsReader,
+	createWellKnownRequirementsReader,
 	ExchangeNotPermitted,
 	ManifestNotExchange,
-	type RegistrationRequirementsReader,
+	type RegistrationRequirements,
 } from "../resolvers/index.ts";
 import type { EndpointResolver } from "./route.ts";
 import { vetExchangeEndpoint } from "./route.ts";
@@ -87,6 +87,20 @@ const CATALOG_SERVICE = "ramp.v1.CatalogService";
 export const DEFAULT_PROOF_WINDOW_SEC = 30;
 
 /** Everything a client is built from. Every field is injected; the client owns none of it. */
+/** Reports what one Exchange asks of a registration.
+ *
+ * An interface for the same two reasons the endpoint seam is one: a test can drive a
+ * registration without standing up a manifest server, and this module has no way to
+ * accept a terms digest or a schema from configuration — the only way to skip the read
+ * is to set `terms_digest` on the request, where the signature covers it.
+ *
+ * An implementation MUST NOT serve the answer from a cache. The contract requires a
+ * registering client to read the digest from a freshly fetched manifest, so a cached one
+ * breaks the rule the field exists to record. */
+export interface RegistrationRequirementsReader {
+	resolveRegistrationRequirements(exchange: string): Promise<RegistrationRequirements>;
+}
+
 export interface ClientOptions {
 	/** The RFC 9421 request signer. Custody stays with the application — the SDK receives
 	 * a non-extractable CryptoKey and the keyid it signs under, never key bytes. */
@@ -798,8 +812,8 @@ async function applyRegistrationRequirements(
 	sent: Record<string, unknown>,
 ): Promise<void> {
 	const reader =
-		r.opts.registrationRequirements ?? createRegistrationRequirementsReader();
-	let reqs: Awaited<ReturnType<RegistrationRequirementsReader["resolveRegistrationRequirements"]>>;
+		r.opts.registrationRequirements ?? createWellKnownRequirementsReader();
+	let reqs: RegistrationRequirements;
 	try {
 		reqs = await reader.resolveRegistrationRequirements(stringField(sent, "exchange"));
 	} catch (err) {

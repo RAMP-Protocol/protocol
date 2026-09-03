@@ -13,7 +13,7 @@ manifest and then checked, rather than taken on trust or, worse, read from confi
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from ramp_sdk._endpoint_rule import endpoint_refusal
 from ramp_sdk._hostref import _redact_userinfo as redact_userinfo
@@ -122,3 +122,20 @@ def vet_exchange_endpoint(
             f"{redact_userinfo(exchange_domain)!r} advertises: {refusal}",
         )
     return endpoint
+
+
+class RegistrationRequirementsReader(Protocol):
+    """Reports what one Exchange asks of a registration.
+
+    A Protocol for the same two reasons the endpoint seam is one: a test can drive a
+    registration without standing up a manifest server, and this module has no way to
+    accept a terms digest or a schema from configuration — the only way to skip the read
+    is to set ``terms_digest`` on the request, where the signature covers it.
+
+    An implementation MUST NOT serve the answer from a cache. The contract requires a
+    registering client to read the digest from a freshly fetched manifest, so a cached
+    one breaks the rule the field exists to record.
+    """
+
+    def resolve_registration_requirements(self, exchange: str) -> Any:  # pragma: no cover
+        ...
