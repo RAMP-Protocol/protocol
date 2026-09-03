@@ -1646,10 +1646,112 @@ checks** stand between the caller's message and the wire, in this order.
 follows is bounded and evicts least-recently-used, because which Exchanges appear is
 driven by incoming offers — an open-ended, caller-influenced key space.
 
-## Three client defaults where the ports differ from Go on purpose
+## The account verbs route like a report, not like a discovery
+
+`Register` and `GetAccountStatus` are the agent client's, not a fourth constructor's, and
+they read their destination off the message rather than from the base URL. Both halves of
+that follow one rule already recorded above: a client's constructor takes its shape from
+where the address comes from.
+
+The party is the same. An agent registering holds the same key it discovers and buys with
+— the protocol carries one agent identity — so there is no second signer and no second
+address to hang a constructor on. What differs from discovery is *which* Exchange: an
+account is per-Exchange, and which Exchange is the agent's choice PER CALL rather than the
+operator's at start-up. A registration target routinely arrives at runtime, because a
+denial names where to register precisely so an agent can converge unattended. A client
+that could only register where it was configured could not follow that.
+
+So both verbs take the usage report's shape: `exchange` off the request, the endpoint
+resolved from that Exchange's own manifest, the guarded leg, and no parameter a configured
+origin could be passed as. An earlier design document said the opposite — that these two
+calls use the configured address because an account's address is known in advance — and it
+was written before accounts were per-Exchange. The contract disagrees with it in as many
+words: `RegisterRequest.exchange` says the caller reaches this endpoint by resolving a
+fetched manifest.
+
+Two details the routing tier does not supply, and this leg therefore does itself. The
+contract's SHAPE rule runs on the recipient as well as the routing tier's dialability
+question: the two are deliberately different predicates, and nothing upstream of the client
+has applied the first, so a value the wire would refuse is declined here rather than
+carried to an Exchange that can only refuse it. And neither verb takes call options,
+because neither message carries an idempotency key — registering again returns the same
+account handle, so a key would be ceremony rather than a guarantee.
+
+## A digest that may not be cached needs a reader that cannot cache
+
+Submitting a registration states which terms the operator accepted, and the contract
+requires the value to come from a FRESHLY fetched manifest: a cached endpoint is fine, a
+cached digest is not, because a client cannot detect staleness locally and a warm cache
+would make it echo a value the Exchange has already stopped accepting and retry the same
+refusal until the cache expired.
+
+The SDK had one manifest path, and it is built out of exactly the mechanism that value may
+not touch — a per-host cache with a TTL, single-flight coalescing on top, and no bypass.
+Adding a member to the document it decodes would have satisfied the rule's letter at the
+one point it fails in practice: the first caller to reuse the SDK's own manifest path would
+be handed a digest minutes old with nothing in the API to warn them. So the requirements
+read is a separate face that holds no document cache. Leaving no cache slot to reuse is
+what makes the rule structural rather than a convention callers remember — the same
+argument the report leg makes about configuration.
+
+Reading the published `data_schema` out of the same fresh bytes then costs nothing extra
+and removes a failure mode of its own: a stale local schema cannot refuse a payload the
+Exchange would have taken, because there is no stale local schema. Not even the compiled
+validator is held. Memoising it is a cache, which this tier does not do by default, and the
+useful key for one — the digest of the served bytes — is a property of a deployment's
+threat model rather than of the protocol.
+
+Two things the ports had to build that Go got for free, both from the same sentence: the
+caps are defined over the bytes AS SERVED. Neither JavaScript nor Python has a raw-message
+slice, and re-serialising the parsed member measures a document nobody sent — a schema
+padded past the cap on the wire that minifies under it would then be refused by an Exchange
+and accepted by a client, which is the two-privately-chosen-limits failure those numbers
+exist to prevent. Both ports slice the member out of the served body by extent instead.
+
+The pre-check refuses a payload a USABLE schema rejects, and refuses nothing otherwise. A
+schema this SDK will not compile is skipped, because the contract says so and gives the
+reason: refusing locally and declining to send would turn a rule about reading a third
+party's document into a denial of service against the client's own user. Absent schema and
+unusable schema are therefore one branch, not two.
+
+## The peer's token is ours to trust; the peer's sentence is only ours to carry
+
+A caller reading why a call failed had the failure class and the peer's refusal token, both
+machine-readable, and no way to reach the peer's own sentence except by parsing it back out
+of a rendered error. That is a thing a layer will get wrong, and the platform's MCP adapter
+had grown parallel extraction arms over three error shapes to avoid doing it.
+
+So the client's failure carries the sentence as a value, beside the token rather than in
+it. `Reason` is the peer's machine token; putting prose there was a mistake this SDK made
+once and reverted, and the same mistake in the other direction would be no better.
+
+What it holds is the TYPED reason's developer message and nothing else. An answer that did
+not come from a RAMP service — a draining load balancer, a proxy's own page — carries no
+message of its own, and the text a transport synthesizes for one is that transport's:
+connect-go writes a status line where a fetch-based client writes nothing. Filling the
+field from that would make its value a property of the language rather than of the answer,
+which is the drift a shared corpus exists to catch and could not have caught here, because
+each language would have been faithfully reporting its own transport. The synthesized text
+stays reachable through the cause, where it reads as what it is.
+
+It is unbounded, and that is a choice rather than an oversight. The contract calls the
+field it comes from an easy existence oracle and places the no-secrets duty on the server,
+so truncating it is a decision that belongs to whoever displays it, where the audience is
+known — the same reason the typed detail's message has never been bounded here either.
+
+One hazard is documented rather than fixed on this path. `GetAccountStatusRequest` carries
+no varying field, so two calls to one Exchange inside a second sign identical bytes and a
+peer screening replays on (key id, signature) refuses the second. The remedy is a monotonic
+freshness window, which every language ships — but a window is ONE INSTANCE PER CLIENT
+rather than one per call, since the running maximum is the whole mechanism, so the choice
+belongs to whoever builds the client and no verb makes it for them. Bounding that window's
+drift is a separate change: today it compounds without a ceiling, which is its own defect
+and has its own answer.
+
+## Four client defaults where the ports differ from Go on purpose
 
 Go is the oracle and the ports mirror it, so a difference that survives review has to be
-written down or it reads as drift. Three survive, and none is an API-surface divergence —
+written down or it reads as drift. Four survive, and none is an API-surface divergence —
 all are behaviour, so they live here rather than in `sdk/parity/symbol-map.json`, whose
 allowlist is a shrink-only ratchet over SYMBOLS.
 
@@ -1697,6 +1799,17 @@ serve a conformant answer deeper than this. The Go client reads it and the other
 it. Both readers of one wire is the shape this file exists to record, and moving the number
 into the contract — which would make it one rule for every implementation rather than two —
 is the change that would close it rather than document it.
+
+**The default signature validity window is five minutes in Go and TypeScript, and ten in
+Python.** It has been that way since the ports were written and was recorded nowhere,
+which is how it reads as drift rather than as a decision. It is a genuine difference and
+not a rounding: a deployment that cares about the number sets it explicitly, and every
+client now names the knob at the same tier so it can — `WithSignWindow` in Go,
+`signWindow` in TypeScript, `ClientConfig.sign_window` in Python. What it costs, stated
+plainly: a peer enforcing a maximum signature lifetime may accept one client's default
+and refuse another's, and the two would then disagree about a request neither client
+built wrongly. Moving the number into the contract is the change that would close it
+rather than document it.
 
 **The client's transport splits in two, and which leg is guarded is the same in all
 three.** A plain transport carries the configured home Exchange and the Broker — an

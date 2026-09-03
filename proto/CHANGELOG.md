@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+**The SDK serves the account-setup role, in all three languages (no wire change;
+conformance-affecting).** `Register` and `GetAccountStatus` land on the agent client —
+`connect.Client` in Go, `createClient`'s face in TypeScript, `Client` and its blocking
+twin in Python — under the same names, over the same signing transport, redirect
+refusal, request-id and validate interceptors and read cap as the other agent verbs.
+They sit on that client rather than on a fourth constructor because they are the same
+party holding the same key, and they route as a usage report does: the destination is
+read off the request's own `exchange`, resolved from that Exchange's own manifest, and
+dialled on the guarded leg. An account is per-Exchange and which Exchange is the agent's
+choice per call — a denial names where to register — so a configured origin would confine
+registration to one Exchange. Neither message carries an idempotency key, so neither verb
+takes call options; `ver` is stamped when empty; a request that names no bare-domain
+recipient is refused before it is signed. The client-request corpus gains three rows,
+replayed in all three languages.
+
+A new resolver face reads what one Exchange asks of a registration — the terms revision
+submitting one accepts, and the schema its `registration_data` must match — from that
+Exchange's own manifest, and it holds NO document cache. The contract requires a
+registering client to read the terms digest from a freshly fetched manifest, and the
+endpoint resolver is built out of exactly the mechanism that value may not touch, so a
+face with no cache slot to reuse is what makes the rule structural. `Register` fills
+`terms_digest` from it only when the caller left the field unset, applies the four
+`registration_data` bounds before anything is signed, and pre-checks the payload against
+the published schema — skipping the check, never the send, when that schema is one the
+SDK refuses. The schema is measured over the bytes AS SERVED in every language, which the
+two JSON ports reach by slicing the member out of the served body rather than
+re-serialising a parsed value.
+
+Two cross-cutting changes anyone re-pinning will see. The client's typed failure now
+carries the peer's own developer message as a value — the typed reason's message, empty
+when the answer carried none, never a transport's synthesized status line — so a consumer
+reads it instead of parsing it back out of a rendered error; it is unbounded, and bounding
+it belongs to whoever displays it. And Python's `ClientConfig` gains `sign_window`, so the
+RFC 9421 freshness knob sits at the tier Go and TypeScript already surface it at.
+
+*Parity record:* six new mapped symbols and one Go-idiomatic exclusion; the reader's Go
+factory folds into the Python class constructor as every other `NewX` does, so the
+shrink-only allowlist baseline moves 16 → 17 as a reviewed bump under that one recorded
+class.
+
 **`TransactionRequest.agent_request_acceptance` adds an agent-signed complete
 ordered request-set proof (additive wire change).** The proof signs ordered
 `(offer_sig, exchange)` references plus requester and idempotency key using the
