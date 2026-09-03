@@ -39,6 +39,22 @@ import (
 // a second resolve that hit the cache from one that went back to the network.
 func loopbackManifestServer(t *testing.T, rest http.Handler) (string, *atomic.Int64) {
 	t.Helper()
+	return loopbackManifestServerWith(t, rest, nil)
+}
+
+// loopbackManifestServerWith is the same server with extra manifest members —
+// terms_digest and the account_registration block, which the account verbs read
+// and nothing else does. The extras are read per request rather than captured, so
+// a test can revise the served document between calls and prove a read went back
+// to the network.
+//
+// The body always names the Exchange role, because a real manifest does: the
+// contract makes the field required, and the registration reader refuses a
+// document that omits it.
+func loopbackManifestServerWith(
+	t *testing.T, rest http.Handler, extra func() map[string]any,
+) (string, *atomic.Int64) {
+	t.Helper()
 	var (
 		hits   atomic.Int64
 		origin string
@@ -46,7 +62,13 @@ func loopbackManifestServer(t *testing.T, rest http.Handler) (string, *atomic.In
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/ramp.json", func(w http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
-		_ = json.NewEncoder(w).Encode(map[string]any{"endpoint": origin})
+		doc := map[string]any{"endpoint": origin, "role": "ROLE_EXCHANGE"}
+		if extra != nil {
+			for k, v := range extra() {
+				doc[k] = v
+			}
+		}
+		_ = json.NewEncoder(w).Encode(doc)
 	})
 	mux.Handle("/", rest)
 	srv := httptest.NewServer(mux)

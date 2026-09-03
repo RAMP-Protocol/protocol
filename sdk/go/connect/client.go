@@ -36,6 +36,10 @@ type Client struct {
 	// endpoints resolves an offer's exchange domain to that Exchange's own
 	// advertised origin. Never configuration.
 	endpoints EndpointResolver
+	// requirements reads what an Exchange asks of a registration. It holds no
+	// document cache, which the terms-digest rule depends on — see
+	// WithRegistrationRequirements.
+	requirements resolvers.RegistrationRequirementsReader
 	// fetcher is the content leg. It dials, so it lives one tier down.
 	fetcher *resolvers.ContentFetcher
 }
@@ -102,7 +106,8 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 		// goroutine and a socket open indefinitely.
 		exchanges: newExchangePool(
 			offerDerivedClient(cfg, resolvers.NewGuardedTransport(cfg.guardedBase)), connectOpts...),
-		endpoints: cfg.resolveEndpointResolver(),
+		endpoints:    cfg.resolveEndpointResolver(),
+		requirements: cfg.resolveRequirementsReader(),
 		fetcher: resolvers.NewContentFetcher(resolvers.ContentFetchOptions{
 			BaseTransport: cfg.guardedBase,
 			Timeout:       cfg.fetchTimeout,
