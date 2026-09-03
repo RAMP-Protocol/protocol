@@ -35,10 +35,14 @@ import {
 	DiscoveryResponseSchema,
 	DisputeRequestSchema,
 	DisputeResponseSchema,
+	GetAccountStatusRequestSchema,
+	GetAccountStatusResponseSchema,
 	PushResourcesRequestSchema,
 	PushResourcesResponseSchema,
 	RefreshCatalogRequestSchema,
 	RefreshCatalogResponseSchema,
+	RegisterRequestSchema,
+	RegisterResponseSchema,
 	RemoveResourcesRequestSchema,
 	RemoveResourcesResponseSchema,
 	ResourceQuerySchema,
@@ -50,6 +54,13 @@ import {
 } from "../../../gen/ts/wire/schemas.ts";
 import { type Content, fetchContent } from "./content.ts";
 import { malformed, notSent, RampCallError } from "./errors.ts";
+import { checkRegistrationData } from "../src/regschema.ts";
+import {
+	createRegistrationRequirementsReader,
+	ExchangeNotPermitted,
+	ManifestNotExchange,
+	type RegistrationRequirementsReader,
+} from "../resolvers/index.ts";
 import type { EndpointResolver } from "./route.ts";
 import { vetExchangeEndpoint } from "./route.ts";
 import { createUnarySend } from "./send.ts";
@@ -109,6 +120,18 @@ export interface ClientOptions {
 	/** Turns an offer's exchange domain into that Exchange's own advertised origin. Never
 	 * configuration — a usage report and a dispute go where the signed offer says. */
 	endpointResolver?: EndpointResolver;
+	/** Reports what one Exchange asks of a registration — the terms revision submitting
+	 * one accepts, and the schema its registration_data must match. Defaults to the
+	 * SSRF-guarded well-known reader.
+	 *
+	 * The reader it takes holds no document cache, and that is the point rather than an
+	 * implementation detail: the contract requires a registering client to read the terms
+	 * digest from a FRESHLY fetched manifest, so an implementation serving it from a
+	 * cache breaks the rule the field exists to record. There is deliberately no option
+	 * to supply a digest or a schema directly — a caller managing its own requirements
+	 * sets `terms_digest` on the request, which suppresses the read and says so on the
+	 * message the signature covers. */
+	registrationRequirements?: RegistrationRequirementsReader;
 	/** The WBA directory origin this client signs as. */
 	signatureAgent?: string;
 	/** The RFC 9421 freshness window stamped on every outbound call. */
@@ -169,6 +192,13 @@ export interface Client {
 		opts?: CallOptions,
 	): Promise<UsageReportResponse>;
 	dispute(request: Record<string, unknown>, opts?: CallOptions): Promise<DisputeResponse>;
+	/** Create this agent's account at the Exchange the request names. Takes no
+	 * CallOptions: the message carries no idempotency key, because registering again
+	 * returns the same account handle. */
+	register(request: Record<string, unknown>): Promise<RegisterResponse>;
+	/** Read whether this agent's account at the named Exchange is active. An empty
+	 * `billing_ref` is a NORMAL answer — no account there yet. */
+	getAccountStatus(request: Record<string, unknown>): Promise<GetAccountStatusResponse>;
 	fetch(signedURL: string): Promise<Content>;
 }
 
@@ -255,6 +285,8 @@ export function createClient(baseURL: string, options: ClientOptions = {}): Clie
 		execute: (offer, opts) => execute(r, baseURL, offer, opts ?? {}),
 		reportUsage: (report, opts) => reportUsage(r, report, opts ?? {}),
 		dispute: (request, opts) => dispute(r, request, opts ?? {}),
+		register: (request) => register(r, request),
+		getAccountStatus: (request) => getAccountStatus(r, request),
 		fetch: (signedURL) => fetchVerb(r, signedURL),
 	};
 }
@@ -661,6 +693,142 @@ async function dispute(
 	return parseMessage(op, raw, DisputeResponseSchema);
 }
 
+// ---------------------------------------------------------------------------
+// The account-setup verbs
+//
+// They route like a usage report, not like discovery. An account is per-Exchange,
+// and which Exchange is the agent's choice PER CALL: a target routinely arrives at
+// runtime — a denial names where to register — rather than from configuration. So
+// the destination is read off the request's own `exchange` field and resolved
+// through that Exchange's own manifest, over the guarded leg.
+//
+// Neither message carries an idempotency key, so neither verb takes CallOptions.
+// ---------------------------------------------------------------------------
+
+/**
+ * register creates the calling agent's account at the Exchange the request names.
+ *
+ * The caller's identity is the request SIGNATURE. Nothing in the message says who is
+ * registering, and the business payload is not an identity claim.
+ *
+ * Four bounds on `registration_data` are checked before anything is signed, in the order
+ * the contract fixes, because a limit that exists to stop work belongs before the work it
+ * would stop — including before the manifest read.
+ *
+ * `terms_digest` is filled only when the caller left it ABSENT, from a freshly fetched
+ * manifest, and the payload is pre-checked against the schema that manifest publishes. A
+ * caller that sets the field is managing its own requirements and gets neither.
+ *
+ * A schema this SDK refuses never becomes a local veto: refusing locally and declining to
+ * send would turn a rule about reading a third party's document into a denial of service
+ * against the caller's own user, so an unusable schema is skipped and the Exchange
+ * decides. A usable schema the payload fails is the pre-check working, and that request is
+ * refused here with the offending members named.
+ */
+async function register(
+	r: Resolved,
+	request: Record<string, unknown>,
+): Promise<RegisterResponse> {
+	const op = "register";
+	const sent = stampVer(op, request);
+	requireRecipient(op, stringField(sent, "exchange"));
+	const verdict = checkRegistrationData(
+		(sent.registration_data ?? null) as Record<string, unknown> | null,
+	);
+	if (verdict !== "accepted") {
+		throw malformed(op, new Error(`registration_data: ${verdict}`));
+	}
+	if (sent.terms_digest === undefined || sent.terms_digest === null) {
+		await applyRegistrationRequirements(r, op, sent);
+	}
+	const endpoint = await vetExchangeEndpoint(
+		r.opts.endpointResolver,
+		stringField(sent, "exchange"),
+		op,
+	);
+	validateRequest(op, sent, RegisterRequestSchema, r.opts.validation ?? "strict");
+	const raw = await call(r, op, endpoint, EXCHANGE_SERVICE, "Register", sent, true);
+	return parseMessage(op, raw, RegisterResponseSchema);
+}
+
+/**
+ * getAccountStatus reports whether the calling agent's account at the named Exchange is
+ * active.
+ *
+ * The request carries no field identifying the caller — the Exchange resolves the account
+ * from the verified signature — so `exchange` is the only thing that says which account is
+ * being asked about. An empty `billing_ref` in the answer is a NORMAL answer: no account
+ * there yet.
+ *
+ * A caveat worth knowing before calling this in a loop. The request has no varying field,
+ * so two calls to the same Exchange inside one wall-clock second sign IDENTICAL bytes, and
+ * a peer screening replays on (key id, signature) refuses the second. This verb does not
+ * choose the freshness window for you, because a window is one instance per client rather
+ * than per call: pass `monotonicWindow` as `signWindow` when repeat calls are expected.
+ */
+async function getAccountStatus(
+	r: Resolved,
+	request: Record<string, unknown>,
+): Promise<GetAccountStatusResponse> {
+	const op = "get account status";
+	const sent = stampVer(op, request);
+	requireRecipient(op, stringField(sent, "exchange"));
+	const endpoint = await vetExchangeEndpoint(
+		r.opts.endpointResolver,
+		stringField(sent, "exchange"),
+		op,
+	);
+	validateRequest(op, sent, GetAccountStatusRequestSchema, r.opts.validation ?? "strict");
+	const raw = await call(r, op, endpoint, EXCHANGE_SERVICE, "GetAccountStatus", sent, true);
+	return parseMessage(op, raw, GetAccountStatusResponseSchema);
+}
+
+/**
+ * applyRegistrationRequirements reads what the Exchange asks of a registration and applies
+ * it to the request being built.
+ *
+ * A failed READ refuses the registration rather than sending without a digest. Guessing
+ * here is not the cautious option: an Exchange that publishes a digest refuses a
+ * registration that omits one, so sending anyway trades a local failure the caller can act
+ * on for a remote one it cannot.
+ */
+async function applyRegistrationRequirements(
+	r: Resolved,
+	op: string,
+	sent: Record<string, unknown>,
+): Promise<void> {
+	const reader =
+		r.opts.registrationRequirements ?? createRegistrationRequirementsReader();
+	let reqs: Awaited<ReturnType<RegistrationRequirementsReader["resolveRegistrationRequirements"]>>;
+	try {
+		reqs = await reader.resolveRegistrationRequirements(stringField(sent, "exchange"));
+	} catch (err) {
+		// A value this deployment or the Exchange refused is FINAL; anything else is a
+		// transport failure worth retrying. The same split the routing tier makes, so a
+		// caller branches on one taxonomy whichever check declined.
+		if (err instanceof ExchangeNotPermitted || err instanceof ManifestNotExchange) {
+			throw notSent(op, err);
+		}
+		throw new RampCallError({ kind: "unreachable", op, cause: err });
+	}
+	if (reqs.termsDigest !== undefined) {
+		sent.terms_digest = reqs.termsDigest;
+	}
+	// A null validator means "nothing to enforce", which is the behaviour the contract
+	// requires both when the Exchange publishes no schema and when it publishes one this
+	// SDK refused. One branch, deliberately.
+	const fails = reqs.schema?.validate(sent.registration_data ?? {}) ?? [];
+	if (fails.length > 0) {
+		const named = fails.map((f) => `${f.path}: ${f.error}`).join("; ");
+		throw malformed(
+			op,
+			new Error(
+				`registration_data does not match the schema ${stringField(sent, "exchange")} publishes: ${named}`,
+			),
+		);
+	}
+}
+
 /**
  * fetch retrieves the content a signed delivery URL names, presenting proof of possession
  * of the agent key that URL is bound to.
@@ -794,6 +962,10 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 // ---------------------------------------------------------------------------
 
 /** The answer to a catalog push: accepted/rejected counts and the warnings the accepted terms carry. */
+export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
+
+export type GetAccountStatusResponse = z.infer<typeof GetAccountStatusResponseSchema>;
+
 export type PushResourcesResponse = z.infer<typeof PushResourcesResponseSchema>;
 /** The answer to a catalog removal. */
 export type RemoveResourcesResponse = z.infer<typeof RemoveResourcesResponseSchema>;
