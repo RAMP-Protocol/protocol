@@ -55,6 +55,8 @@ Each restriction carries:
 - `prohibited[]` — tokens blocked on this axis. Takes precedence over `permitted[]`.
 - `advisory` — when `false` (the **default**), the restriction is **binding**: an agent that cannot evaluate every token in it (including an unknown vendor token) MUST decline the term. Set `advisory: true` to downgrade an unverifiable restriction to non-blocking. (Fail-closed by default — a forgotten flag fails safe.)
 
+**A token cannot be both permitted and prohibited** on one axis, and that is checked twice, over two readings of the same lists. At the RPC boundary `restriction.permitted_prohibited_disjoint` compares the tokens **as written**, because it runs over the request exactly as received. At ingest, after canonicalisation, `restriction.canonical_disjoint` compares what the fold produced. The second is not a repetition: several tokens have more than one accepted spelling, so `permitted: ["scrape"]` with `prohibited: ["crawl"]` — or `["us"]` against `["US"]` — names one token on both sides while passing the first check. Both refuse the term.
+
 **Reading a restriction**: a value is in-scope when it matches at least one `permitted[]` token AND matches none of the `prohibited[]` tokens. Multiple restrictions on the same term are AND-combined — the agent must satisfy all of them. The agent applies this itself when self-selecting a term; the Exchange does not pre-filter terms against requester attributes.
 
 **Standard function tokens** (rendered from the proto at build, not hand-listed):
@@ -69,7 +71,7 @@ Each restriction carries:
 
 ::proto-vocab{axis=user-type}
 
-Unknown tokens during ingest produce a `PushResourcesResponse.warnings[]` entry — the term is accepted but flagged. This is forward-compatible: new vocab tokens can be added to the registry and used immediately without breaking existing Exchange deployments. Tokens are canonicalised before the check — RFC 8259 whitespace trimmed, ASCII case folded, and the accepted aliases listed in each table above resolved to their registered token — so a spelling difference is never an unknown token; only a non-ASCII byte is left as it came, because a Unicode fold would turn a homograph into a registered token.
+Unknown tokens during ingest produce a `PushResourcesResponse.warnings[]` entry — the term is accepted but flagged. This is forward-compatible: new vocab tokens can be added to the registry and used immediately without breaking existing Exchange deployments. Tokens are canonicalised before the check — RFC 8259 whitespace trimmed, ASCII case folded, and the accepted aliases listed in each table above resolved to their registered token — so a spelling difference is never an unknown token; only a non-ASCII byte is left as it came, because a Unicode fold would turn a homograph into a registered token. Canonicalisation is also what the disjointness check above is measured against at this tier: the fold is what turns two spellings into the one token the term may not carry on both sides.
 
 ## Quotas
 

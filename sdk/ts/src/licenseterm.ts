@@ -7,7 +7,8 @@
 // applied to the entry as received. The ingest tier runs over the CANONICALISED
 // terms: restriction tokens are folded and alias-resolved to their registered
 // form, then a bare Pricing.unit or Quota.metric that is not a registered token
-// is rejected, while an unregistered restriction token and an
+// is rejected, as is a restriction whose permitted and prohibited lists name one
+// token once folded, while an unregistered restriction token and an
 // OBLIGATION_KIND_OTHER obligation without detail are accepted with a warning
 // that reaches PushResourcesResponse.warnings. The Exchange's own run is the
 // deciding one; a client-side verdict is advice about what that run will say.
@@ -34,6 +35,14 @@ import { crossFieldRuleIds } from "./crossfield.ts";
 export const RULE_PRICING_UNIT_REGISTERED = "pricing.unit.registered";
 /** Rejects a bare Quota.metric that is not a registered quota token. */
 export const RULE_QUOTA_METRIC_REGISTERED = "quota.metric.registered";
+/**
+ * Rejects a restriction whose permitted and prohibited lists name the same token
+ * once both are canonicalised. The wire tier's rule compares the tokens AS
+ * WRITTEN, so two accepted spellings of one token — an alias beside its
+ * registered form, or two spellings differing only in ASCII case — pass it and
+ * collide only after the fold.
+ */
+export const RULE_RESTRICTION_CANONICAL_DISJOINT = "restriction.canonical_disjoint";
 /** Warns about a bare restriction token not registered on its axis; the term is accepted. */
 export const RULE_RESTRICTION_TOKEN_REGISTERED = "restriction.token.registered";
 /** Warns about an OBLIGATION_KIND_OTHER obligation carrying no detail. */
@@ -61,7 +70,11 @@ export interface RuleWarning {
 	message: string;
 }
 
-/** What validateLicenseTerm reports for one already-canonical term. */
+/**
+ * What validateLicenseTerm reports for one term. Every check but the disjointness
+ * one reads the term as already canonical; that one folds what it compares, so it
+ * is correct on a term as authored too.
+ */
 export interface TermVerdict {
 	violation: RuleViolation | null;
 	warnings: RuleWarning[];
@@ -235,12 +248,56 @@ function restrictionTokenWarning(kind: string, tok: string, path: string): RuleW
 }
 
 /**
- * validateLicenseTerm runs the ingest-tier checks over one already-canonical
- * term: a bare Pricing.unit or Quota.metric that is not registered is a
- * violation (pricing first, first offending quota wins), and an accepted term
- * carries one warning per unregistered bare restriction token — restriction
- * order, permitted before prohibited — then one per OBLIGATION_KIND_OTHER
- * obligation without detail. The wire tier is not re-run here.
+ * canonicalDisjointViolation returns the violation for the first permitted token
+ * of r whose canonical form is also the canonical form of one of its prohibited
+ * tokens, or undefined when the two lists name no token in common. It
+ * canonicalises what it compares rather than trusting the term to have been
+ * normalised, and it runs on every axis — where the fold is a no-op the check is
+ * plain equality, which is what a server that never asked for the wire tier
+ * needs. The finding names the canonical token, not the spellings that produced
+ * it, so the message does not depend on whether the caller folded first.
+ *
+ * An element that is not a string is SKIPPED rather than coerced. Coercing it to ""
+ * would report two ill-typed elements as a collision on the empty token, which names
+ * the wrong fault; the wire tier already refuses a non-string where the schema says
+ * string, the same division this file applies to an empty or namespaced token. Two
+ * genuinely empty strings still collide, which is what the Go oracle answers.
+ */
+function canonicalDisjointViolation(i: number, r: Obj): RuleViolation | undefined {
+	const permitted = asArr(r["permitted"]);
+	const prohibited = asArr(r["prohibited"]);
+	if (permitted.length === 0 || prohibited.length === 0) return undefined;
+	const kind = str(r["kind"]);
+	const banned = new Set(
+		prohibited.filter((t) => typeof t === "string").map((t) => canonicalRestrictionToken(kind, t)),
+	);
+	for (let j = 0; j < permitted.length; j++) {
+		const tok = permitted[j];
+		if (typeof tok !== "string") continue;
+		const canon = canonicalRestrictionToken(kind, tok);
+		if (!banned.has(canon)) continue;
+		return {
+			rule: RULE_RESTRICTION_CANONICAL_DISJOINT,
+			path: `restrictions[${i}].permitted[${j}]`,
+			token: canon,
+			message: `restriction token "${canon}" is both permitted and prohibited after canonicalisation`,
+		};
+	}
+	return undefined;
+}
+
+/**
+ * validateLicenseTerm runs the ingest-tier checks over one term, in a fixed
+ * order: a bare Pricing.unit that is not registered, then the first offending
+ * quota metric, then the first restriction whose permitted and prohibited lists
+ * name one token once canonicalised. An accepted term carries one warning per
+ * unregistered bare restriction token — restriction order, permitted before
+ * prohibited — then one per OBLIGATION_KIND_OTHER obligation without detail.
+ *
+ * Every check but the disjointness one reads the term as already canonical. The
+ * wire tier is not re-run here; disjointness is the one property both tiers
+ * assert, over different values, so a term the boundary clears can still fail
+ * here.
  */
 export function validateLicenseTerm(term: Obj): TermVerdict {
 	const unit = str(asObj(term["pricing"])?.["unit"]);
@@ -270,8 +327,14 @@ export function validateLicenseTerm(term: Obj): TermVerdict {
 			};
 		}
 	}
-	const warnings: RuleWarning[] = [];
 	const restrictions = asArr(term["restrictions"]);
+	for (let i = 0; i < restrictions.length; i++) {
+		const r = asObj(restrictions[i]);
+		if (!r) continue;
+		const violation = canonicalDisjointViolation(i, r);
+		if (violation) return { violation, warnings: [] };
+	}
+	const warnings: RuleWarning[] = [];
 	for (let i = 0; i < restrictions.length; i++) {
 		const r = asObj(restrictions[i]);
 		if (!r) continue;

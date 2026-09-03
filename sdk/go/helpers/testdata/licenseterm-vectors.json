@@ -72,6 +72,38 @@
       "warnings": []
     },
     {
+      "name": "alias_disjoint_after_fold_accepted",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "restrictions": [
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "scrape"
+                ],
+                "prohibited": [
+                  "ai-train"
+                ]
+              }
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": true,
+      "structural": false,
+      "cross_field_rules": [],
+      "term_rules": [],
+      "warnings": []
+    },
+    {
       "name": "unknown_token_warns_with_entry_path",
       "entry": {
         "domain": "publisher.example",
@@ -285,7 +317,14 @@
       "cross_field_rules": [
         "restriction.permitted_prohibited_disjoint"
       ],
-      "term_rules": [],
+      "term_rules": [
+        {
+          "rule": "restriction.canonical_disjoint",
+          "path": "terms[0].restrictions[0].permitted[0]",
+          "token": "ai-train",
+          "message": "restriction token \"ai-train\" is both permitted and prohibited after canonicalisation"
+        }
+      ],
       "warnings": []
     },
     {
@@ -939,6 +978,45 @@
           "path": "terms[0].pricing.unit",
           "token": "frobnications",
           "message": "pricing unit \"frobnications\" is not a registered metering token"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "term_reject_restriction_canonical_disjoint",
+      "entry": {
+        "domain": "publisher.example",
+        "path": "/premium/article-42.html",
+        "terms": [
+          {
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            },
+            "restrictions": [
+              {
+                "kind": "RESTRICTION_KIND_FUNCTION",
+                "permitted": [
+                  "scrape"
+                ],
+                "prohibited": [
+                  "crawl"
+                ]
+              }
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "ok": false,
+      "structural": false,
+      "cross_field_rules": [],
+      "term_rules": [
+        {
+          "rule": "restriction.canonical_disjoint",
+          "path": "terms[0].restrictions[0].permitted[0]",
+          "token": "crawl",
+          "message": "restriction token \"crawl\" is both permitted and prohibited after canonicalisation"
         }
       ],
       "warnings": []
@@ -2261,6 +2339,551 @@
       "name": "empty_term_accepted",
       "term": {},
       "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "restriction_two_aliases_of_one_token_collide_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "adapt"
+            ],
+            "prohibited": [
+              "derivative"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "modify",
+        "message": "restriction token \"modify\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_function_case_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "CRAWL"
+            ],
+            "prohibited": [
+              "crawl"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "crawl",
+        "message": "restriction token \"crawl\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_geography_case_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_GEOGRAPHY",
+            "permitted": [
+              "us"
+            ],
+            "prohibited": [
+              "US"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "US",
+        "message": "restriction token \"US\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_other_axis_exact_duplicate_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_OTHER",
+            "permitted": [
+              "custom-use"
+            ],
+            "prohibited": [
+              "custom-use"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "custom-use",
+        "message": "restriction token \"custom-use\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_padded_token_collides_after_trim_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              " crawl "
+            ],
+            "prohibited": [
+              "crawl"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "crawl",
+        "message": "restriction token \"crawl\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_namespaced_tokens_disjoint_accepted",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_OTHER",
+            "permitted": [
+              "acme:read"
+            ],
+            "prohibited": [
+              "acme:write"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": null,
+      "warnings": []
+    },
+    {
+      "name": "restriction_second_restriction_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "ai-train"
+            ],
+            "prohibited": [
+              "search"
+            ]
+          },
+          {
+            "kind": "RESTRICTION_KIND_USER_TYPE",
+            "permitted": [
+              "personal"
+            ],
+            "prohibited": [
+              "individual"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[1].permitted[0]",
+        "token": "individual",
+        "message": "restriction token \"individual\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_collision_reports_first_permitted_site",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "tdm",
+              "scrape"
+            ],
+            "prohibited": [
+              "crawl",
+              "text-and-data-mining"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "text-and-data-mining",
+        "message": "restriction token \"text-and-data-mining\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "quota_metric_checked_before_restriction_collision",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "quotas": [
+          {
+            "limit": "10",
+            "metric": "frobnications",
+            "window": "QUOTA_WINDOW_DAILY"
+          }
+        ],
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "scrape"
+            ],
+            "prohibited": [
+              "crawl"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "quota.metric.registered",
+        "path": "quotas[0].metric",
+        "token": "frobnications",
+        "message": "quota metric \"frobnications\" is not a registered quota token"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_alias_function_adapt_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "adapt"
+            ],
+            "prohibited": [
+              "modify"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "modify",
+        "message": "restriction token \"modify\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_alias_function_copy_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "copy"
+            ],
+            "prohibited": [
+              "reproduce"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "reproduce",
+        "message": "restriction token \"reproduce\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_alias_function_derivative_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "derivative"
+            ],
+            "prohibited": [
+              "modify"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "modify",
+        "message": "restriction token \"modify\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_alias_function_generative_ai_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "generative-ai"
+            ],
+            "prohibited": [
+              "ai-input"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "ai-input",
+        "message": "restriction token \"ai-input\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_alias_function_scrape_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "scrape"
+            ],
+            "prohibited": [
+              "crawl"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "crawl",
+        "message": "restriction token \"crawl\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_alias_function_tdm_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "tdm"
+            ],
+            "prohibited": [
+              "text-and-data-mining"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "text-and-data-mining",
+        "message": "restriction token \"text-and-data-mining\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_alias_function_train_ai_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_FUNCTION",
+            "permitted": [
+              "train-ai"
+            ],
+            "prohibited": [
+              "ai-train"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "ai-train",
+        "message": "restriction token \"ai-train\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_alias_user_type_business_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_USER_TYPE",
+            "permitted": [
+              "business"
+            ],
+            "prohibited": [
+              "commercial_entity"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "commercial_entity",
+        "message": "restriction token \"commercial_entity\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_alias_user_type_enterprise_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_USER_TYPE",
+            "permitted": [
+              "enterprise"
+            ],
+            "prohibited": [
+              "commercial_entity"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "commercial_entity",
+        "message": "restriction token \"commercial_entity\" is both permitted and prohibited after canonicalisation"
+      },
+      "warnings": []
+    },
+    {
+      "name": "restriction_alias_user_type_personal_collides_rejected",
+      "term": {
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        },
+        "restrictions": [
+          {
+            "kind": "RESTRICTION_KIND_USER_TYPE",
+            "permitted": [
+              "personal"
+            ],
+            "prohibited": [
+              "individual"
+            ]
+          }
+        ],
+        "semantics": "TERM_SEMANTICS_ENUMERATED"
+      },
+      "violation": {
+        "rule": "restriction.canonical_disjoint",
+        "path": "restrictions[0].permitted[0]",
+        "token": "individual",
+        "message": "restriction token \"individual\" is both permitted and prohibited after canonicalisation"
+      },
       "warnings": []
     }
   ]

@@ -1231,6 +1231,24 @@ message License {
 //   USER_TYPE — RAMP user/organization categories
 message Restriction {
   // A token cannot be both permitted and prohibited on the same axis.
+  //
+  // Read that as a property of the AXIS, held by two rules together: this one is
+  // scoped to a single Restriction, and one restriction per kind — the rule on
+  // LicenseTerm below — is what makes one Restriction the whole of an axis. Split
+  // the two lists across two restrictions of the same kind and neither disjointness
+  // rule sees a collision; that shape is refused by the one-per-kind rule instead,
+  // at the wire tier.
+  //
+  // This rule compares the tokens AS WRITTEN, because it runs at the wire tier,
+  // over the request exactly as received. Several tokens have more than one
+  // accepted spelling — a registered alias beside its canonical form, and either
+  // one in any ASCII case — so two spellings of ONE token pass this rule and
+  // become the same token when the ingest tier folds them. The ingest tier
+  // therefore asserts the same property a second time, over the canonicalised
+  // tokens, under the SDK rule id restriction.canonical_disjoint; see
+  // CatalogService. Both refuse the term, and a term that fails both is reported
+  // by both — the second is not a fallback for the first, it reads different
+  // values.
   option (buf.validate.message).cel = {
     id: "restriction.permitted_prohibited_disjoint"
     message: "a token cannot appear in both permitted and prohibited"
@@ -2281,16 +2299,26 @@ enum IngestionSource {
 // GEOGRAPHY; a non-ASCII byte is never folded) and alias-resolved to their
 // registered form — the aliases are authored beside the tokens, on the
 // RestrictionKind values — after which a bare (non-namespaced) Pricing.unit or
-// Quota.metric that is not a registered token is rejected, while an
-// unregistered restriction token and an OBLIGATION_KIND_OTHER obligation
-// without detail are accepted and reported in PushResourcesResponse.warnings.
+// Quota.metric that is not a registered token is rejected, as is a restriction
+// whose permitted and prohibited lists name one token once folded
+// (restriction.canonical_disjoint), while an unregistered restriction token and
+// an OBLIGATION_KIND_OTHER obligation without detail are accepted and reported
+// in PushResourcesResponse.warnings.
+//
+// Disjointness is the one property BOTH tiers assert, and deliberately so: the
+// wire tier reads the tokens as written and the ingest tier reads what the fold
+// produced, so a term the boundary clears can still be refused here. A deployment
+// that does not mount the wire tier still gets the second of those two readings —
+// it does not thereby get the one-per-kind rule that makes a restriction the whole
+// of its axis, which stays a wire-tier rule.
+//
 // The SDK ships both tiers as a publisher-side pre-check; the Exchange's own
 // run of them is the deciding one.
 //
 // A push is ALL-OR-NOTHING, at both tiers. A hard rejection anywhere in the
 // submission — an envelope or term rule at the wire tier, an unregistered bare
-// unit or metric at the ingest tier — refuses the entire submission and persists
-// nothing; the publisher fixes and resubmits the whole set. The refusal names
+// unit or metric or a restriction that is not disjoint once folded at the ingest
+// tier — refuses the entire submission and persists nothing; the publisher fixes and resubmits the whole set. The refusal names
 // the entries that failed and why, and that per-entry detail is REPORTING, never
 // partial acceptance: no entry of a refused submission is stored. Warnings do
 // not refuse anything.

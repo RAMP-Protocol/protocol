@@ -37,7 +37,18 @@ _NORMALIZE = _VECTORS["normalize"]
 _KNOWN = _VECTORS["known"]
 _VALIDATE = _VECTORS["validate"]
 _ENTRY = _VECTORS["entry"]
-_TERM_RULES = {RULE_PRICING_UNIT_REGISTERED, RULE_QUOTA_METRIC_REGISTERED}
+# The ingest-tier reject ids, read out of the corpus's own per-term list — an
+# ingest-tier reject IS an id that list can carry as a violation. Reading them beats
+# listing them here, the same trade the cross-field set below already makes: a
+# classification written down in four places is one that can disagree with itself.
+_TERM_RULES = {case["violation"]["rule"] for case in _VALIDATE if case["violation"] is not None}
+
+# Guard the guard. A derivation that stopped reading the column would leave an empty
+# set and quietly move every term reject into the structural bucket, where the entry
+# assertions would still pass. Both long-standing ids are reachable from that list, so
+# requiring them pins that it is still being read.
+for _id in (RULE_PRICING_UNIT_REGISTERED, RULE_QUOTA_METRIC_REGISTERED):
+    assert _id in _TERM_RULES, f"the per-term list carries no {_id} — the column this classification is derived from has moved"
 
 # The registered cross-field rule ids, read from the generated cross-field corpus —
 # corpusgen emits one mutant per message-level CEL rule, so its ``rules`` are the

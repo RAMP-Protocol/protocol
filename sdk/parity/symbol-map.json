@@ -654,6 +654,11 @@
       "python": "RULE_QUOTA_METRIC_REGISTERED",
       "ts": "RULE_QUOTA_METRIC_REGISTERED"
     },
+    "helpers.RuleRestrictionCanonicalDisjoint": {
+      "allowlist_reason": null,
+      "python": "RULE_RESTRICTION_CANONICAL_DISJOINT",
+      "ts": "RULE_RESTRICTION_CANONICAL_DISJOINT"
+    },
     "helpers.RuleRestrictionTokenRegistered": {
       "allowlist_reason": null,
       "python": "RULE_RESTRICTION_TOKEN_REGISTERED",

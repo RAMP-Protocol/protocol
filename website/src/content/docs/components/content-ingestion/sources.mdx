@@ -298,7 +298,7 @@ async with CatalogClient(ClientConfig(base_url=catalog_endpoint, signer=contribu
     })
 ```
 
-`ver` is stamped when the caller leaves it empty; no idempotency key is minted, because the catalog messages carry none — a push is an upsert. A request whose `exchange` is empty or not a bare domain — the shape the wire rule admits, which is narrower than a usable host — is refused before it is signed. The pre-check is advice about what the Exchange will say; the Exchange re-runs both tiers on every push and its verdict decides. The JSONL feed, a sitemap, an RSL file, a crawl or a CMS plugin are inputs that converge on the same `ResourceEntry`; the SDK owns the shape, its validation and the push, never the source.
+`ver` is stamped when the caller leaves it empty; no idempotency key is minted, because the catalog messages carry none — a push is an upsert. A request whose `exchange` is empty or not a bare domain — the shape the wire rule admits, which is narrower than a usable host — is refused before it is signed. The pre-check is advice about what the Exchange will say; the Exchange re-runs both tiers on every push and its verdict decides — including the ingest tier's check that a term is still disjoint after its tokens are canonicalised, which is the one refusal a feed written against the registry's alias spellings is most likely to hit. The JSONL feed, a sitemap, an RSL file, a crawl or a CMS plugin are inputs that converge on the same `ResourceEntry`; the SDK owns the shape, its validation and the push, never the source.
 
 ### Third-Party Content Intelligence and Verification Vendors (v1.0)
 

@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 133 symbols at cross-language parity · 16 documented divergences · 183 Go-idiomatic exclusions · 35 conformance corpora, each tri-replayed.
+**At a glance:** 134 symbols at cross-language parity · 16 documented divergences · 183 Go-idiomatic exclusions · 35 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -85,6 +85,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `RuleObligationOtherRequiresDetail` | `RULE_OBLIGATION_OTHER_REQUIRES_DETAIL` | `RULE_OBLIGATION_OTHER_REQUIRES_DETAIL` |
 | `RulePricingUnitRegistered` | `RULE_PRICING_UNIT_REGISTERED` | `RULE_PRICING_UNIT_REGISTERED` |
 | `RuleQuotaMetricRegistered` | `RULE_QUOTA_METRIC_REGISTERED` | `RULE_QUOTA_METRIC_REGISTERED` |
+| `RuleRestrictionCanonicalDisjoint` | `RULE_RESTRICTION_CANONICAL_DISJOINT` | `RULE_RESTRICTION_CANONICAL_DISJOINT` |
 | `RuleRestrictionTokenRegistered` | `RULE_RESTRICTION_TOKEN_REGISTERED` | `RULE_RESTRICTION_TOKEN_REGISTERED` |
 | `RuleViolation` | `RuleViolation` | `RuleViolation` |
 | `RuleWarning` | `RuleWarning` | `RuleWarning` |

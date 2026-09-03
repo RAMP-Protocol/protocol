@@ -48,8 +48,12 @@ vr, err = helpers.VerifyRequestResolved(ctx, req, body, resolver, helpers.Verify
 **License-term pre-check** — the two tiers an Exchange applies to a pushed entry,
 runnable by a publisher before signing: the wire rules over the entry as given, then
 canonicalisation (RFC 8259 trim, ASCII-only fold, alias resolution through the generated
-vocabulary) and registry membership over a copy of its terms. Warning messages are the
-exact `PushResourcesResponse.warnings` strings; rule ids share the CEL-id namespace:
+vocabulary), then registry membership and canonical disjointness over a copy of its terms.
+The second of those is why the tier order matters: `permitted: ["scrape"]` with
+`prohibited: ["crawl"]` clears the boundary rule, which compares the tokens as written, and
+names one token once folded. Warning messages are the exact
+`PushResourcesResponse.warnings` strings; rule ids share the CEL-id namespace
+(`pricing.unit.registered`, `restriction.canonical_disjoint`, …):
 
 ```go
 verdict := helpers.ValidateResourceEntry(entry)   // never modifies entry
