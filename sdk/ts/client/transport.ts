@@ -405,6 +405,12 @@ function connectEnvelopeError(
 		// than the class reads the typed detail.
 		reason: code,
 		...(detail !== null ? { detail } : {}),
+		// The one site that fills peerMessage, because this is the one site holding a
+		// detail the PEER emitted. Every other CallError leaves it empty — including
+		// the content leg, whose detail this SDK writes itself.
+		...(detail?.message !== undefined && detail.message !== ""
+			? { peerMessage: detail.message }
+			: {}),
 		cause:
 			typeof envelope["message"] === "string" ? envelope["message"] : undefined,
 	});

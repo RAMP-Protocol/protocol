@@ -188,10 +188,13 @@ func TestSendError_CallerCancellationIsNotARefusal(t *testing.T) {
 // The peer's own sentence reaches a caller as a VALUE, not as something to parse
 // back out of a rendered error.
 //
-// A typed detail's developer message wins when it carries one; otherwise the
-// transport envelope's does, because a peer may name a typed reason and leave the
-// prose to the transport, and returning an empty string there would drop the only
-// sentence that was sent.
+// It is filled from a typed detail the PEER emitted, and from nothing else. Two
+// other things look like candidates and are not: the transport envelope's prose,
+// which a transport synthesizes and so is a property of the language rather than
+// of the answer, and a detail this SDK built ITSELF on the content leg, whose
+// message is our sentence with the edge's token quoted into it. The field exists
+// so a consumer can attribute words to a remote party; a field that sometimes
+// holds our own words cannot do that job at all.
 func TestCallError_CarriesThePeersSentence(t *testing.T) {
 	t.Run("a typed detail's message wins", func(t *testing.T) {
 		sig := newSigningFixture(t)
@@ -234,6 +237,33 @@ func TestCallError_CarriesThePeersSentence(t *testing.T) {
 		if !strings.Contains(err.Error(), "draining") {
 			t.Fatalf("the transport's text is gone entirely: %v", err)
 		}
+	})
+
+	// The content leg builds a typed detail LOCALLY, out of the edge's refusal
+	// token: the token is the edge's, the sentence around it is this SDK's. So a
+	// detail is present and the peer's message is still empty — which is the case
+	// that separates "fill it from the detail" from "fill it where the peer's own
+	// answer was decoded", and the only one where the two differ.
+	t.Run("a detail this SDK synthesized leaves it empty", func(t *testing.T) {
+		sig := newSigningFixture(t)
+		edge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"reason":"pop_expired"}`))
+		}))
+		defer edge.Close()
+
+		client := rampconnect.NewClient("http://home.invalid",
+			append(allowLoopback(t),
+				rampconnect.WithSigner(sig.signer),
+				rampconnect.WithAgentKey(sig.pub),
+			)...)
+		_, err := client.Fetch(context.Background(), edge.URL+"/doc?agent_id=tp")
+
+		// The typed reason still reaches the caller — this is not about losing it.
+		if _, ok := rampconnect.ErrorDetailFrom(err); !ok {
+			t.Fatalf("no typed detail on a refused fetch: %v", err)
+		}
+		assertPeerMessage(t, err, "")
 	})
 }
 

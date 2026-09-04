@@ -67,6 +67,7 @@ class CallError(Exception):
         status: int | None = None,
         reason: str | None = None,
         detail: ErrorDetail | None = None,
+        peer_message: str = "",
         cause: BaseException | str | None = None,
     ) -> None:
         self.kind = kind
@@ -95,7 +96,13 @@ class CallError(Exception):
         #: NON-AUTHORITATIVE and UNBOUNDED — the contract says both of the field it comes
         #: from. Branch on ``kind`` or on the typed reason, never on this text, and bound
         #: it before rendering it to a log line or an agent.
-        self.peer_message = detail.message if detail is not None and detail.message else ""
+        #:
+        #: Taken ONLY from what the decode site passed, never derived from ``detail``
+        #: here. A detail is not always the peer's: the content leg SYNTHESIZES one from
+        #: the edge's refusal token, and its message is this SDK's own sentence with the
+        #: token quoted into it. Deriving from the field would put the SDK's words in the
+        #: field that claims to hold a remote party's.
+        self.peer_message = peer_message
         self.cause = cause
         super().__init__(_render(kind, op, status, reason, cause))
 

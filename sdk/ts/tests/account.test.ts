@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createClient, RampCallError } from "../client/index.ts";
 import type { UnaryRequest, UnarySend } from "../client/index.ts";
 import type { RegistrationRequirements } from "../resolvers/index.ts";
+import { retrievalAuthFailureDetail } from "../src/errordetail.ts";
 
 /** A send that records what it was given and answers a fixed body. */
 function recordingSend(
@@ -150,6 +151,27 @@ describe("the peer's own sentence", () => {
     expect((err as RampCallError).peerMessage).toBe("terms have moved");
     // The token stays a token: prose never leaks into the field a caller branches on.
     expect((err as RampCallError).reason).not.toContain(" ");
+  });
+
+  // The content leg builds a typed detail LOCALLY, out of the edge's refusal token:
+  // the token is the edge's, the sentence around it is this SDK's. So a detail is
+  // present and the peer's message is still empty — the one case that separates
+  // "fill it from the detail" from "fill it where the peer's own answer was decoded".
+  it("stays empty for a detail this SDK synthesized", () => {
+    const err = new RampCallError({
+      kind: "refused",
+      op: "fetch content",
+      status: 403,
+      reason: "keyid_mismatch",
+      detail: retrievalAuthFailureDetail(
+        "ramp.v1.Edge",
+        "delivery refused: keyid_mismatch",
+        "RETRIEVAL_AUTH_FAILURE_REASON_KEYID_MISMATCH",
+      ),
+    });
+    // The typed reason still reaches the caller — this is not about losing it.
+    expect(err.detail).toBeDefined();
+    expect(err.peerMessage).toBe("");
   });
 
   it("is empty when the answer carried no typed reason", async () => {

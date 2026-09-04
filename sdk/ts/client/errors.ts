@@ -91,7 +91,13 @@ export class RampCallError extends Error {
 		this.status = init.status;
 		this.reason = init.reason;
 		this.detail = init.detail;
-		this.peerMessage = init.peerMessage ?? init.detail?.message ?? "";
+		// Taken ONLY from what the decode site passed, never derived from `detail`
+		// here. A detail is not always the peer's: the content leg SYNTHESIZES one
+		// from the edge's refusal token, and its message is this SDK's own sentence
+		// with the token quoted into it. Deriving from the field would put the SDK's
+		// words in the field that claims to hold a remote party's, which is the one
+		// thing this field exists not to do.
+		this.peerMessage = init.peerMessage ?? "";
 	}
 
 	/**

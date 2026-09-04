@@ -227,6 +227,29 @@ def test_account_verbs_caller_ver_wins(face: Face) -> None:
     assert rec.body(1)["ver"] == "9.9"
 
 
+def test_peer_message_stays_empty_for_a_detail_the_sdk_synthesized() -> None:
+    """The content leg builds a typed detail LOCALLY, out of the edge's refusal token:
+    the token is the edge's, the sentence around it is this SDK's. So a detail is present
+    and the peer's message is still empty — the one case that separates "fill it from the
+    detail" from "fill it where the peer's own answer was decoded"."""
+    from ramp_sdk.errordetail import retrieval_auth_failure_detail
+
+    err = CallError(
+        CallErrorKind.REFUSED,
+        "fetch content",
+        status=403,
+        reason="keyid_mismatch",
+        detail=retrieval_auth_failure_detail(
+            "ramp.v1.Edge",
+            "delivery refused: keyid_mismatch",
+            "RETRIEVAL_AUTH_FAILURE_REASON_KEYID_MISMATCH",
+        ),
+    )
+    # The typed reason still reaches the caller — this is not about losing it.
+    assert err.detail is not None
+    assert err.peer_message == ""
+
+
 @pytest.mark.parametrize("face", FACES, ids=_IDS)
 def test_peer_message_carries_the_typed_reason_and_nothing_else(face: Face) -> None:
     """The peer's own sentence reaches a caller as a VALUE, and only when the answer

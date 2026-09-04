@@ -281,6 +281,7 @@ def _connect_envelope_error(op: str, status: int, payload: Any) -> CallError:
     if not code:
         code = connect_code_from_status(status)
     message = envelope.get("message")
+    detail = error_detail_from(envelope)
     return CallError(
         kind_of_connect_code(code),
         op,
@@ -288,7 +289,11 @@ def _connect_envelope_error(op: str, status: int, payload: Any) -> CallError:
         # The peer's own token, which is the Connect code here. A caller that wants more
         # than the class reads the typed detail.
         reason=code or None,
-        detail=error_detail_from(envelope),
+        detail=detail,
+        # The one site that fills peer_message, because this is the one site holding a
+        # detail the PEER emitted. Every other CallError leaves it empty — including the
+        # content leg, whose detail this SDK writes itself.
+        peer_message=detail.message if detail is not None and detail.message else "",
         cause=message if isinstance(message, str) else None,
     )
 
