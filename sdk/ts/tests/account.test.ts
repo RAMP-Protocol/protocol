@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { createClient, RampCallError } from "../client/index.ts";
 import type { UnaryRequest, UnarySend } from "../client/index.ts";
-import type { RegistrationRequirements } from "../resolvers/index.ts";
+import {
+  ExchangeNotPermitted,
+  ManifestNotExchange,
+  type RegistrationRequirements,
+} from "../resolvers/index.ts";
+import { compileRegistrationSchema } from "../src/regschema.ts";
 import { retrievalAuthFailureDetail } from "../src/errordetail.ts";
 
 /** A send that records what it was given and answers a fixed body. */
@@ -21,6 +26,9 @@ function recordingSend(
 function bodyOf(req: UnaryRequest): Record<string, unknown> {
   return JSON.parse(new TextDecoder().decode(req.body)) as Record<string, unknown>;
 }
+
+const SCHEMA =
+  '{"type":"object","required":["legal_entity"],"properties":{"legal_entity":{"type":"string"}}}';
 
 const ENDPOINT = "https://exchange.test";
 const endpointResolver = { resolveEndpoint: async () => ENDPOINT };
@@ -101,6 +109,74 @@ describe("register", () => {
       await expect(client(send).register({ exchange })).rejects.toBeInstanceOf(RampCallError);
     }
     expect(seen).toHaveLength(0);
+  });
+
+  // The pre-check working: a schema the SDK can use, and a payload that fails it.
+  // Refused locally, before anything is signed, with the offending member named — the
+  // point of reading the schema at all is that the caller learns this without a round
+  // trip.
+  it("pre-checks the published schema", async () => {
+    const { schema, verdict } = compileRegistrationSchema(SCHEMA);
+    expect(verdict).toBe("accepted");
+    const { send, seen } = recordingSend({ ver: "1.0", billing_ref: "acct-1" });
+    const withSchema: RegistrationRequirements = {
+      termsDigest: undefined,
+      schema,
+      verdict,
+    };
+
+    const err = await client(send, withSchema)
+      .register({ exchange: "exchange.test", registration_data: { trading_name: "Acme" } })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(RampCallError);
+    expect((err as RampCallError).kind).toBe("malformed");
+    expect((err as RampCallError).message).toContain("legal_entity");
+    expect(seen).toHaveLength(0);
+
+    // The conforming payload goes through against the same schema.
+    await client(send, withSchema).register({
+      exchange: "exchange.test",
+      registration_data: { legal_entity: "Acme" },
+    });
+    expect(seen).toHaveLength(1);
+  });
+
+  // A schema the SDK REFUSES is skipped, never a veto. The contract is explicit that
+  // refusing locally and declining to send would turn a rule about reading a third
+  // party's document into a denial of service against the caller's own user, so the
+  // Exchange's own enforcement stays the deciding check.
+  it("does not let an unusable schema block the send", async () => {
+    const { schema, verdict } = compileRegistrationSchema(
+      '{"$schema":"https://json-schema.org/draft/2019-09/schema","type":"object"}',
+    );
+    expect(schema).toBeNull();
+    expect(verdict).toBe("wrong_dialect");
+    const { send, seen } = recordingSend({ ver: "1.0", billing_ref: "acct-1" });
+
+    await client(send, { termsDigest: undefined, schema, verdict }).register({
+      exchange: "exchange.test",
+      registration_data: { anything: "goes" },
+    });
+    expect(seen).toHaveLength(1);
+  });
+
+  // A failed READ is classified the way the routing tier classifies its own: a value
+  // this deployment or the Exchange refused is FINAL, anything else is a transport
+  // failure worth retrying. Without the split a caller retries a refusal forever.
+  it("classifies a refused requirements read as final and a transport failure as retryable", async () => {
+    for (const [thrown, kind] of [
+      [new ExchangeNotPermitted("blocked"), "not_sent"],
+      [new ManifestNotExchange("host=exchange.test"), "not_sent"],
+      [new Error("connection reset"), "unreachable"],
+    ] as const) {
+      const { send, seen } = recordingSend({});
+      const err = await client(send, () => Promise.reject(thrown))
+        .register({ exchange: "exchange.test" })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(RampCallError);
+      expect((err as RampCallError).kind).toBe(kind);
+      expect(seen).toHaveLength(0);
+    }
   });
 });
 
