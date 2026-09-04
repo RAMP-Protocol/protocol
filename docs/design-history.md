@@ -1571,6 +1571,13 @@ pool per call. And the escape stays what it always was: inject a transport, or s
 The ports' endpoint resolver still defaults plain, which is the last leg not following the
 rule and is tracked separately.
 
+Each language now pins its own row of that table in a test that dials a loopback origin
+with no transport injected, so moving a default fails a gate rather than merely diverging
+from this page and from the published threat model — which states the same postures per
+language, and which drifted from the code the first time it was written down. Two rows
+deliberately record the gap above, and say so, because a test that pinned an insecure
+default without explaining itself would read as endorsement of it.
+
 ## Active-key selection: deterministic, non-normative, unbounded by default
 
 The WBA directory can carry several simultaneously window-active signing keys during an
