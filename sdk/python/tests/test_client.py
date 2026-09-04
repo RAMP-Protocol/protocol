@@ -660,7 +660,7 @@ def test_fetch_presents_the_proof_and_returns_the_bytes(face: Face) -> None:
 @pytest.mark.parametrize("face", FACES, ids=_IDS)
 def test_an_edge_refusal_carries_its_typed_reason(face: Face) -> None:
     def respond(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
-        return httpx.Response(403, json={"error": "denied", "reason": "url_expired"})
+        return httpx.Response(403, json={"error": "denied", "reason": "expired"})
 
     transport = httpx.MockTransport(respond)
     config = _config()
@@ -675,7 +675,7 @@ def test_an_edge_refusal_carries_its_typed_reason(face: Face) -> None:
 
     err = excinfo.value
     assert err.kind is CallErrorKind.REFUSED
-    assert err.reason_of() == "url_expired"
+    assert err.reason_of() == "expired"
     assert err.detail is not None
     assert (
         err.detail.retrieval_auth_failure.reason.value

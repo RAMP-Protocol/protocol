@@ -353,15 +353,43 @@ async function edgeRefusal(
 	);
 }
 
+/** The edge's refusal token, mapped to its typed reason.
+ *
+ * The two vocabularies are separate on purpose — the edge is a code-capable worker with
+ * no protobuf runtime, so it answers a string — and `ramp.proto` records which token each
+ * enum value stands for, beside the value. This table IS that record; it is not derived
+ * from the enum's own spelling, and deriving it would be wrong: `expired` names
+ * URL_EXPIRED, `pop_expired` names PROOF_EXPIRED, and neither is the enum suffix
+ * lowercased. A port that computed the name instead of reading the record typed two of
+ * the eleven tokens and silently dropped the rest.
+ *
+ * `missing_sig` is deliberately ABSENT rather than guessed at: both checkers emit it —
+ * the signed-URL check for a missing `sig` parameter and the proof check for a missing
+ * Signature header — and the enum has a distinct value for each, so the body does not say
+ * which ran. An unmapped token still reaches the caller as the raw refusal string; only
+ * the typed reason is withheld, which is the honest outcome when the wire cannot say
+ * which failure occurred. The edge's parse-level tokens have no enum value at all. */
+const EDGE_REASON_TOKENS: Readonly<Record<string, string>> = {
+	// Signed-URL checks.
+	expired: "RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRED",
+	missing_exp: "RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRY_MISSING",
+	signature_mismatch: "RETRIEVAL_AUTH_FAILURE_REASON_URL_SIGNATURE_MISMATCH",
+	// Proof-of-possession checks.
+	missing_agent_key: "RETRIEVAL_AUTH_FAILURE_REASON_AGENT_KEY_MISSING",
+	keyid_mismatch: "RETRIEVAL_AUTH_FAILURE_REASON_KEYID_MISMATCH",
+	thumbprint_mismatch: "RETRIEVAL_AUTH_FAILURE_REASON_THUMBPRINT_MISMATCH",
+	pop_missing_created: "RETRIEVAL_AUTH_FAILURE_REASON_PROOF_CREATED_MISSING",
+	pop_missing_exp: "RETRIEVAL_AUTH_FAILURE_REASON_PROOF_EXPIRY_MISSING",
+	pop_expired: "RETRIEVAL_AUTH_FAILURE_REASON_PROOF_EXPIRED",
+	pop_sig_invalid: "RETRIEVAL_AUTH_FAILURE_REASON_PROOF_SIGNATURE_INVALID",
+};
+
 // retrievalAuthFailureDetailOrUndefined promotes an edge token to the typed reason when
-// it names one of the protocol's own values, and answers undefined otherwise. The edge's
-// vocabulary and the protocol's are deliberately separate, and this is the single place
-// they meet.
+// the protocol records one for it, and answers undefined otherwise. The edge's vocabulary
+// and the protocol's are deliberately separate, and this is the single place they meet.
 function retrievalAuthFailureDetailOrUndefined(token: string) {
-	const upper = token.toUpperCase();
-	const named = upper.startsWith("RETRIEVAL_AUTH_FAILURE_REASON_")
-		? upper
-		: `RETRIEVAL_AUTH_FAILURE_REASON_${upper}`;
+	const named = EDGE_REASON_TOKENS[token];
+	if (named === undefined) return undefined;
 	try {
 		return retrievalAuthFailureDetail(
 			EDGE_ERROR_DOMAIN,
