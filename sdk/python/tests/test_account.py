@@ -7,7 +7,9 @@ request's own ``exchange`` field and resolved through that Exchange's own manife
 from __future__ import annotations
 
 import asyncio
+import http.server
 import json
+import threading
 from typing import Any
 
 import httpx
@@ -17,6 +19,7 @@ from test_client import FACES, _IDS, Face, Recorder, _config  # noqa: PLC2701
 from ramp_sdk.client import CallError, CallErrorKind
 from ramp_sdk.regschema import compile_registration_schema
 from ramp_sdk.resolvers import (
+    DirectoryUnavailableError,
     ExchangeNotPermittedError,
     ManifestNotExchangeError,
     RegistrationRequirements,
@@ -329,3 +332,111 @@ def test_reader_measures_the_schema_over_the_served_bytes() -> None:
     got = reader.resolve_registration_requirements("exchange.test")
     assert got.verdict == "too_large"
     assert got.schema is None
+
+
+# The transport default, dialled for real.
+#
+# The domain this reader fetches comes off a RegisterRequest, so it is chosen by the
+# caller at runtime rather than by the operator at start-up. That is the provenance that
+# takes the SSRF-guarded transport — the rule the Go oracle states in the options struct
+# these readers mirror — and it is the same threat shape as the offer-derived legs. A
+# reader that dialled a caller-named host unguarded would turn ``register`` into a blind
+# GET aimed wherever that value pointed, and ``is_bare_domain`` accepts ``localhost`` and
+# ``169.254.169.254`` because they are well-formed domains.
+#
+# Real-dial rather than a mocked transport, mirroring test_resolvers_ssrf_gate.py: a mock
+# would assert which factory was referenced, and what matters is which addresses the
+# process will actually connect to.
+def _serve_manifest() -> tuple[http.server.ThreadingHTTPServer, int]:
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # BaseHTTPRequestHandler contract
+            body = b'{"role":"ROLE_EXCHANGE","endpoint":"https://exchange.test"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args: object) -> None:
+            return
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1]
+
+
+def test_reader_default_transport_refuses_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The default client refuses a reserved address; an injected one reaches the same
+    server, so the refusal is the guard's verdict and not an unreachable origin.
+
+    ALLOW_INSECURE is set so the http scheme is not the refuser — the ADDRESS guard is
+    what this isolates, exactly as the guarded-factory pillars do.
+    """
+    monkeypatch.delenv("SKIP_SSRF", raising=False)
+    monkeypatch.setenv("ALLOW_INSECURE", "true")
+    server, port = _serve_manifest()
+    host = f"127.0.0.1:{port}"
+    try:
+        # The default: no client injected, so the guarded transport, which refuses a
+        # reserved address at the dial seam. The guard's SsrfError is an OSError, so it
+        # reaches the caller as the transport failure this face documents.
+        guarded = WellKnownRequirementsReader(scheme="http")
+        with pytest.raises(DirectoryUnavailableError):
+            guarded.resolve_registration_requirements(host)
+
+        # The same host, same server, through an injected client — so the refusal above
+        # is the guard's verdict and not an unreachable origin.
+        plain = httpx.Client()
+        try:
+            injected = WellKnownRequirementsReader(scheme="http", http=plain)
+            assert injected.resolve_registration_requirements(host).verdict == "not_published"
+        finally:
+            plain.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+# The default reader is built ONCE per client, and closed with it.
+#
+# Its transport is the SSRF-guarded one, so a reader built per call opens a connection
+# pool per registration and closes none — measured before this was fixed: three calls,
+# three clients, none closed. Go resolves the same default once at NewClient; both faces
+# here do it in their constructor, which is the same tier.
+#
+# Directly observable in Python, unlike TypeScript, because the client owns the transport
+# and has a close() to prove it with; the TS side pins the same invariant structurally.
+def test_client_builds_one_requirements_transport_and_closes_it() -> None:
+    from ramp_sdk.sync import Client as SyncClient
+
+    cfg = _config(endpoint_resolver=_Resolver())
+    assert cfg.registration_requirements is None
+    client = SyncClient(cfg, http=httpx.Client(transport=httpx.MockTransport(
+        lambda _r: httpx.Response(200, json={"ver": "1.0", "billing_ref": "acct-1"})
+    )))
+    try:
+        # Filled in once, on a COPY: a caller may hold its config and reuse it.
+        assert client._config.registration_requirements is not None
+        assert cfg.registration_requirements is None
+        owned = client._requirements_http
+        assert owned is not None
+        assert not owned.is_closed
+    finally:
+        client.close()
+    assert owned.is_closed
+
+
+def test_client_leaves_an_injected_reader_alone() -> None:
+    """A reader the caller injected carries a transport the caller owns, so the client
+    builds nothing and closes nothing — the same rule the two RPC legs follow."""
+    from ramp_sdk.sync import Client as SyncClient
+
+    injected = _Requirements(RegistrationRequirements())
+    client = SyncClient(_account_config(injected), http=httpx.Client(
+        transport=httpx.MockTransport(lambda _r: httpx.Response(200, json={"ver": "1.0"}))
+    ))
+    try:
+        assert client._requirements_http is None
+        assert client._config.registration_requirements is injected
+    finally:
+        client.close()

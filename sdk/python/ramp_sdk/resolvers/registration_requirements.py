@@ -35,7 +35,7 @@ from ramp_sdk.regschema import (
     SchemaVerdict,
     compile_registration_schema,
 )
-from ramp_sdk.resolvers._http import default_client, fetch_strict
+from ramp_sdk.resolvers._http import fetch_strict, guarded_client
 from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
     ExchangeNotPermittedError,
@@ -94,9 +94,11 @@ class WellKnownRequirementsReader:
         self._scheme = scheme or "https"
         # The domain is CALLER-NAMED — an agent registers at whichever Exchange it
         # means to transact with, and that domain routinely arrives at runtime rather
-        # than from configuration — so this takes the same guarded default the endpoint
-        # resolver does.
-        self._http = http if http is not None else default_client()
+        # than from configuration. That is REQUEST-DERIVED provenance, which takes the
+        # SSRF-guarded transport; a fixed operator-chosen URL is what takes the plain
+        # one. A deployment that must reach a private or loopback Exchange injects its
+        # own client here, or opts out through the SKIP_SSRF / ALLOW_INSECURE flags.
+        self._http = http if http is not None else guarded_client()
         self._allow = allow
 
     def resolve_registration_requirements(self, exchange: str) -> RegistrationRequirements:

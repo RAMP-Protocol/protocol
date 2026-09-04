@@ -28,7 +28,7 @@ import {
   type SchemaVerdict,
 } from "../src/regschema.ts";
 import { DirectoryUnavailable, ExchangeNotPermitted, ManifestNotExchange } from "./errors.ts";
-import { type FetchLike, defaultFetch, fetchStrict } from "./http.ts";
+import { type FetchLike, fetchStrict, guardedFetchFromEnv } from "./http.ts";
 
 /** What one Exchange asks of a registration. Both members are optional in the
  * contract, and their absence is a normal answer rather than a failure. */
@@ -60,6 +60,13 @@ export interface WellKnownRequirementsReader {
 /** Options for the reader. `ttlMs` and `now` are deliberately absent: it caches
  * nothing, so it has no freshness to compute. */
 export interface WellKnownRequirementsOptions {
+  /** The transport. Omitted, it is the SSRF-GUARDED one: the domain is
+   * caller-named — an agent registers at whichever Exchange it means to transact
+   * with, and that domain routinely arrives at runtime rather than from
+   * configuration — so this is request-derived provenance, which takes the guarded
+   * default. A deployment that must reach a private or loopback Exchange injects
+   * its own transport here, or opts out through the SKIP_SSRF / ALLOW_INSECURE
+   * environment flags. */
   fetch?: FetchLike;
   /** Trust allowlist consulted BEFORE the fetch. A domain it rejects never
    * reaches the network. */
@@ -73,7 +80,10 @@ export interface WellKnownRequirementsOptions {
 export function createWellKnownRequirementsReader(
   opts: WellKnownRequirementsOptions = {},
 ): WellKnownRequirementsReader {
-  const fetchFn: FetchLike = opts.fetch ?? defaultFetch;
+  // Built ONCE per reader, never per read: guardedFetchFromEnv constructs a
+  // dispatcher, so a per-read default would trade an unguarded dial for a socket
+  // leak.
+  const fetchFn: FetchLike = opts.fetch ?? guardedFetchFromEnv();
   const scheme = opts.scheme && opts.scheme !== "" ? opts.scheme : "https";
   const allow = opts.allow;
 

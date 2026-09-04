@@ -136,7 +136,9 @@ export interface ClientOptions {
 	endpointResolver?: EndpointResolver;
 	/** Reports what one Exchange asks of a registration — the terms revision submitting
 	 * one accepts, and the schema its registration_data must match. Defaults to the
-	 * SSRF-guarded well-known reader.
+	 * well-known reader over the SSRF-guarded transport, built once with this client:
+	 * the domain comes off the request rather than from configuration, so it is the
+	 * request-derived provenance that takes the guarded default.
 	 *
 	 * The reader it takes holds no document cache, and that is the point rather than an
 	 * implementation detail: the contract requires a registering client to read the terms
@@ -228,6 +230,11 @@ interface Resolved {
 	verifier: Verifier;
 	send: UnarySend;
 	guardedSend: UnarySend;
+	/** The SEAM, not the concrete reader: an injected one and the default are the
+	 * same thing to every caller below here. Resolved alongside the transports
+	 * because the default holds a dispatcher, so building it per call would open
+	 * one per registration and close none. */
+	requirements: RegistrationRequirementsReader;
 	signer: CallSigner | undefined;
 }
 
@@ -255,6 +262,8 @@ function resolve(opts: ClientOptions): Resolved {
 		verifier,
 		send: opts.send ?? createUnarySend({ guarded: false }),
 		guardedSend: opts.guardedSend ?? createUnarySend({ guarded: true }),
+		requirements:
+			opts.registrationRequirements ?? createWellKnownRequirementsReader(),
 		signer,
 	};
 }
@@ -811,11 +820,11 @@ async function applyRegistrationRequirements(
 	op: string,
 	sent: Record<string, unknown>,
 ): Promise<void> {
-	const reader =
-		r.opts.registrationRequirements ?? createWellKnownRequirementsReader();
 	let reqs: RegistrationRequirements;
 	try {
-		reqs = await reader.resolveRegistrationRequirements(stringField(sent, "exchange"));
+		reqs = await r.requirements.resolveRegistrationRequirements(
+			stringField(sent, "exchange"),
+		);
 	} catch (err) {
 		// A value this deployment or the Exchange refused is FINAL; anything else is a
 		// transport failure worth retrying. The same split the routing tier makes, so a

@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from ramp_sdk.resolvers import _ssrf, guarded_async_client
+from ramp_sdk.resolvers import _ssrf, guarded_async_client, guarded_client
 from ramp_sdk.window import clock_window
 
 from . import _verbs
@@ -46,7 +46,7 @@ from ._read import (
     require_dialable_scheme,
     rpc_headers,
 )
-from ._verbs import ClientConfig
+from ._verbs import ClientConfig, _with_requirements_reader
 from .content import (
     DEFAULT_CONTENT_TIMEOUT_SEC,
     DEFAULT_MAX_CONTENT_BYTES,
@@ -116,7 +116,6 @@ class _Face:
         http: httpx.AsyncClient | None,
         guarded: httpx.AsyncClient | None = None,
     ) -> None:
-        self._config = config
         self._owns = http is None
         self._http = http if http is not None else httpx.AsyncClient(
             follow_redirects=False, trust_env=False
@@ -127,9 +126,15 @@ class _Face:
         self._guarded = guarded if guarded is not None else (
             self._http if not self._owns else guarded_async_client(follow_redirects=False)
         )
+        self._config, self._requirements_http = _with_requirements_reader(config)
 
     async def aclose(self) -> None:
         """Close the transports this client built. An injected one is left alone."""
+        # Independent of the RPC legs above: this client is built here whenever the
+        # caller injected no reader, whether or not it injected an RPC transport, so it
+        # is closed on its own terms rather than behind that ownership question.
+        if self._requirements_http is not None:
+            self._requirements_http.close()
         if not self._owns:
             return
         await self._http.aclose()

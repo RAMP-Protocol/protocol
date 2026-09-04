@@ -12,7 +12,7 @@ it hands back.
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from wire.models import (
@@ -52,6 +52,7 @@ from ramp_sdk.resolvers import (
     ExchangeNotPermittedError,
     ManifestNotExchangeError,
     WellKnownRequirementsReader,
+    guarded_client,
 )
 from ramp_sdk.window import Window
 from ramp_sdk.wire import ProtocolVersion
@@ -78,6 +79,8 @@ from .route import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    import httpx
 
     from ramp_sdk.signing_transport import SigningTransport
     from ramp_sdk.window import Window
@@ -139,6 +142,28 @@ class ClientConfig:
         if self.verifier is not None:
             return self.verifier
         return _NULL_VERIFIER
+
+
+def _with_requirements_reader(
+    config: ClientConfig,
+) -> tuple[ClientConfig, httpx.Client | None]:
+    """Fill in the default requirements reader ONCE, and report the transport that
+    came with it.
+
+    Both client facades call this from their constructor, which is the tier Go resolves
+    the same default at. Per CALL it would build an SSRF-guarded httpx client for every
+    registration and close none of them; per CLIENT it is one pooled transport with an
+    owner that can close it.
+
+    The caller's config is never mutated — a caller may hold it, reuse it across
+    clients, or read it back — so the filled-in reader rides on a copy. The second
+    return is the transport this client OWNS: ``None`` when the caller injected a
+    reader, because then the transport inside it is theirs.
+    """
+    if config.registration_requirements is not None:
+        return config, None
+    http = guarded_client()
+    return replace(config, registration_requirements=WellKnownRequirementsReader(http=http)), http
 
 
 class _NullOfferKeyResolver:
@@ -592,6 +617,9 @@ def _apply_registration_requirements(cfg: ClientConfig, op: str, sent: dict[str,
     registration that omits one, so sending anyway trades a local failure the caller can
     act on for a remote one it cannot.
     """
+    # Both client facades fill this in at construction, so the fallback is only for a
+    # caller driving the plan functions directly. It builds a transport per call, which
+    # is why the clients do not go through it.
     reader = cfg.registration_requirements
     if reader is None:
         reader = WellKnownRequirementsReader()
