@@ -26,6 +26,7 @@
     "connect.WithMaxContentBytes": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithOfferKey": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithProofWindow": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connect.WithRegistrationRequirements": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithRequestIDFunc": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithRequester": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithSignWindow": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
@@ -88,7 +89,6 @@
     "helpers.ComponentParam": "Go value type for an RFC 9421 covered-component parameter; py/ts model components inline.",
     "helpers.CoveredComponent": "Go value type for an RFC 9421 covered component; py/ts model components inline.",
     "helpers.ErrAcceptanceSignatureInvalid": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
-    "helpers.ErrRequestAcceptanceSignatureInvalid": "Go errors.Is sentinel; py/ts return false for a request-acceptance mismatch rather than exporting a sentinel.",
     "helpers.ErrAudienceIdentity": "Go errors.Is sentinel for an unusable configured Exchange identity; py/ts raise/throw instead of exporting sentinels.",
     "helpers.ErrBrokenSignatureChain": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "helpers.ErrDigestMismatch": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
@@ -111,6 +111,7 @@
     "helpers.ErrOfferExpired": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "helpers.ErrOfferSignatureInvalid": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "helpers.ErrProofOfPossessionMismatch": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrRequestAcceptanceSignatureInvalid": "Go errors.Is sentinel; py/ts return false for a request-acceptance mismatch rather than exporting a sentinel.",
     "helpers.ErrSignatureLifetimeTooLong": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "helpers.ErrSignatureVerify": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "helpers.ErrTooManyHops": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
@@ -136,7 +137,7 @@
     "helpers.RegistrationDataUncanonicalizable": "Member of the mapped helpers.RegistrationDataVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token.",
     "helpers.RegistrationSchemaCompileTimeout": "Go-only wall-clock backstop on compilation, not part of the accepted/refused contract and deliberately absent from the ports: Go's runtime preempts, while a CPU-bound spin holds CPython's interpreter and blocks Node's event loop, so a timer there cannot interrupt the work it names. What bounds all three identically is static — the size, depth and evaluation caps and the pattern alphabet — and no admitted schema should ever reach this timeout.",
     "helpers.RequestAcceptancePayload": "Go typed-protobuf builder for the request-acceptance payload; Python and TypeScript build their language-native payload objects inside the mapped canonicalizer/client.",
-    "helpers.RetrievalAuthFailureReasonFromToken": "Go lookup from the delivery edge's refusal token to the typed enum; py/ts branch on the token string directly.",
+    "helpers.RetrievalAuthFailureReasonFromToken": "Go exposes the delivery edge's refusal-token table as an L1 lookup, because the Exchange and the client both read it; in the ports the content leg is its only consumer, so each keeps the SAME table private to that module. The table is the protocol's own record — ramp.proto names the token beside each enum value — never derived from the enum's spelling, and synthesized-detail-vectors.json replays every recorded token in all three languages so the three copies cannot come apart again.",
     "helpers.SchemaAccepted": "Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token.",
     "helpers.SchemaCompileTimeout": "Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token.",
     "helpers.SchemaMalformed": "Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token.",
@@ -153,8 +154,8 @@
     "helpers.SchemaWrongDialect": "Member of the mapped helpers.SchemaVerdict vocabulary. Python and TypeScript spell it as a literal; the shared registration-schema corpus pins the token.",
     "helpers.SharedValidator": "Go protovalidate validator singleton; TS/Python ship no protovalidate face.",
     "helpers.SignOfferAcceptanceWith": "Go Signer-custody variant of SignOfferAcceptance so the SDK never holds the key; py/ts pass key material directly to their single acceptance signer.",
-    "helpers.SignRequestAcceptanceWith": "Go Signer-custody variant of SignRequestAcceptance; Python custody is a SigningTransport method and TypeScript passes its CryptoKey directly.",
     "helpers.SignOptions": "Go options struct for SignRequest; py/ts pass options via kwargs/options objects.",
+    "helpers.SignRequestAcceptanceWith": "Go Signer-custody variant of SignRequestAcceptance; Python custody is a SigningTransport method and TypeScript passes its CryptoKey directly.",
     "helpers.SignatureAgentFromContext": "Go context.Context accessor; py/ts thread signature-agent state explicitly.",
     "helpers.SignedURL": "Go signed-URL result value type; py/ts return language-native result objects.",
     "helpers.Signer": "Go Signer interface; py/ts inject a sign function (TS Ed25519SignFn; Python a signing callable) rather than a named Signer type — divergent handle shape, not a missing operation.",
@@ -245,6 +246,11 @@
       "allowlist_reason": "Go NewX factory folds into the Python class constructor (Client(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the create* object-factory prefix.",
       "python": null,
       "ts": "createClient"
+    },
+    "connect.RegistrationRequirementsReader": {
+      "allowlist_reason": null,
+      "python": "RegistrationRequirementsReader",
+      "ts": "RegistrationRequirementsReader"
     },
     "connect.Validation": {
       "allowlist_reason": null,
@@ -379,15 +385,15 @@
       "python": "jcs_acceptance_payload",
       "ts": "acceptancePayload"
     },
-    "helpers.CanonicalRequestAcceptanceBytes": {
-      "allowlist_reason": null,
-      "python": "jcs_request_acceptance_payload",
-      "ts": "requestAcceptancePayload"
-    },
     "helpers.CanonicalOfferBytes": {
       "allowlist_reason": null,
       "python": "canonical_offer_payload",
       "ts": "canonicalOfferPayload"
+    },
+    "helpers.CanonicalRequestAcceptanceBytes": {
+      "allowlist_reason": null,
+      "python": "jcs_request_acceptance_payload",
+      "ts": "requestAcceptancePayload"
     },
     "helpers.CanonicalRestrictionToken": {
       "allowlist_reason": null,
@@ -714,15 +720,15 @@
       "python": "sign_offer_acceptance_jcs",
       "ts": "signOfferAcceptance"
     },
-    "helpers.SignRequestAcceptance": {
-      "allowlist_reason": null,
-      "python": "sign_request_acceptance_jcs",
-      "ts": "signRequestAcceptance"
-    },
     "helpers.SignRequest": {
       "allowlist_reason": null,
       "python": "sign_request",
       "ts": "signRequest"
+    },
+    "helpers.SignRequestAcceptance": {
+      "allowlist_reason": null,
+      "python": "sign_request_acceptance_jcs",
+      "ts": "signRequestAcceptance"
     },
     "helpers.SignURLEd25519": {
       "allowlist_reason": null,
@@ -784,15 +790,15 @@
       "python": "verify_offer_acceptance_jcs",
       "ts": "verifyOfferAcceptance"
     },
-    "helpers.VerifyRequestAcceptance": {
-      "allowlist_reason": null,
-      "python": "verify_request_acceptance_jcs",
-      "ts": "verifyRequestAcceptance"
-    },
     "helpers.VerifyRequest": {
       "allowlist_reason": null,
       "python": "verify_request",
       "ts": "verifyRequestServer"
+    },
+    "helpers.VerifyRequestAcceptance": {
+      "allowlist_reason": null,
+      "python": "verify_request_acceptance_jcs",
+      "ts": "verifyRequestAcceptance"
     },
     "helpers.VerifyURLEd25519": {
       "allowlist_reason": null,
@@ -854,6 +860,11 @@
       "python": "EndpointRefusedError",
       "ts": "EndpointRefused"
     },
+    "resolvers.ErrExchangeNotPermitted": {
+      "allowlist_reason": null,
+      "python": "ExchangeNotPermittedError",
+      "ts": "ExchangeNotPermitted"
+    },
     "resolvers.ErrKeyExpired": {
       "allowlist_reason": null,
       "python": "KeyExpiredError",
@@ -863,6 +874,11 @@
       "allowlist_reason": null,
       "python": "KeyRevokedError",
       "ts": "KeyRevoked"
+    },
+    "resolvers.ErrManifestNotExchange": {
+      "allowlist_reason": null,
+      "python": "ManifestNotExchangeError",
+      "ts": "ManifestNotExchange"
     },
     "resolvers.ErrManifestVersionRefused": {
       "allowlist_reason": null,
@@ -914,10 +930,20 @@
       "python": null,
       "ts": "createWellKnownKeyResolver"
     },
+    "resolvers.NewWellKnownRequirementsReader": {
+      "allowlist_reason": "Go NewWellKnownRequirementsReader factory folds into the Python class constructor (WellKnownRequirementsReader(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWellKnownRequirementsReader factory.",
+      "python": null,
+      "ts": "createWellKnownRequirementsReader"
+    },
     "resolvers.OfferDirectoryFetcher": {
       "allowlist_reason": null,
       "python": "DirectoryFetch",
       "ts": "OfferDirectoryFetch"
+    },
+    "resolvers.RegistrationRequirements": {
+      "allowlist_reason": null,
+      "python": "RegistrationRequirements",
+      "ts": "RegistrationRequirements"
     },
     "resolvers.SSRFGuard": {
       "allowlist_reason": null,
@@ -958,6 +984,11 @@
       "allowlist_reason": "Go options struct (shared by the well-known key/endpoint resolvers) / TS options object folds into Python constructor keyword arguments (WellKnownKeyResolver(...) / WellKnownEndpointResolver(...)); idiomatic Python has no separate options type.",
       "python": null,
       "ts": "WellKnownOptions"
+    },
+    "resolvers.WellKnownRequirementsReader": {
+      "allowlist_reason": null,
+      "python": "WellKnownRequirementsReader",
+      "ts": "WellKnownRequirementsReader"
     }
   }
 }

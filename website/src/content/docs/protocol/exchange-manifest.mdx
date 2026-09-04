@@ -180,6 +180,27 @@ is a denial-of-service vector and one that resolves references is an SSRF vector
 aimed wherever its author points. A publisher **MUST** satisfy every rule below,
 and a consumer **MUST** refuse a schema that does not.
 
+The SDK is that consumer for a registering agent: it reads this block from a
+**freshly fetched** manifest — never a cached one, because the terms digest beside
+it cannot be checked for staleness locally — over its SSRF-guarded transport, since
+the Exchange domain arrives on the request rather than from configuration. It then
+compiles the schema under every rule here, and pre-checks the payload before
+anything is signed. A schema it refuses is
+reported as a verdict and the registration is sent anyway: refusing locally would
+turn a rule about reading a third party's document into a denial of service against
+the agent's own user, so the Exchange's own enforcement stays the deciding check.
+The 16KB cap is measured over the bytes **as served**, in every language, so a
+schema padded past it on the wire is refused at both ends rather than at one.
+
+A payload the pre-check does refuse comes back naming the offending members, as the
+same typed `RegistrationFailure` detail an Exchange attaches when it refuses the same
+payload — so an agent reads one shape whichever side declined, and its tooling needs
+one renderer rather than two. The detail's `domain` names the client's own tier rather
+than the Exchange, which never saw the request. Each entry addresses a member by RFC
+6901 pointer, with the empty pointer addressing `registration_data` itself; the
+constraint text beside it is developer-facing and validator-defined, so branch on the
+pointer and the typed reason, never on that prose.
+
 - **Self-contained.** Every `$ref`, `$dynamicRef` and `$recursiveRef` begins with
   `#`. A consumer never resolves a reference that leaves the document — doing so
   turns every reader into a fetch aimed at a URL the schema's author chose.

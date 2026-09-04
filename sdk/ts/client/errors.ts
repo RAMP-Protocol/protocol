@@ -49,6 +49,11 @@ export interface CallErrorInit {
 	reason?: string;
 	/** The typed protocol reason when there is one. */
 	detail?: ErrorDetail;
+	/** The developer message the peer put on its TYPED reason, when it sent one.
+	 * Deliberately not filled from the transport envelope: an answer that did not
+	 * come from a RAMP service carries no message of its own, and the text a
+	 * transport synthesizes for one is that transport's rather than the peer's. */
+	peerMessage?: string;
 	/** The underlying failure, kept so a caller can still reach a custody or resolver
 	 * sentinel after the failure has been classified here. */
 	cause?: unknown;
@@ -66,6 +71,17 @@ export class RampCallError extends Error {
 	readonly status: number | undefined;
 	readonly reason: string | undefined;
 	readonly detail: ErrorDetail | undefined;
+	/** The peer's own developer message, taken from its typed reason. Empty when the
+	 * answer carried none.
+	 *
+	 * A field rather than something to recover from `message`'s rendering, because a
+	 * reason rendered into prose cannot be read back out without parsing it. It sits
+	 * BESIDE `reason` rather than in it: `reason` is the peer's machine token.
+	 *
+	 * NON-AUTHORITATIVE and UNBOUNDED — the contract says both of the field it comes
+	 * from. Branch on `kind` or on the typed reason, never on this text, and bound it
+	 * before rendering it to a log line or an agent. */
+	readonly peerMessage: string;
 
 	constructor(init: CallErrorInit) {
 		super(renderCallError(init), init.cause !== undefined ? { cause: init.cause } : undefined);
@@ -75,6 +91,13 @@ export class RampCallError extends Error {
 		this.status = init.status;
 		this.reason = init.reason;
 		this.detail = init.detail;
+		// Taken ONLY from what the decode site passed, never derived from `detail`
+		// here. A detail is not always the peer's: the content leg SYNTHESIZES one
+		// from the edge's refusal token, and its message is this SDK's own sentence
+		// with the token quoted into it. Deriving from the field would put the SDK's
+		// words in the field that claims to hold a remote party's, which is the one
+		// thing this field exists not to do.
+		this.peerMessage = init.peerMessage ?? "";
 	}
 
 	/**

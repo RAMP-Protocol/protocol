@@ -8,8 +8,8 @@ directly with no `replace` directive.
 |---|---|---|
 | **L0** | `gen/go/ramp/v1`, `gen/go/vocab/*` | generated wire types (consumed, never rebuilt) |
 | **L1** | **`sdk/go/helpers`** | stateless, **IO-free** protocol helpers — RFC 9421/7638 crypto, offer/acceptance verify, static key resolution, validation |
-| L2 · I/O | **`sdk/go/resolvers`** | the network-fetching tier: well-known JWKS / WBA directory / `ramp.json` endpoint / offer-key resolvers + the SSRF-guarded HTTP client. Runs on a maintained `net/http` client behind the SSRF guard; composes L1, never the reverse |
-| L2 · transport | `sdk/go/core` (transport-neutral: Verifier, {verified,rejected}, `DiscoveryResult` per-URI groups, VerifiedOffer guard, signing RoundTripper, ReplayStore — zero Connect) · `sdk/go/connect` (Connect **client** binding: `NewClient` + `NewBrokerClient` + `NewCatalogClient`; the agent verbs **`Discover` · `Resolve` · `Execute` · `ReportUsage` · `Dispute` · `Fetch`** and the publisher verbs **`PushResources` · `RemoveResources` · `RefreshCatalog`** + client options + the `CallError` taxonomy + `ErrorDetailFrom`) · `sdk/go/connectserver` (Connect **server** binding: `NewExchangeServiceHandler` + `NewBrokerServiceHandler` + `NewCatalogServiceHandler` + server options + `AsConnectError` + `AttachErrorDetail`/`AttachDetail` + the reject answer **`RejectCode` · `IsBodyTooLarge` · `WriteReject`**, the one place the 413/429/401 split and the error-envelope body are decided) | transport-neutral core + Connect client/server bindings (state injected) |
+| L2 · I/O | **`sdk/go/resolvers`** | the network-fetching tier: well-known JWKS / WBA directory / `ramp.json` endpoint / offer-key resolvers, the uncached registration-requirements reader, + the SSRF-guarded HTTP client. Runs on a maintained `net/http` client behind the SSRF guard; composes L1, never the reverse |
+| L2 · transport | `sdk/go/core` (transport-neutral: Verifier, {verified,rejected}, `DiscoveryResult` per-URI groups, VerifiedOffer guard, signing RoundTripper, ReplayStore — zero Connect) · `sdk/go/connect` (Connect **client** binding: `NewClient` + `NewBrokerClient` + `NewCatalogClient`; the agent verbs **`Discover` · `Resolve` · `Execute` · `ReportUsage` · `Dispute` · `Fetch`**, the account-setup verbs **`Register` · `GetAccountStatus`** and the publisher verbs **`PushResources` · `RemoveResources` · `RefreshCatalog`** + client options + the `CallError` taxonomy + `ErrorDetailFrom`) · `sdk/go/connectserver` (Connect **server** binding: `NewExchangeServiceHandler` + `NewBrokerServiceHandler` + `NewCatalogServiceHandler` + server options + `AsConnectError` + `AttachErrorDetail`/`AttachDetail` + the reject answer **`RejectCode` · `IsBodyTooLarge` · `WriteReject`**, the one place the 413/429/401 split and the error-envelope body are decided) | transport-neutral core + Connect client/server bindings (state injected) |
 | L3 | separate packages | framework adapters (convert, never replace) — later |
 
 The `L2` tier is split by kind: the **I/O** package (`resolvers`) is the only tier
@@ -198,7 +198,16 @@ whole object) plus the violated constraint. The text states the constraint and
 refusal travels back over the wire, so the validating library's own messages, which
 quote the failing value, are deliberately not used. The list is deduplicated by
 pointer and keyword and sorted before the 64-item cap, so the same entries survive in
-every language.
+every language. The POINTERS survive identically; the constraint text does not, and
+the contract says so of that field — it is validator-defined and not stable across
+implementations, so branch on the pointer and the typed reason, never on the prose.
+
+The client's own pre-check returns this same list, on the `CallError` it refuses with,
+as a `RegistrationFailure` detail reachable through `ErrorDetailFrom`. That is
+deliberate: an agent developer's tooling renders the Exchange's refusal and the local
+one through the same code, and a structured list on one side and a sentence on the
+other would read as two different problems. Its `domain` names the client rather than
+the Exchange, which never saw the request.
 
 **Also:** RFC 7638 `Thumbprint`, ADR-019 `ErrorDetail` constructors +
 `AsConnectError`/`ErrorDetailFrom`/`Reason`, `NewIdempotencyKey`, scope helpers,

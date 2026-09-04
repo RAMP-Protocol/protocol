@@ -47,6 +47,33 @@
       "requester_id": ""
     },
     {
+      "name": "register",
+      "verb": "register",
+      "path": "/ramp.v1.ExchangeService/Register",
+      "ver": "1.0",
+      "idempotency_key": "",
+      "key_minted": false,
+      "requester_id": ""
+    },
+    {
+      "name": "register_caller_ver_wins",
+      "verb": "register",
+      "path": "/ramp.v1.ExchangeService/Register",
+      "ver": "9.9",
+      "idempotency_key": "",
+      "key_minted": false,
+      "requester_id": ""
+    },
+    {
+      "name": "get_account_status",
+      "verb": "getAccountStatus",
+      "path": "/ramp.v1.ExchangeService/GetAccountStatus",
+      "ver": "1.0",
+      "idempotency_key": "",
+      "key_minted": false,
+      "requester_id": ""
+    },
+    {
       "name": "execute_key_pinned",
       "verb": "execute",
       "path": "/ramp.v1.ExchangeService/ExecuteTransaction",

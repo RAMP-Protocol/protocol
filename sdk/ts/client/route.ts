@@ -133,6 +133,22 @@ export async function vetExchangeEndpoint(
 	return endpoint;
 }
 
+/** Whether a cause is the invalid-host refusal.
+ *
+ * Matched on its wording rather than its type. The host helpers are L1 and deliberately
+ * raise a bare error for it — a typed InvalidHost would cross the helpers-versus-resolvers
+ * sentinel split the SDK documents — so the shared prefix is what there is to match.
+ *
+ * Exported because TWO injectable readers can raise it, the endpoint resolver and the
+ * registration-requirements reader, and both have to call it final for the same reason. A
+ * second copy of the prefix is exactly how the two would come to disagree. */
+export function isInvalidHostRefusal(cause: unknown): boolean {
+	return (
+		cause instanceof Error &&
+		cause.message.startsWith("hosts: reference is not a usable host")
+	);
+}
+
 // isVerdict tells the resolver's final answers from its transient ones. The invalid-host
 // error is in the set because the resolver checks the host itself too, and a value that
 // is not a host will not become one on a later attempt. This module checks it before
@@ -145,14 +161,5 @@ function isVerdict(cause: unknown): boolean {
 	) {
 		return true;
 	}
-	// The invalid-host refusal is matched on its wording rather than its type. The host
-	// helpers are L1 and deliberately raise a bare error for it — a typed InvalidHost
-	// would cross the helpers-versus-resolvers sentinel split the SDK documents — so the
-	// shared prefix is what there is to match. It is only reachable through an INJECTED
-	// resolver: the bare-host check above runs first, so the SDK's own resolver can never
-	// be handed a value that fails it here.
-	return (
-		cause instanceof Error &&
-		cause.message.startsWith("hosts: reference is not a usable host")
-	);
+	return isInvalidHostRefusal(cause);
 }

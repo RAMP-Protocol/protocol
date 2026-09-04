@@ -12,7 +12,7 @@ it hands back.
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from wire.models import (
@@ -20,10 +20,15 @@ from wire.models import (
     DiscoveryResponse,
     DisputeRequest,
     DisputeResponse,
+    GetAccountStatusRequest,
+    GetAccountStatusResponse,
     PushResourcesRequest,
     PushResourcesResponse,
     RefreshCatalogRequest,
     RefreshCatalogResponse,
+    RegisterRequest,
+    RegisterResponse,
+    RegistrationFailureReason,
     RemoveResourcesRequest,
     RemoveResourcesResponse,
     ResourceQuery,
@@ -42,7 +47,16 @@ from ramp_sdk.core import (
     VerifiedOffer,
     Verifier,
 )
+from ramp_sdk.errordetail import registration_failure_detail
 from ramp_sdk.idempotency import generate_idempotency_key
+from ramp_sdk.regschema import check_registration_data
+from ramp_sdk.resolvers import (
+    ExchangeNotPermittedError,
+    ManifestNotExchangeError,
+    WellKnownRequirementsReader,
+    guarded_client,
+)
+from ramp_sdk.window import Window
 from ramp_sdk.wire import ProtocolVersion
 from ramp_sdk.wire_canon import from_wire_offer
 
@@ -59,10 +73,16 @@ from ._call import (
 from .._hostref import _redact_userinfo as redact_userinfo
 from ..hosts import is_bare_domain
 from .errors import CallError, CallErrorKind, malformed, not_sent
-from .route import EndpointResolver, vet_exchange_endpoint
+from .route import (
+    EndpointResolver,
+    RegistrationRequirementsReader,
+    vet_exchange_endpoint,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    import httpx
 
     from ramp_sdk.signing_transport import SigningTransport
     from ramp_sdk.window import Window
@@ -92,6 +112,25 @@ class ClientConfig:
     #: Turns an offer's exchange domain into that Exchange's own advertised origin. Never
     #: configuration — a usage report and a dispute go where the signed offer says.
     endpoint_resolver: EndpointResolver | None = None
+    #: Reports what one Exchange asks of a registration — the terms revision submitting
+    #: one accepts, and the schema its registration_data must match. The reader it takes
+    #: holds no document cache, and that is the point rather than an implementation
+    #: detail: the contract requires a registering client to read the terms digest from a
+    #: FRESHLY fetched manifest, so an implementation serving it from a cache breaks the
+    #: rule the field exists to record. There is deliberately no slot for a digest or a
+    #: schema directly — a caller managing its own requirements sets ``terms_digest`` on
+    #: the request, which suppresses the read and says so on the message the signature
+    #: covers.
+    registration_requirements: RegistrationRequirementsReader | None = None
+    #: The RFC 9421 freshness window stamped on every outbound REQUEST signature.
+    #:
+    #: Named here as well as on the signer so the knob sits at the same tier it does in
+    #: Go and TypeScript. A deployment with its own freshness policy sets it; so does one
+    #: whose peer screens replays on (key id, signature), since timestamps have
+    #: one-second resolution and two identical requests inside a second otherwise sign to
+    #: the same bytes — ``monotonic_window`` keeps each signature unique for exactly
+    #: that, and must be ONE INSTANCE PER CLIENT rather than one per call.
+    sign_window: Window | None = None
     #: Mints the X-Request-ID correlation value. ``None`` sends no header.
     request_id: Callable[[], str] | None = None
     #: The freshness window stamped on a delivery-fetch proof.
@@ -105,6 +144,28 @@ class ClientConfig:
         if self.verifier is not None:
             return self.verifier
         return _NULL_VERIFIER
+
+
+def _with_requirements_reader(
+    config: ClientConfig,
+) -> tuple[ClientConfig, httpx.Client | None]:
+    """Fill in the default requirements reader ONCE, and report the transport that
+    came with it.
+
+    Both client facades call this from their constructor, which is the tier Go resolves
+    the same default at. Per CALL it would build an SSRF-guarded httpx client for every
+    registration and close none of them; per CLIENT it is one pooled transport with an
+    owner that can close it.
+
+    The caller's config is never mutated — a caller may hold it, reuse it across
+    clients, or read it back — so the filled-in reader rides on a copy. The second
+    return is the transport this client OWNS: ``None`` when the caller injected a
+    reader, because then the transport inside it is theirs.
+    """
+    if config.registration_requirements is not None:
+        return config, None
+    http = guarded_client()
+    return replace(config, registration_requirements=WellKnownRequirementsReader(http=http)), http
 
 
 class _NullOfferKeyResolver:
@@ -472,22 +533,181 @@ def _plan_offer_derived(
     message: dict[str, Any],
     idempotency_key: str | None,
 ) -> Plan:
+    # Discovery and execute keep the plain transport, because their address is the
+    # operator's own configuration. The same split the Go client makes.
+    sent = _stamp_envelope(verb.op, message, idempotency_key)
+    return _plan_routed_keyless(cfg, _Routed(verb.op, verb.model, verb.method), sent)
+
+
+# ---------------------------------------------------------------------------
+# account setup: register / get account status
+#
+# They route like a usage report, not like discovery. An account is per-Exchange,
+# and which Exchange is the agent's choice PER CALL: a target routinely arrives at
+# runtime — a denial names where to register — rather than from configuration.
+#
+# Neither message carries an idempotency key, so neither verb takes one.
+# ---------------------------------------------------------------------------
+
+#: The ErrorDetail domain for a refusal THIS CLIENT computed, before anything was sent.
+#: It names the failing surface, which here is the client's own tier: the Exchange never
+#: saw the request, so naming it would attribute a local verdict to a party that reached
+#: none. The naming rule the value follows — a Service suffix for an RPC service that
+#: exists in the contract, a bare noun for a tier that does not — is recorded on the Go
+#: oracle's ``edgeErrorDomain``, beside ``_EDGE_ERROR_DOMAIN``'s twin.
+_CLIENT_ERROR_DOMAIN = "ramp.v1.Client"
+
+
+def plan_register(cfg: ClientConfig, request: dict[str, Any]) -> Plan:
+    """Assemble a registration for the Exchange the request names.
+
+    The caller's identity is the request SIGNATURE. Nothing in the message says who is
+    registering, and the business payload is not an identity claim.
+
+    Four bounds on ``registration_data`` are checked before anything is signed, in the
+    order the contract fixes, because a limit that exists to stop work belongs before the
+    work it would stop — including before the manifest read.
+
+    ``terms_digest`` is filled only when the caller left it ABSENT, from a freshly fetched
+    manifest, and the payload is pre-checked against the schema that manifest publishes. A
+    caller that sets the field is managing its own requirements and gets neither.
+
+    A schema this SDK refuses never becomes a local veto: refusing locally and declining
+    to send would turn a rule about reading a third party's document into a denial of
+    service against the caller's own user, so an unusable schema is skipped and the
+    Exchange decides.
+    """
+    op = "register"
+    sent = _stamp_ver(op, request)
+    _require_recipient(op, _str_field(sent, "exchange"))
+    data = sent.get("registration_data")
+    verdict = check_registration_data(data if isinstance(data, dict) else None)
+    if verdict != "accepted":
+        raise malformed(op, f"registration_data: {verdict}")
+    if sent.get("terms_digest") is None:
+        _apply_registration_requirements(cfg, op, sent)
+    return _plan_routed_keyless(cfg, _Routed(op, RegisterRequest, "Register"), sent)
+
+
+def finish_register(plan: Plan, status: int, body: str) -> RegisterResponse:
+    return decode(plan.op, status, body, RegisterResponse)  # type: ignore[no-any-return]
+
+
+def plan_get_account_status(cfg: ClientConfig, request: dict[str, Any]) -> Plan:
+    """Assemble a status read for the Exchange the request names.
+
+    The request carries no field identifying the caller — the Exchange resolves the
+    account from the verified signature — so ``exchange`` is the only thing that says
+    which account is being asked about.
+
+    A caveat worth knowing before calling this in a loop. The request has no varying
+    field, so two calls to the same Exchange inside one wall-clock second sign IDENTICAL
+    bytes, and a peer screening replays on (key id, signature) refuses the second. This
+    verb does not choose the freshness window for you, because a window is one instance
+    per client rather than per call: set ``ClientConfig.sign_window`` to a
+    ``monotonic_window`` when repeat calls are expected.
+    """
+    op = "get account status"
+    sent = _stamp_ver(op, request)
+    _require_recipient(op, _str_field(sent, "exchange"))
+    return _plan_routed_keyless(
+        cfg, _Routed(op, GetAccountStatusRequest, "GetAccountStatus"), sent
+    )
+
+
+def finish_get_account_status(plan: Plan, status: int, body: str) -> GetAccountStatusResponse:
+    return decode(plan.op, status, body, GetAccountStatusResponse)  # type: ignore[no-any-return]
+
+
+def _apply_registration_requirements(cfg: ClientConfig, op: str, sent: dict[str, Any]) -> None:
+    """Read what the Exchange asks of a registration and apply it to the request.
+
+    A failed READ refuses the registration rather than sending without a digest. Guessing
+    here is not the cautious option: an Exchange that publishes a digest refuses a
+    registration that omits one, so sending anyway trades a local failure the caller can
+    act on for a remote one it cannot.
+    """
+    # Both client facades fill this in at construction, so the fallback is only for a
+    # caller driving the plan functions directly. It builds a transport per call, which
+    # is why the clients do not go through it.
+    reader = cfg.registration_requirements
+    if reader is None:
+        reader = WellKnownRequirementsReader()
+    exchange = _str_field(sent, "exchange")
+    try:
+        reqs = reader.resolve_registration_requirements(exchange)
+    # ValueError is the invalid-host refusal: the host helpers are L1 and deliberately
+    # raise a bare error for it, so this is the shape there is to catch, and it is the
+    # same one the routing tier catches for the same reason. The verb's own recipient
+    # check runs the host rule first, so the SDK's own reader never reaches here that
+    # way — an INJECTED one can, and calling its refusal retryable would have a caller
+    # retry a verdict.
+    except (ExchangeNotPermittedError, ManifestNotExchangeError, ValueError) as exc:
+        # A value this deployment or the Exchange refused is FINAL; anything else is a
+        # transport failure worth retrying. The same split the routing tier makes, so a
+        # caller branches on one taxonomy whichever check declined.
+        raise not_sent(op, str(exc)) from exc
+    except CallError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - classified, then re-raised as one shape
+        raise CallError(kind=CallErrorKind.UNREACHABLE, op=op, cause=exc) from exc
+    if reqs.terms_digest is not None:
+        sent["terms_digest"] = reqs.terms_digest
+    # A None validator means "nothing to enforce", which is the behaviour the contract
+    # requires both when the Exchange publishes no schema and when it publishes one this
+    # SDK refused. One branch, deliberately.
+    data = sent.get("registration_data")
+    fails = reqs.schema.validate(data if isinstance(data, dict) else None) if reqs.schema else []
+    if fails:
+        # An empty path addresses the whole object, which is how a missing required
+        # member and every other whole-object failure is reported. Rendering a bare
+        # ": ..." there would read as a member with no name.
+        named = "; ".join(
+            f"{p}: {f.get('error', '')}" if (p := f.get("path", "")) else f.get("error", "")
+            for f in fails
+        )
+        # The failures travel as a typed detail, not only as prose. An Exchange attaches
+        # this same list when it refuses the same payload, so a consumer that renders one
+        # refusal renders both, and nothing has to parse the members back out of a
+        # sentence.
+        raise CallError(
+            kind=CallErrorKind.MALFORMED,
+            op=op,
+            cause=f"registration_data does not match the schema {exchange} publishes: {named}",
+            detail=registration_failure_detail(
+                _CLIENT_ERROR_DOMAIN,
+                "registration_data does not match the published data_schema",
+                RegistrationFailureReason.REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
+                fails,
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class _Routed:
+    """One manifest-routed verb that carries no idempotency key: its name, its request
+    model, and its RPC method."""
+
+    op: str
+    model: Any
+    method: str
+
+
+def _plan_routed_keyless(cfg: ClientConfig, verb: _Routed, sent: dict[str, Any]) -> Plan:
+    """The routing half every manifest-addressed verb shares, with the envelope already
+    stamped by the caller.
+
+    It exists so the order — address, then schema, then the guarded leg — is written
+    once. The address is vetted BEFORE the schema: an unroutable recipient is a refusal to
+    send, which is a different verdict from a message the server would reject, and the
+    caller acts on them differently.
+    """
     op = verb.op
-    sent = _stamp_envelope(op, message, idempotency_key)
-    # The address is vetted BEFORE the schema: an unroutable recipient is a refusal to
-    # send, which is a different verdict from a message the server would reject, and the
-    # caller acts on them differently.
-    endpoint = vet_exchange_endpoint(
-        cfg.endpoint_resolver, _str_field(sent, "exchange"), op
-    )
+    endpoint = vet_exchange_endpoint(cfg.endpoint_resolver, _str_field(sent, "exchange"), op)
     validate_request(op, sent, verb.model, cfg.validation)
-    # The offer-derived leg, so the guarded transport: the caller named a domain, the
-    # manifest it serves named this endpoint, and a signed call now goes there. Discovery
-    # and execute keep the plain one, because their address is the operator's own
-    # configuration. The same split the Go client makes.
-    return _plan(
-        cfg, _Route(op, endpoint, EXCHANGE_SERVICE, verb.method), sent, guarded=True
-    )
+    # The manifest-derived leg, so the guarded transport: the caller named a domain, the
+    # manifest it serves named this endpoint, and a signed call now goes there.
+    return _plan(cfg, _Route(op, endpoint, EXCHANGE_SERVICE, verb.method), sent, guarded=True)
 
 
 # ---------------------------------------------------------------------------
@@ -683,7 +903,12 @@ def _plan(
     op = route.op
     url = rpc_url(route.base_url, route.service, route.method)
     body, headers = prepare(
-        op, url, sent, signer=cfg.signer, request_id=cfg.request_id
+        op,
+        url,
+        sent,
+        signer=cfg.signer,
+        request_id=cfg.request_id,
+        sign_window=cfg.sign_window,
     )
     return Plan(
         op=op,

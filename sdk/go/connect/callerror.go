@@ -65,15 +65,54 @@ func (k CallErrorKind) String() string { return failure.Name(callErrorKindNames,
 // Detail carries the typed protocol reason when there is one. On an RPC path it
 // is the ErrorDetail the peer emitted; on the content path it is SYNTHESIZED
 // locally from the edge's refusal token, because the edge answers a small JSON
-// object rather than a protobuf. ErrorDetailFrom reads both, so a caller branches
-// on one vocabulary either way.
+// object rather than a protobuf; and on a registration refused by the client's own
+// pre-check it is synthesized from the schema failures that pre-check found, which
+// are the failures the Exchange would have named had the request been sent.
+// ErrorDetailFrom reads all three, so a caller branches on one vocabulary whichever
+// side declined.
 type CallError struct {
 	Kind   CallErrorKind
 	Op     string
 	Status int    // HTTP status when the peer answered; 0 otherwise
 	Reason string // the peer's own refusal token when it sent one
 	Detail *rampv1.ErrorDetail
-	Err    error
+	// PeerMessage is the developer message the peer put on its TYPED reason, when
+	// it sent one. Empty otherwise.
+	//
+	// It is a field rather than something to recover from Error()'s rendering
+	// because a reason rendered into prose cannot be read back out without
+	// parsing it, and a layer that has to do that is a layer that will get it
+	// wrong. It sits BESIDE Reason rather than in it: Reason is the peer's
+	// machine token, and putting prose there was a mistake this SDK has already
+	// made once and reverted.
+	//
+	// It is deliberately NOT filled from the transport envelope when there is no
+	// typed detail. An answer that did not come from a RAMP service — a draining
+	// load balancer, a proxy's own page — carries no message of its own, and the
+	// text a transport synthesizes for it is that transport's, not the peer's:
+	// connect-go writes "502 Bad Gateway" where a fetch-based client writes
+	// nothing, so carrying it would make this field's value a property of the
+	// language rather than of the answer. That text is still reachable through
+	// the cause, where it reads as what it is.
+	//
+	// It is equally NOT filled from a detail this SDK BUILT ITSELF — the content
+	// leg's refusal sentence, or the registration pre-check's. Those details carry
+	// a typed reason, so the envelope rule above would not stop them; what stops
+	// them is that the sentence around the reason is ours. A field that exists so a
+	// layer can attribute prose to a remote party cannot sometimes hold our words.
+	// In Go only the decode site fills this, so the rule holds structurally; the
+	// two ports state it where their constructors could otherwise derive it.
+	//
+	// NON-AUTHORITATIVE, and the contract says so of the field it comes from.
+	// Branch on Kind or on the typed reason, never on this text. It is also
+	// UNBOUNDED — the contract calls it an easy existence oracle and places the
+	// no-secrets duty on the server, so a consumer that renders it to a log line
+	// or to an agent bounds it there, where the audience is known. This SDK does
+	// not bound it, for the same reason it does not bound Detail.Message:
+	// truncating a peer's only account of why a call failed is a decision that
+	// belongs to whoever displays it.
+	PeerMessage string
+	Err         error
 }
 
 func (e *CallError) Error() string {
@@ -150,6 +189,7 @@ func sendError(op string, err error) error {
 	out.Reason = cerr.Code().String()
 	if detail, ok := errorDetailFromConnect(cerr); ok {
 		out.Detail = detail
+		out.PeerMessage = detail.GetMessage()
 	}
 	return out
 }

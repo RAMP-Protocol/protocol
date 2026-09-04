@@ -136,14 +136,14 @@
     },
     {
       "name": "registration_failure_reason",
-      "domain": "ramp.v1.RegistrationService",
+      "domain": "ramp.v1.ExchangeService",
       "message": "domain not verified",
       "metadata": null,
       "reason_field": "registration_failure",
       "reason_enum": "REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED",
       "field_errors": null,
       "wire_json": {
-        "domain": "ramp.v1.RegistrationService",
+        "domain": "ramp.v1.ExchangeService",
         "message": "domain not verified",
         "registration_failure": {
           "reason": "REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED"

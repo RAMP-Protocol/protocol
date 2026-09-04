@@ -17,11 +17,14 @@ import (
 // (AsConnectError) lives in the server binding sdk/go/connectserver.
 func ErrorDetailFrom(err error) (*rampv1.ErrorDetail, bool) {
 	// The SDK's own typed failure is checked first, so ONE accessor serves every
-	// verb. On an RPC path the detail below was emitted by the peer; on the
-	// content path it was synthesized locally from the edge's refusal token,
-	// because a delivery edge answers a small JSON object rather than a protobuf.
-	// What a synthesized detail names as its domain, and why, is recorded once on
-	// edgeErrorDomain rather than restated here.
+	// verb. The detail below reaches it three ways. On an RPC path the peer emitted
+	// it. On the content path it was synthesized locally from the edge's refusal
+	// token, because a delivery edge answers a small JSON object rather than a
+	// protobuf. On a registration the client PRE-CHECKED and refused, it was
+	// synthesized from the same schema failures the Exchange would have named, so a
+	// caller reads one shape whichever side declined. What a synthesized detail
+	// names as its domain, and why, is recorded once on edgeErrorDomain rather than
+	// restated here.
 	if callErr, ok := asCallError(err); ok && callErr.Detail != nil {
 		return callErr.Detail, true
 	}

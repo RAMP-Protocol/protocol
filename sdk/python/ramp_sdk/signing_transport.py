@@ -153,6 +153,7 @@ class SigningTransport:
         url: str,
         body: bytes,
         authorization: str,
+        window: Window | None = None,
     ) -> SignedOutbound:
         """Sign an outbound request; return it with the RFC 9421 headers attached.
 
@@ -160,8 +161,14 @@ class SigningTransport:
         token, which BINDS that emptiness (mirrors the L1 sign_request contract). The
         header is still emitted and still sent; an absent header is a different thing
         entirely and a verifier refuses it.
+
+        ``window`` overrides the one this transport was built with, so a client can
+        surface the freshness knob at the tier Go and TypeScript surface it at without
+        the application having to rebuild its signer. It must be ONE INSTANCE held by the
+        caller rather than a fresh one per call: a monotonic window carries the running
+        maximum that makes each signature unique, and one built per request has none.
         """
-        created, expires = self._window()
+        created, expires = (window or self._window)()
         signed = sign_request(
             method=method,
             url=url,

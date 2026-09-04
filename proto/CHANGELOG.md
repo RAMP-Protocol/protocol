@@ -2,6 +2,81 @@
 
 ## Unreleased
 
+**The SDK serves the account-setup role, in all three languages (no wire change;
+conformance-affecting).** `Register` and `GetAccountStatus` land on the agent client —
+`connect.Client` in Go, `createClient`'s face in TypeScript, `Client` and its blocking
+twin in Python — under the same names, over the same signing transport, redirect
+refusal, request-id and validate interceptors and read cap as the other agent verbs.
+They sit on that client rather than on a fourth constructor because they are the same
+party holding the same key, and they route as a usage report does: the destination is
+read off the request's own `exchange`, resolved from that Exchange's own manifest, and
+dialled on the guarded leg. An account is per-Exchange and which Exchange is the agent's
+choice per call — a denial names where to register — so a configured origin would confine
+registration to one Exchange. Neither message carries an idempotency key, so neither verb
+takes call options; `ver` is stamped when empty; a request that names no bare-domain
+recipient is refused before it is signed. The client-request corpus gains three rows,
+replayed in all three languages.
+
+A new resolver face reads what one Exchange asks of a registration — the terms revision
+submitting one accepts, and the schema its `registration_data` must match — from that
+Exchange's own manifest, and it holds NO document cache. The contract requires a
+registering client to read the terms digest from a freshly fetched manifest, and the
+endpoint resolver is built out of exactly the mechanism that value may not touch, so a
+face with no cache slot to reuse is what makes the rule structural. `Register` fills
+`terms_digest` from it only when the caller left the field unset, applies the four
+`registration_data` bounds before anything is signed, and pre-checks the payload against
+the published schema — skipping the check, never the send, when that schema is one the
+SDK refuses. The schema is measured over the bytes AS SERVED in every language, which the
+two JSON ports reach by slicing the member out of the served body rather than
+re-serialising a parsed value.
+
+The reader dials on the SSRF-guarded transport in all three languages, and is built once
+with the client rather than once per registration: the Exchange domain comes off the
+request, so it is an address another party chose, which is the provenance that takes the
+guard. A deployment reaching a private Exchange injects its own transport or sets the
+usual two environment flags.
+
+Two cross-cutting changes anyone re-pinning will see. The client's typed failure now
+carries the peer's own developer message as a value — filled where the peer's own answer
+is decoded, and empty otherwise: never a transport's synthesized status line, and never a
+typed detail the SDK built itself, as the content leg does from an edge's refusal token.
+So a consumer reads it instead of parsing it back out of a rendered error; it is
+unbounded, and bounding it belongs to whoever displays it. And Python's `ClientConfig` gains `sign_window`, so the
+RFC 9421 freshness knob sits at the tier Go and TypeScript already surface it at.
+
+A refusal the pre-check computes carries what it computed. The offending members travel as
+a typed `RegistrationFailure` detail beside the sentence, so a consumer that renders the
+Exchange's refusal and the client's own through one renderer reads one shape either way
+rather than parsing members back out of prose. Its domain names the client's own tier: the
+Exchange never saw the request. The field errors are compared across languages by POINTER
+only — the constraint text beside each comes from a different JSON Schema library in each
+port and the contract calls it validator-defined — and an empty pointer, which is how a
+missing required member is reported, now renders without a leading separator instead of as
+a member with no name.
+
+Two corrections to the content leg travel with it. The delivery edge's refusal tokens are
+recorded in the proto beside each `RetrievalAuthFailureReason`, and the mapping is not
+derivable — `expired` is `URL_EXPIRED`, `pop_expired` is `PROOF_EXPIRED`. Both JSON ports
+had computed each name by uppercasing the token instead, which matches the record for two
+of the eleven tokens, so nine refusals a real edge emits reached a TypeScript or Python
+caller with no typed reason at all while any spelling that happened to match an enum
+suffix was promoted. Both now carry the record. And an invalid-host refusal from an
+injected requirements reader is classified `not_sent` in all three rather than retried in
+two, which is what each port's own routing leg already answered.
+
+A new shared corpus pins the details the SDK builds itself rather than receives — the two
+above — over every recorded edge token, including the two that must stay untyped, replayed
+in all three languages. Two conformance guards sit under it: one holds every committed
+`ErrorDetail.domain` to the shape it claims (a `Service` suffix names a service the
+contract defines, a bare noun names a tier that is not one), and one holds the corpus to
+the token annotations in the `.proto` source. The first found a vector naming a
+registration service the contract has never defined; that fixture is corrected.
+
+*Parity record:* six new mapped symbols and one Go-idiomatic exclusion; the reader's Go
+factory folds into the Python class constructor as every other `NewX` does, so the
+shrink-only allowlist baseline moves 16 → 17 as a reviewed bump under that one recorded
+class.
+
 **SDK endpoint resolvers enforce `WellKnownManifest.ver`; `WellKnownManifestVersion`
 exported (SDK behaviour change; no wire change).** The manifest's `ver` comment now
 states the full receive-side rule — read before any other member, accept a

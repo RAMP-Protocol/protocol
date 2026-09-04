@@ -1,0 +1,338 @@
+import { describe, expect, it } from "vitest";
+
+import { createClient, RampCallError } from "../client/index.ts";
+import type { UnaryRequest, UnarySend } from "../client/index.ts";
+import {
+  ExchangeNotPermitted,
+  ManifestNotExchange,
+  type RegistrationRequirements,
+} from "../resolvers/index.ts";
+import { compileRegistrationSchema } from "../src/regschema.ts";
+import { retrievalAuthFailureDetail } from "../src/errordetail.ts";
+import { invalidHost } from "../src/host-ref.ts";
+
+/** A send that records what it was given and answers a fixed body. */
+function recordingSend(
+  answer: unknown,
+  status = 200,
+): { send: UnarySend; seen: UnaryRequest[] } {
+  const seen: UnaryRequest[] = [];
+  const send: UnarySend = async (req) => {
+    seen.push(req);
+    return { status, body: JSON.stringify(answer) };
+  };
+  return { send, seen };
+}
+
+function bodyOf(req: UnaryRequest): Record<string, unknown> {
+  return JSON.parse(new TextDecoder().decode(req.body)) as Record<string, unknown>;
+}
+
+const SCHEMA =
+  '{"type":"object","required":["legal_entity"],"properties":{"legal_entity":{"type":"string"}}}';
+
+/** Fails two ways at once: a required member is absent, which is a whole-object
+ * violation the wire reports with an EMPTY path, and a member that IS present breaks
+ * its pattern, which is reported against its own pointer. One refusal carrying both is
+ * what a consumer has to render, and the empty path is the half easiest to render
+ * wrong. */
+const BOTH_SHAPES_SCHEMA =
+  '{"type":"object","required":["legal_entity"],' +
+  '"properties":{"vat_id":{"type":"string","pattern":"^[A-Z]{2}[0-9]+$"}}}';
+
+/** Drive a pre-check refusal against `schema`, so the tests below share one
+ * arrangement and differ only in what they read off the failure. */
+async function refusedByTheSchema(
+  schemaSource: string,
+  payload: Record<string, unknown>,
+): Promise<RampCallError> {
+  const { schema, verdict } = compileRegistrationSchema(schemaSource);
+  expect(verdict).toBe("accepted");
+  const { send, seen } = recordingSend({ ver: "1.0", billing_ref: "acct-1" });
+
+  const err = await client(send, { termsDigest: undefined, schema, verdict })
+    .register({ exchange: "exchange.test", registration_data: payload })
+    .catch((e: unknown) => e);
+
+  expect(err).toBeInstanceOf(RampCallError);
+  expect((err as RampCallError).kind).toBe("malformed");
+  expect(seen).toHaveLength(0);
+  return err as RampCallError;
+}
+
+const ENDPOINT = "https://exchange.test";
+const endpointResolver = { resolveEndpoint: async () => ENDPOINT };
+
+const publishesNothing: RegistrationRequirements = {
+  termsDigest: undefined,
+  schema: null,
+  verdict: "not_published",
+};
+
+function client(
+  send: UnarySend,
+  reqs: RegistrationRequirements | (() => Promise<never>) = publishesNothing,
+) {
+  return createClient("https://home.invalid", {
+    endpointResolver,
+    send,
+    guardedSend: send,
+    registrationRequirements: {
+      resolveRegistrationRequirements: async () => {
+        if (typeof reqs === "function") return reqs();
+        return reqs;
+      },
+    },
+  });
+}
+
+describe("register", () => {
+  it("addresses the RPC, stamps ver and keeps the caller's recipient", async () => {
+    const { send, seen } = recordingSend({ ver: "1.0", billing_ref: "acct-1", active: true });
+    const resp = await client(send).register({
+      exchange: "exchange.test",
+      registration_data: { legal_entity: "Acme" },
+    });
+    expect(resp.billing_ref).toBe("acct-1");
+    const req = seen[0] as UnaryRequest;
+    expect(req.url).toBe(`${ENDPOINT}/ramp.v1.ExchangeService/Register`);
+    const body = bodyOf(req);
+    expect(body["ver"]).toBe("1.0");
+    expect(body["exchange"]).toBe("exchange.test");
+    // No idempotency key is minted: the message carries none.
+    expect(body["idempotency_key"]).toBeUndefined();
+  });
+
+  it("echoes the freshly fetched terms digest", async () => {
+    const digest = `sha256:${"ab".repeat(32)}`;
+    const { send, seen } = recordingSend({ ver: "1.0", billing_ref: "acct-1" });
+    await client(send, { ...publishesNothing, termsDigest: digest }).register({
+      exchange: "exchange.test",
+    });
+    expect(bodyOf(seen[0] as UnaryRequest)["terms_digest"]).toBe(digest);
+  });
+
+  it("leaves a caller-supplied digest alone", async () => {
+    const mine = `sha256:${"cd".repeat(32)}`;
+    const { send, seen } = recordingSend({ ver: "1.0", billing_ref: "acct-1" });
+    // The reader would throw if it were consulted, which is how this asserts that a
+    // caller managing its own requirements suppresses the read.
+    await client(send, async () => {
+      throw new Error("the requirements read must not happen");
+    }).register({ exchange: "exchange.test", terms_digest: mine });
+    expect(bodyOf(seen[0] as UnaryRequest)["terms_digest"]).toBe(mine);
+  });
+
+  it("refuses an out-of-bounds payload before signing", async () => {
+    const tooMany: Record<string, unknown> = {};
+    for (let i = 0; i <= 64; i++) tooMany[`m${i}`] = "v";
+    const { send, seen } = recordingSend({});
+    await expect(
+      client(send).register({ exchange: "exchange.test", registration_data: tooMany }),
+    ).rejects.toBeInstanceOf(RampCallError);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("refuses an unaddressed request before signing", async () => {
+    const { send, seen } = recordingSend({});
+    for (const exchange of ["", "https://exchange.test", "exchange.test/path"]) {
+      await expect(client(send).register({ exchange })).rejects.toBeInstanceOf(RampCallError);
+    }
+    expect(seen).toHaveLength(0);
+  });
+
+  // The pre-check working: a schema the SDK can use, and a payload that fails it.
+  // Refused locally, before anything is signed, with the offending member named — the
+  // point of reading the schema at all is that the caller learns this without a round
+  // trip.
+  it("pre-checks the published schema", async () => {
+    const { schema, verdict } = compileRegistrationSchema(SCHEMA);
+    expect(verdict).toBe("accepted");
+    const { send, seen } = recordingSend({ ver: "1.0", billing_ref: "acct-1" });
+    const withSchema: RegistrationRequirements = {
+      termsDigest: undefined,
+      schema,
+      verdict,
+    };
+
+    const err = await client(send, withSchema)
+      .register({ exchange: "exchange.test", registration_data: { trading_name: "Acme" } })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(RampCallError);
+    expect((err as RampCallError).kind).toBe("malformed");
+    expect((err as RampCallError).message).toContain("legal_entity");
+    expect(seen).toHaveLength(0);
+
+    // The conforming payload goes through against the same schema.
+    await client(send, withSchema).register({
+      exchange: "exchange.test",
+      registration_data: { legal_entity: "Acme" },
+    });
+    expect(seen).toHaveLength(1);
+  });
+
+  // What the pre-check computed is what the caller gets. An Exchange attaches this same
+  // list, from this same validator, when it refuses the same payload — so a consumer that
+  // renders one refusal renders both, and nothing has to parse the members back out of a
+  // sentence.
+  it("carries the field errors the pre-check found", async () => {
+    const err = await refusedByTheSchema(BOTH_SHAPES_SCHEMA, { vat_id: "de1" });
+
+    expect(err.detail?.registration_failure?.reason).toBe(
+      "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA",
+    );
+    // The PATHS are what this asserts, never the constraint prose beside them: that text
+    // comes from each language's validator library, and the contract calls it
+    // non-authoritative for exactly that reason.
+    const paths = (err.detail?.registration_failure?.field_errors ?? []).map(
+      (f) => f.path ?? "",
+    );
+    expect(paths).toEqual(["", "/vat_id"]);
+  });
+
+  // An empty path addresses the whole object, which is how a missing required member is
+  // reported. Rendering a bare ": ..." there would read as a member with no name.
+  it("renders a whole-object violation with no member name", async () => {
+    const err = await refusedByTheSchema(BOTH_SHAPES_SCHEMA, { vat_id: "de1" });
+
+    expect(err.message).not.toContain("publishes: : ");
+    // The member that HAS a name still carries it, so the fix did not drop the separator
+    // everywhere.
+    expect(err.message).toContain("/vat_id: ");
+  });
+
+  // A schema the SDK REFUSES is skipped, never a veto. The contract is explicit that
+  // refusing locally and declining to send would turn a rule about reading a third
+  // party's document into a denial of service against the caller's own user, so the
+  // Exchange's own enforcement stays the deciding check.
+  it("does not let an unusable schema block the send", async () => {
+    const { schema, verdict } = compileRegistrationSchema(
+      '{"$schema":"https://json-schema.org/draft/2019-09/schema","type":"object"}',
+    );
+    expect(schema).toBeNull();
+    expect(verdict).toBe("wrong_dialect");
+    const { send, seen } = recordingSend({ ver: "1.0", billing_ref: "acct-1" });
+
+    await client(send, { termsDigest: undefined, schema, verdict }).register({
+      exchange: "exchange.test",
+      registration_data: { anything: "goes" },
+    });
+    expect(seen).toHaveLength(1);
+  });
+
+  // A failed READ is classified the way the routing tier classifies its own: a value
+  // this deployment or the Exchange refused is FINAL, anything else is a transport
+  // failure worth retrying. Without the split a caller retries a refusal forever.
+  it("classifies a refused requirements read as final and a transport failure as retryable", async () => {
+    for (const [thrown, kind] of [
+      [new ExchangeNotPermitted("blocked"), "not_sent"],
+      [new ManifestNotExchange("host=exchange.test"), "not_sent"],
+      // Reachable only through an INJECTED reader with its own host rule — the verb's
+      // own recipient check runs this one first. Retryable would be wrong: a value that
+      // is not a host will not become one on a later attempt.
+      [invalidHost("exchange.test/path", "not a bare domain"), "not_sent"],
+      [new Error("connection reset"), "unreachable"],
+    ] as const) {
+      const { send, seen } = recordingSend({});
+      const err = await client(send, () => Promise.reject(thrown))
+        .register({ exchange: "exchange.test" })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(RampCallError);
+      expect((err as RampCallError).kind).toBe(kind);
+      expect(seen).toHaveLength(0);
+    }
+  });
+});
+
+describe("getAccountStatus", () => {
+  it("addresses the RPC and reads an accountless answer as a normal one", async () => {
+    const { send, seen } = recordingSend({ ver: "1.0", billing_ref: "", active: false });
+    const resp = await client(send).getAccountStatus({ exchange: "exchange.test" });
+    expect(resp.billing_ref).toBe("");
+    expect(resp.active).toBe(false);
+    expect((seen[0] as UnaryRequest).url).toBe(
+      `${ENDPOINT}/ramp.v1.ExchangeService/GetAccountStatus`,
+    );
+    expect(bodyOf(seen[0] as UnaryRequest)["ver"]).toBe("1.0");
+  });
+
+  it("refuses an unaddressed request before signing", async () => {
+    const { send, seen } = recordingSend({});
+    await expect(client(send).getAccountStatus({ exchange: "" })).rejects.toBeInstanceOf(
+      RampCallError,
+    );
+    expect(seen).toHaveLength(0);
+  });
+});
+
+describe("the peer's own sentence", () => {
+  it("comes back as a value when the peer sent a typed reason", async () => {
+    const { send } = recordingSend(
+      {
+        code: "failed_precondition",
+        message: "envelope prose",
+        details: [
+          {
+            type: "ramp.v1.ErrorDetail",
+            debug: {
+              domain: "ramp.v1.ExchangeService",
+              message: "terms have moved",
+              registrationFailure: { reason: "REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE" },
+            },
+          },
+        ],
+      },
+      412,
+    );
+    const err = await client(send)
+      .register({ exchange: "exchange.test" })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(RampCallError);
+    expect((err as RampCallError).peerMessage).toBe("terms have moved");
+    // The token stays a token: prose never leaks into the field a caller branches on.
+    expect((err as RampCallError).reason).not.toContain(" ");
+  });
+
+  // The content leg builds a typed detail LOCALLY, out of the edge's refusal token:
+  // the token is the edge's, the sentence around it is this SDK's. So a detail is
+  // present and the peer's message is still empty — the one case that separates
+  // "fill it from the detail" from "fill it where the peer's own answer was decoded".
+  it("stays empty for a detail this SDK synthesized", () => {
+    const err = new RampCallError({
+      kind: "refused",
+      op: "fetch content",
+      status: 403,
+      reason: "keyid_mismatch",
+      detail: retrievalAuthFailureDetail(
+        "ramp.v1.Edge",
+        "delivery refused: keyid_mismatch",
+        "RETRIEVAL_AUTH_FAILURE_REASON_KEYID_MISMATCH",
+      ),
+    });
+    // The typed reason still reaches the caller — this is not about losing it.
+    expect(err.detail).toBeDefined();
+    expect(err.peerMessage).toBe("");
+  });
+
+  // The registration pre-check is the same rule with no peer involved at all: the
+  // request never left the process, so there is no remote party whose words this field
+  // could hold. A detail is present because the schema failures are worth carrying; the
+  // sentence around them is ours.
+  it("stays empty for a detail the registration pre-check synthesized", async () => {
+    const err = await refusedByTheSchema(SCHEMA, { trading_name: "Acme" });
+
+    expect(err.detail).toBeDefined();
+    expect(err.peerMessage).toBe("");
+  });
+
+  it("is empty when the answer carried no typed reason", async () => {
+    const { send } = recordingSend({ code: "unavailable", message: "draining" }, 503);
+    const err = await client(send)
+      .getAccountStatus({ exchange: "exchange.test" })
+      .catch((e: unknown) => e);
+    expect((err as RampCallError).peerMessage).toBe("");
+    // The transport's own account is not lost, only kept out of the field that
+    // claims to hold the peer's words.
+    expect((err as RampCallError).message).toContain("draining");
+  });
+});

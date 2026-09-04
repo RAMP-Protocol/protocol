@@ -49,6 +49,29 @@ type EndpointResolver interface {
 	ResolveEndpoint(ctx context.Context, host string) (string, error)
 }
 
+// RegistrationRequirementsReader reports what one Exchange asks of a registration.
+// It is an interface for the same two reasons the endpoint seam is one: a test can
+// drive a registration without standing up a manifest server, and this package has
+// no way to accept a terms digest or a schema from configuration — the only way to
+// skip the read is to set RegisterRequest.terms_digest, where the signature covers
+// it.
+//
+// An implementation MUST NOT serve the answer from a cache. The contract requires a
+// registering client to read the digest from a freshly fetched manifest, so a cached
+// one breaks the rule the field exists to record.
+//
+// Its ERROR decides how a caller is told to react, as the endpoint seam's does. A
+// failure that is a VERDICT — the domain is unusable, the deployment excludes it, or
+// the document served is not an Exchange's — MUST wrap helpers.ErrInvalidHost,
+// resolvers.ErrExchangeNotPermitted or resolvers.ErrManifestNotExchange; those
+// surface as CallNotSent, which tells the caller not to retry. Anything else is read
+// as a transport failure and reported as CallUnreachable.
+type RegistrationRequirementsReader interface {
+	ResolveRegistrationRequirements(
+		ctx context.Context, exchange string,
+	) (resolvers.RegistrationRequirements, error)
+}
+
 // vetExchangeEndpoint resolves exchangeDomain to an origin a signed call may be
 // sent to, or refuses — naming the check that declined, and classifying it by
 // CAUSE. "The Exchange said no", "we could not reach it" and "we refused to dial

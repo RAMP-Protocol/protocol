@@ -21,8 +21,10 @@ from ramp_sdk.resolvers._ssrf import SsrfError, blocked_address
 from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
     EndpointRefusedError,
+    ExchangeNotPermittedError,
     KeyExpiredError,
     KeyRevokedError,
+    ManifestNotExchangeError,
     ManifestVersionRefusedError,
     NoEndpointError,
     ResolverError,
@@ -30,6 +32,10 @@ from ramp_sdk.resolvers.errors import (
     UnknownKeyError,
 )
 from ramp_sdk.resolvers.offer_key_cache import CachedOfferKeyResolver, DirectoryFetch
+from ramp_sdk.resolvers.registration_requirements import (
+    RegistrationRequirements,
+    WellKnownRequirementsReader,
+)
 from ramp_sdk.resolvers.wba import (
     WBA_DIRECTORY_PATH,
     WBAKeyResolver,
@@ -47,10 +53,13 @@ __all__ = [
     "DirectoryFetch",
     "DirectoryUnavailableError",
     "EndpointRefusedError",
+    "ExchangeNotPermittedError",
     "KeyExpiredError",
     "KeyRevokedError",
+    "ManifestNotExchangeError",
     "ManifestVersionRefusedError",
     "NoEndpointError",
+    "RegistrationRequirements",
     "ResolverError",
     "RevocationUnevaluatedError",
     "SsrfError",
@@ -58,6 +67,7 @@ __all__ = [
     "WBAKeyResolver",
     "WellKnownEndpointResolver",
     "WellKnownKeyResolver",
+    "WellKnownRequirementsReader",
     "active_ed25519_key",
     "active_ed25519_key_screened",
     "active_ed25519_key_with_expiry",

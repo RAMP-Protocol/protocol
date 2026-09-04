@@ -1536,6 +1536,48 @@ the deny-by-default scheme allowlist — are **corpus-locked** to shared vectors
 the residual wiring (that the guard is actually applied on each redirect hop and that a
 non-2xx surfaces as a status rather than a crash) is covered behaviorally per language.
 
+## Which transport a resolver defaults to is decided by its URL's provenance
+
+The rule behind the sentence above, stated because the ports mirrored the options struct
+that carries it without carrying the rule itself.
+
+A resolver's nil-default follows where its URL COMES FROM, not what it fetches. A FIXED,
+operator-chosen address — the well-known JWKS — defaults to the plain client: the
+operator rather than an attacker chose it, and an on-prem directory may legitimately be
+private, so guarding it would refuse a deployment its own operator configured. A
+REQUEST-DERIVED host — the WBA directory named in a `Signature-Agent` header, an Exchange
+domain read off an offer, the Exchange domain on a `RegisterRequest` — defaults to the
+guarded one, because the party choosing the address is not the party running the process.
+Go states this in `WellKnownOptions.HTTP`'s own comment, one field above both
+constructors that read it.
+
+What went wrong is instructive, and it is the same shape as the WBA scheme gap recorded
+above. The ports copied the options struct, the two faces and the field names, and took
+the plain default for all of them — then explained it in a docstring as *matching the Go
+oracle, which guards only its WBA client*, which had stopped being true when Go's endpoint
+resolver was guarded. A wrong sentence in a docstring is load-bearing in a way a wrong
+sentence in prose is not: it is the thing the next port reads. The registration-requirements
+reader inherited both the default and the sentence, and it was the first component either
+port's CLIENT builds on its own — the endpoint resolver has no default there at all, so
+until then an application always chose that transport itself.
+
+Two consequences worth keeping. A guarded default has to be built ONCE per holder, because
+in every language the guarded factory constructs a dispatcher or a connection pool; a
+`?? guardedFetchFromEnv()` written at a call site trades an unguarded dial for a leaked
+pool per call. And the escape stays what it always was: inject a transport, or set
+`SKIP_SSRF` / `ALLOW_INSECURE`. Neither of those is a reason to default to the plain client
+— they are the reason defaulting to the guarded one costs nothing.
+
+The ports' endpoint resolver still defaults plain, which is the last leg not following the
+rule and is tracked separately.
+
+Each language now pins its own row of that table in a test that dials a loopback origin
+with no transport injected, so moving a default fails a gate rather than merely diverging
+from this page and from the published threat model — which states the same postures per
+language, and which drifted from the code the first time it was written down. Two rows
+deliberately record the gap above, and say so, because a test that pinned an insecure
+default without explaining itself would read as endorsement of it.
+
 ## Active-key selection: deterministic, non-normative, unbounded by default
 
 The WBA directory can carry several simultaneously window-active signing keys during an
@@ -1565,7 +1607,9 @@ Python and TS ship symmetric **decoders** (`parse_error_detail` / `error_detail_
 reason enum a Go exchange emitted, never on a human string. Emit and decode are pinned
 to one shared oracle corpus (`error-detail-vectors.json`) replayed by all three
 languages, so the typed-failure contract is verified end-to-end across the language
-boundary rather than trusted to match by inspection.
+boundary rather than trusted to match by inspection. The details a client SYNTHESIZES —
+where no peer wrote the values and all three have to author the same ones — are pinned
+separately and for a different reason; see "Details the SDK writes itself are pinned".
 
 ## Discovery answers are grouped per URI, not flattened
 
@@ -1646,10 +1690,117 @@ checks** stand between the caller's message and the wire, in this order.
 follows is bounded and evicts least-recently-used, because which Exchanges appear is
 driven by incoming offers — an open-ended, caller-influenced key space.
 
-## Three client defaults where the ports differ from Go on purpose
+## The account verbs route like a report, not like a discovery
+
+`Register` and `GetAccountStatus` are the agent client's, not a fourth constructor's, and
+they read their destination off the message rather than from the base URL. Both halves of
+that follow one rule already recorded above: a client's constructor takes its shape from
+where the address comes from.
+
+The party is the same. An agent registering holds the same key it discovers and buys with
+— the protocol carries one agent identity — so there is no second signer and no second
+address to hang a constructor on. What differs from discovery is *which* Exchange: an
+account is per-Exchange, and which Exchange is the agent's choice PER CALL rather than the
+operator's at start-up. A registration target routinely arrives at runtime, because a
+denial names where to register precisely so an agent can converge unattended. A client
+that could only register where it was configured could not follow that.
+
+So both verbs take the usage report's shape: `exchange` off the request, the endpoint
+resolved from that Exchange's own manifest, the guarded leg, and no parameter a configured
+origin could be passed as. An earlier design document said the opposite — that these two
+calls use the configured address because an account's address is known in advance — and it
+was written before accounts were per-Exchange. The contract disagrees with it in as many
+words: `RegisterRequest.exchange` says the caller reaches this endpoint by resolving a
+fetched manifest.
+
+Two details the routing tier does not supply, and this leg therefore does itself. The
+contract's SHAPE rule runs on the recipient as well as the routing tier's dialability
+question: the two are deliberately different predicates, and nothing upstream of the client
+has applied the first, so a value the wire would refuse is declined here rather than
+carried to an Exchange that can only refuse it. And neither verb takes call options,
+because neither message carries an idempotency key — registering again returns the same
+account handle, so a key would be ceremony rather than a guarantee.
+
+## A digest that may not be cached needs a reader that cannot cache
+
+Submitting a registration states which terms the operator accepted, and the contract
+requires the value to come from a FRESHLY fetched manifest: a cached endpoint is fine, a
+cached digest is not, because a client cannot detect staleness locally and a warm cache
+would make it echo a value the Exchange has already stopped accepting and retry the same
+refusal until the cache expired.
+
+The SDK had one manifest path, and it is built out of exactly the mechanism that value may
+not touch — a per-host cache with a TTL, single-flight coalescing on top, and no bypass.
+Adding a member to the document it decodes would have satisfied the rule's letter at the
+one point it fails in practice: the first caller to reuse the SDK's own manifest path would
+be handed a digest minutes old with nothing in the API to warn them. So the requirements
+read is a separate face that holds no document cache. Leaving no cache slot to reuse is
+what makes the rule structural rather than a convention callers remember — the same
+argument the report leg makes about configuration.
+
+Reading the published `data_schema` out of the same fresh bytes then costs nothing extra
+and removes a failure mode of its own: a stale local schema cannot refuse a payload the
+Exchange would have taken, because there is no stale local schema. Not even the compiled
+validator is held. Memoising it is a cache, which this tier does not do by default, and the
+useful key for one — the digest of the served bytes — is a property of a deployment's
+threat model rather than of the protocol.
+
+Two things the ports had to build that Go got for free, both from the same sentence: the
+caps are defined over the bytes AS SERVED. Neither JavaScript nor Python has a raw-message
+slice, and re-serialising the parsed member measures a document nobody sent — a schema
+padded past the cap on the wire that minifies under it would then be refused by an Exchange
+and accepted by a client, which is the two-privately-chosen-limits failure those numbers
+exist to prevent. Both ports slice the member out of the served body by extent instead.
+
+The pre-check refuses a payload a USABLE schema rejects, and refuses nothing otherwise. A
+schema this SDK will not compile is skipped, because the contract says so and gives the
+reason: refusing locally and declining to send would turn a rule about reading a third
+party's document into a denial of service against the client's own user. Absent schema and
+unusable schema are therefore one branch, not two.
+
+## The peer's token is ours to trust; the peer's sentence is only ours to carry
+
+A caller reading why a call failed had the failure class and the peer's refusal token, both
+machine-readable, and no way to reach the peer's own sentence except by parsing it back out
+of a rendered error. That is a thing a layer will get wrong, and the platform's MCP adapter
+had grown parallel extraction arms over three error shapes to avoid doing it.
+
+So the client's failure carries the sentence as a value, beside the token rather than in
+it. `Reason` is the peer's machine token; putting prose there was a mistake this SDK made
+once and reverted, and the same mistake in the other direction would be no better.
+
+What it holds is the TYPED reason's developer message and nothing else. It is not filled
+from a detail this SDK BUILT ITSELF either — the content leg's sentence around an edge's
+token, or the registration pre-check's around schema failures. Those carry a typed reason,
+so the rule below about untyped answers would not have stopped them; what stops them is
+that the words are ours, and a field that exists so a layer can attribute prose to a remote
+party cannot sometimes hold our own. An answer that did
+not come from a RAMP service — a draining load balancer, a proxy's own page — carries no
+message of its own, and the text a transport synthesizes for one is that transport's:
+connect-go writes a status line where a fetch-based client writes nothing. Filling the
+field from that would make its value a property of the language rather than of the answer,
+which is the drift a shared corpus exists to catch and could not have caught here, because
+each language would have been faithfully reporting its own transport. The synthesized text
+stays reachable through the cause, where it reads as what it is.
+
+It is unbounded, and that is a choice rather than an oversight. The contract calls the
+field it comes from an easy existence oracle and places the no-secrets duty on the server,
+so truncating it is a decision that belongs to whoever displays it, where the audience is
+known — the same reason the typed detail's message has never been bounded here either.
+
+One hazard is documented rather than fixed on this path. `GetAccountStatusRequest` carries
+no varying field, so two calls to one Exchange inside a second sign identical bytes and a
+peer screening replays on (key id, signature) refuses the second. The remedy is a monotonic
+freshness window, which every language ships — but a window is ONE INSTANCE PER CLIENT
+rather than one per call, since the running maximum is the whole mechanism, so the choice
+belongs to whoever builds the client and no verb makes it for them. Bounding that window's
+drift is a separate change: today it compounds without a ceiling, which is its own defect
+and has its own answer.
+
+## Four client defaults where the ports differ from Go on purpose
 
 Go is the oracle and the ports mirror it, so a difference that survives review has to be
-written down or it reads as drift. Three survive, and none is an API-surface divergence —
+written down or it reads as drift. Four survive, and none is an API-surface divergence —
 all are behaviour, so they live here rather than in `sdk/parity/symbol-map.json`, whose
 allowlist is a shrink-only ratchet over SYMBOLS.
 
@@ -1697,6 +1848,17 @@ serve a conformant answer deeper than this. The Go client reads it and the other
 it. Both readers of one wire is the shape this file exists to record, and moving the number
 into the contract — which would make it one rule for every implementation rather than two —
 is the change that would close it rather than document it.
+
+**The default signature validity window is five minutes in Go and TypeScript, and ten in
+Python.** It has been that way since the ports were written and was recorded nowhere,
+which is how it reads as drift rather than as a decision. It is a genuine difference and
+not a rounding: a deployment that cares about the number sets it explicitly, and every
+client now names the knob at the same tier so it can — `WithSignWindow` in Go,
+`signWindow` in TypeScript, `ClientConfig.sign_window` in Python. What it costs, stated
+plainly: a peer enforcing a maximum signature lifetime may accept one client's default
+and refuse another's, and the two would then disagree about a request neither client
+built wrongly. Moving the number into the contract is the change that would close it
+rather than document it.
 
 **The client's transport splits in two, and which leg is guarded is the same in all
 three.** A plain transport carries the configured home Exchange and the Broker — an
@@ -1917,3 +2079,70 @@ The claim is scoped to that seam deliberately. A caller that injects a whole
 ownership of that fetch and the guard is that caller's to install — which is a
 different bargain from an option that quietly weakens a fetch the SDK still
 performs.
+
+## A refusal the client computed carries the same answer the Exchange would have sent
+
+A registering client pre-checks its payload against the schema the Exchange publishes, so
+a payload that will be refused is refused locally, before anything is signed. That check
+produces the same structured list of offending members the Exchange produces from the same
+validator — and the client flattened it into a sentence and dropped the list.
+
+The consequence is a layer that has to parse members back out of prose, which is precisely
+what the failure contract says a layer must never be asked to do. A consumer rendering
+both sources through one renderer, so an agent gets the same remedy whichever side
+declined, could not: it had a typed detail from the Exchange and a string from the client,
+and it would have read them as two different problems. The refusal now carries the detail
+beside the sentence, and the sentence stays because it is what a caller sees who never
+opens the detail at all.
+
+Its DOMAIN names the client's own tier. The Exchange never saw the request, so attributing
+the verdict to it would be the same conflation the peer-message rule already refuses —
+that field exists so a consumer can attribute words to a remote party, and a domain works
+the same way for a surface. The value the field may carry is deliberately open in the
+contract: no rule, and an EXAMPLE rather than a set, which is right for a grouping key
+that would otherwise have to move every time a tier does. What the values in use actually
+obey is narrower, and worth stating because nothing had: a `Service` suffix names an RPC
+service the contract DEFINES, and a bare noun names a tier that is not one and appears in
+no descriptor — a delivery edge, or the client itself. The suffix is what tells a reader
+which they have. A conformance guard now holds every committed domain to that, and found a
+vector naming a registration service the contract has never defined.
+
+The field errors travel as PATHS wherever the three languages have to agree. Each pointer
+is a projection of the payload, which all three compute identically; the constraint text
+beside it comes from a different JSON Schema library in each, and the contract says so of
+that field — validator-defined, not stable across implementations. Pinning the prose would
+pin an accident of which library each port happens to use.
+
+One rendering bug came out of the same place. An empty pointer addresses the whole object,
+which is how a missing required member and every other whole-object failure is reported,
+and the renderer wrote `path + ": " + error` unconditionally — so the most ordinary
+registration failure there is rendered as a member with no name.
+
+## Details the SDK writes itself are pinned, not just the ones it reads
+
+Decoding a peer's `ErrorDetail` was already held to one corpus in all three languages.
+Two details are not decoded at all. The content leg promotes a delivery edge's refusal
+token into a typed reason and writes the envelope around it, because an edge answers a
+small JSON object rather than a protobuf. The registration pre-check builds one from
+failures no peer ever saw. In both, the failing surface, the sentence and the reason are
+AUTHORED — three times, in three languages, from three copies of one decision — and
+nothing compared them.
+
+That is the shape that drifts without anything going red, and it had. The token table
+under the edge leg is not derivable from the enum's own spelling: `expired` is
+`URL_EXPIRED` and `pop_expired` is `PROOF_EXPIRED`, which is why the proto records the
+token beside each value. Two of the three SDKs never read that record. They computed each
+reason's name by uppercasing the token and prefixing it, which lands on the recorded value
+for two of the eleven tokens and on nothing for the other nine — so nine refusals a real
+edge emits carried a typed reason in one language and none in the other two, and the
+inverse held too: any string whose uppercase happened to spell an enum suffix was
+promoted, including spellings no edge sends. Every suite was green, because none of them
+compared a language's answer to the record.
+
+Both details are now one corpus, driven from the real client rather than described, and
+every recorded token is a row — including the two that must stay UNTYPED. The protocol
+records one token against TWO values, one per checker, so the body cannot say which ran
+and no language may choose; and a spelling no edge emits is recorded as untyped precisely
+so a port that derives names from tokens cannot come back green. A second conformance
+guard reads the annotations out of the `.proto` source and holds the corpus to them, so
+the record rather than any one language is what the three are measured against.

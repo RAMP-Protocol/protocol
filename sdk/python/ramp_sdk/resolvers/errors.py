@@ -66,6 +66,28 @@ class EndpointRefusedError(ResolverError):
     """
 
 
+class ExchangeNotPermittedError(ResolverError):
+    """The deployment's allow overlay excluded this Exchange domain, before anything
+    was dialled.
+
+    It says nothing about whether the Exchange exists or answers, only that this
+    deployment declined to ask, so the remedy is a configuration change rather than a
+    retry. Peer of Go ``ErrExchangeNotPermitted`` / TS ``ExchangeNotPermitted``.
+    """
+
+
+class ManifestNotExchangeError(ResolverError):
+    """The document served at the domain's well-known path describes some other role.
+
+    Registration requirements are an Exchange's to publish, so a manifest claiming to
+    be an agent, a broker or a publisher is refused rather than read for members it
+    has no business carrying. A manifest naming no role at all is refused the same
+    way: the field is required by the contract, and reading silence as assent would
+    make the check advisory. Peer of Go ``ErrManifestNotExchange`` / TS
+    ``ManifestNotExchange``.
+    """
+
+
 class ManifestVersionRefusedError(ResolverError):
     """A ``/.well-known/ramp.json`` was fetched and parsed but carries a
     ``WellKnownManifest.ver`` this resolver does not accept: an unrecognised major

@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from ramp_sdk.resolvers import _ssrf, guarded_async_client
+from ramp_sdk.resolvers import _ssrf, guarded_async_client, guarded_client
 from ramp_sdk.window import clock_window
 
 from . import _verbs
@@ -46,7 +46,7 @@ from ._read import (
     require_dialable_scheme,
     rpc_headers,
 )
-from ._verbs import ClientConfig
+from ._verbs import ClientConfig, _with_requirements_reader
 from .content import (
     DEFAULT_CONTENT_TIMEOUT_SEC,
     DEFAULT_MAX_CONTENT_BYTES,
@@ -60,13 +60,15 @@ from .content import (
     transport_failure,
 )
 from .errors import NOT_CANONICAL_WIRE_NAMING, CallError, CallErrorKind
-from .route import EndpointResolver
+from .route import EndpointResolver, RegistrationRequirementsReader
 
 if TYPE_CHECKING:
     from wire.models import (
         DisputeResponse,
+        GetAccountStatusResponse,
         PushResourcesResponse,
         RefreshCatalogResponse,
+        RegisterResponse,
         RemoveResourcesResponse,
         TransactionResponse,
         UsageReportResponse,
@@ -89,6 +91,7 @@ __all__ = [
     "ClientConfig",
     "Content",
     "EndpointResolver",
+    "RegistrationRequirementsReader",
     "Validation",
 ]
 
@@ -113,7 +116,6 @@ class _Face:
         http: httpx.AsyncClient | None,
         guarded: httpx.AsyncClient | None = None,
     ) -> None:
-        self._config = config
         self._owns = http is None
         self._http = http if http is not None else httpx.AsyncClient(
             follow_redirects=False, trust_env=False
@@ -124,9 +126,15 @@ class _Face:
         self._guarded = guarded if guarded is not None else (
             self._http if not self._owns else guarded_async_client(follow_redirects=False)
         )
+        self._config, self._requirements_http = _with_requirements_reader(config)
 
     async def aclose(self) -> None:
         """Close the transports this client built. An injected one is left alone."""
+        # Independent of the RPC legs above: this client is built here whenever the
+        # caller injected no reader, whether or not it injected an RPC transport, so it
+        # is closed on its own terms rather than behind that ownership question.
+        if self._requirements_http is not None:
+            self._requirements_http.close()
         if not self._owns:
             return
         await self._http.aclose()
@@ -247,6 +255,31 @@ class Client(_Face):
         )
         status, body = await self._send(plan)
         return _verbs.finish_dispute(plan, status, body)
+
+    async def register(self, request: dict[str, Any]) -> RegisterResponse:
+        """Create this agent's account at the Exchange the request names.
+
+        Takes no idempotency key: the message carries none, because registering again
+        returns the same account handle. The plan runs in a thread because it signs and,
+        when the caller left ``terms_digest`` unset, reads the Exchange's published
+        requirements from a freshly fetched manifest.
+        """
+        plan = await asyncio.to_thread(_verbs.plan_register, self._config, request)
+        status, body = await self._send(plan)
+        return _verbs.finish_register(plan, status, body)
+
+    async def get_account_status(
+        self, request: dict[str, Any]
+    ) -> GetAccountStatusResponse:
+        """Read whether this agent's account at the named Exchange is active.
+
+        An empty ``billing_ref`` in the answer is a NORMAL answer: no account there yet.
+        """
+        plan = await asyncio.to_thread(
+            _verbs.plan_get_account_status, self._config, request
+        )
+        status, body = await self._send(plan)
+        return _verbs.finish_get_account_status(plan, status, body)
 
     async def fetch(self, signed_url: str) -> Content:
         """Retrieve the content a signed delivery URL names, presenting proof of
