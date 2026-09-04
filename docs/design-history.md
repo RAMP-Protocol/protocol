@@ -1536,6 +1536,41 @@ the deny-by-default scheme allowlist — are **corpus-locked** to shared vectors
 the residual wiring (that the guard is actually applied on each redirect hop and that a
 non-2xx surfaces as a status rather than a crash) is covered behaviorally per language.
 
+## Which transport a resolver defaults to is decided by its URL's provenance
+
+The rule behind the sentence above, stated because the ports mirrored the options struct
+that carries it without carrying the rule itself.
+
+A resolver's nil-default follows where its URL COMES FROM, not what it fetches. A FIXED,
+operator-chosen address — the well-known JWKS — defaults to the plain client: the
+operator rather than an attacker chose it, and an on-prem directory may legitimately be
+private, so guarding it would refuse a deployment its own operator configured. A
+REQUEST-DERIVED host — the WBA directory named in a `Signature-Agent` header, an Exchange
+domain read off an offer, the Exchange domain on a `RegisterRequest` — defaults to the
+guarded one, because the party choosing the address is not the party running the process.
+Go states this in `WellKnownOptions.HTTP`'s own comment, one field above both
+constructors that read it.
+
+What went wrong is instructive, and it is the same shape as the WBA scheme gap recorded
+above. The ports copied the options struct, the two faces and the field names, and took
+the plain default for all of them — then explained it in a docstring as *matching the Go
+oracle, which guards only its WBA client*, which had stopped being true when Go's endpoint
+resolver was guarded. A wrong sentence in a docstring is load-bearing in a way a wrong
+sentence in prose is not: it is the thing the next port reads. The registration-requirements
+reader inherited both the default and the sentence, and it was the first component either
+port's CLIENT builds on its own — the endpoint resolver has no default there at all, so
+until then an application always chose that transport itself.
+
+Two consequences worth keeping. A guarded default has to be built ONCE per holder, because
+in every language the guarded factory constructs a dispatcher or a connection pool; a
+`?? guardedFetchFromEnv()` written at a call site trades an unguarded dial for a leaked
+pool per call. And the escape stays what it always was: inject a transport, or set
+`SKIP_SSRF` / `ALLOW_INSECURE`. Neither of those is a reason to default to the plain client
+— they are the reason defaulting to the guarded one costs nothing.
+
+The ports' endpoint resolver still defaults plain, which is the last leg not following the
+rule and is tracked separately.
+
 ## Active-key selection: deterministic, non-normative, unbounded by default
 
 The WBA directory can carry several simultaneously window-active signing keys during an

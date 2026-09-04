@@ -30,11 +30,18 @@ SDK refuses. The schema is measured over the bytes AS SERVED in every language, 
 two JSON ports reach by slicing the member out of the served body rather than
 re-serialising a parsed value.
 
+The reader dials on the SSRF-guarded transport in all three languages, and is built once
+with the client rather than once per registration: the Exchange domain comes off the
+request, so it is an address another party chose, which is the provenance that takes the
+guard. A deployment reaching a private Exchange injects its own transport or sets the
+usual two environment flags.
+
 Two cross-cutting changes anyone re-pinning will see. The client's typed failure now
-carries the peer's own developer message as a value — the typed reason's message, empty
-when the answer carried none, never a transport's synthesized status line — so a consumer
-reads it instead of parsing it back out of a rendered error; it is unbounded, and bounding
-it belongs to whoever displays it. And Python's `ClientConfig` gains `sign_window`, so the
+carries the peer's own developer message as a value — filled where the peer's own answer
+is decoded, and empty otherwise: never a transport's synthesized status line, and never a
+typed detail the SDK built itself, as the content leg does from an edge's refusal token.
+So a consumer reads it instead of parsing it back out of a rendered error; it is
+unbounded, and bounding it belongs to whoever displays it. And Python's `ClientConfig` gains `sign_window`, so the
 RFC 9421 freshness knob sits at the tier Go and TypeScript already surface it at.
 
 *Parity record:* six new mapped symbols and one Go-idiomatic exclusion; the reader's Go

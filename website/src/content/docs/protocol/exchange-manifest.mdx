@@ -182,8 +182,10 @@ and a consumer **MUST** refuse a schema that does not.
 
 The SDK is that consumer for a registering agent: it reads this block from a
 **freshly fetched** manifest — never a cached one, because the terms digest beside
-it cannot be checked for staleness locally — compiles the schema under every rule
-here, and pre-checks the payload before anything is signed. A schema it refuses is
+it cannot be checked for staleness locally — over its SSRF-guarded transport, since
+the Exchange domain arrives on the request rather than from configuration. It then
+compiles the schema under every rule here, and pre-checks the payload before
+anything is signed. A schema it refuses is
 reported as a verdict and the registration is sent anyway: refusing locally would
 turn a rule about reading a third party's document into a denial of service against
 the agent's own user, so the Exchange's own enforcement stays the deciding check.
