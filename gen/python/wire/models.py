@@ -1744,7 +1744,7 @@ class WellKnownManifest(WireModel):
     )
     ver: str | None = Field(
         '',
-        description='RAMP protocol version of THIS MANIFEST DOCUMENT\'s schema — a namespace\n separate from the RPC envelope `ver`, deliberately not coupled to it.\n MUST equal "1.0"; consumers REJECT unrecognised major versions.',
+        description='Version of THIS MANIFEST DOCUMENT\'s layout — "1.0", stamped by the party\n that serves the document from the SDK\'s WellKnownManifestVersion, never from\n ProtocolVersion. A namespace separate from the RPC envelope `ver`: a change\n to this document\'s layout bumps both numbers, a protocol change that leaves\n the document untouched bumps only the envelope\'s, so a reader that parses\n only manifests upgrades when the manifest changes and at no other time.\n\nConsumers read `ver` before any other member. They ACCEPT a recognised\n MAJOR version whatever the MINOR — a minor revision of the manifest is\n additive, and a reader ignores members it does not know. They REJECT an\n unrecognised MAJOR, a value that is not MAJOR.MINOR, and an ABSENT `ver`:\n the document sits at a fixed, unversioned path and is read before any\n signature is checked, so a layout the reader cannot classify must not\n supply the endpoint a signed call is then sent to. The SDK endpoint\n resolvers apply this rule in all three languages, pinned to one corpus.',
     )
 
 

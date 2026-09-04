@@ -27,6 +27,7 @@ def test_it_sits_beside_its_siblings() -> None:
     for sibling in (
         "ResolverError",
         "NoEndpointError",
+        "ManifestVersionRefusedError",
         "DirectoryUnavailableError",
         "UnknownKeyError",
         "KeyRevokedError",

@@ -41,20 +41,54 @@ var ErrNoEndpoint = errors.New("resolvers: well-known manifest has no endpoint")
 // again in a moment.
 var ErrEndpointRefused = errors.New("resolvers: well-known manifest advertises an unusable endpoint")
 
-// wellKnownDoc is the JSON projection of the subset of WellKnownManifest the SDK
-// resolvers read: the RFC 7517 key set (field 5) and the self-advertised
-// ExchangeService endpoint (field 12). One fetch decodes the whole document so a
-// single body serves both the key face (WellKnownKeyResolver) and the endpoint
-// face (WellKnownEndpointResolver).
+// ErrManifestVersionRefused re-exports helpers.ErrManifestVersionRefused — the
+// verdict CheckWellKnownManifestVersion returns for a /.well-known/ramp.json
+// whose WellKnownManifest.ver this reader does not accept — so the endpoint
+// resolver's refusal is checkable from this package beside ErrNoEndpoint and
+// ErrEndpointRefused without a caller importing helpers directly. One sentinel
+// under two names: an injected resolver that wraps either is classified the
+// same way by the client tier.
+//
+// Like ErrEndpointRefused it is a VERDICT — final, not a transport failure to
+// retry — and it is never cached. The rule, and why the gate runs before any
+// other member is read, are stated once on WellKnownManifest.ver in the proto.
+var ErrManifestVersionRefused = helpers.ErrManifestVersionRefused
+
+// wellKnownDoc is the JSON projection the two well-known resolvers decode
+// through: one decoder for two document shapes, each face reading only its own
+// members. The key face (WellKnownKeyResolver) fetches a plain RFC 7517 JWK Set
+// from an operator-chosen URL and reads `keys`. The endpoint face
+// (WellKnownEndpointResolver) fetches /.well-known/ramp.json and reads the
+// WellKnownManifest projection — the document version (field 1) and the
+// self-advertised ExchangeService endpoint (field 12). A JWK Set carries no
+// manifest version, which is why the version gate is the endpoint face's alone.
+//
+// Ver is held raw rather than as a string so a document whose `ver` is not a
+// JSON string still decodes: the gate then refuses it as a verdict — the answer
+// Python and TS give — instead of the decode failing as a transport error the
+// client would retry. See manifestVer.
 //
 // The embedded jose.JSONWebKeySet promotes the "keys" member, so go-jose (the
 // canonical JOSE library) parses each JWK — decoding the OKP/Ed25519 `x` member
 // into an ed25519.PublicKey on JSONWebKey.Key — rather than the SDK hand-rolling
-// the kty/crv match and the base64url `x` decode. The endpoint face still reads
-// the promoted-alongside Endpoint field from the same body.
+// the kty/crv match and the base64url `x` decode.
 type wellKnownDoc struct {
 	jose.JSONWebKeySet
-	Endpoint string `json:"endpoint"`
+	Ver      json.RawMessage `json:"ver"`
+	Endpoint string          `json:"endpoint"`
+}
+
+// manifestVer is the string the version rule reads out of the raw `ver` member.
+// A member that is absent, null, or not a JSON string yields "" — the value an
+// absent field arrives as — so the rule refuses it as absent. Python and TS make
+// the same choice (any non-string is absent), so the three languages return the
+// same verdict for the same document.
+func manifestVer(raw json.RawMessage) string {
+	var s string
+	if len(raw) == 0 || json.Unmarshal(raw, &s) != nil {
+		return ""
+	}
+	return s
 }
 
 // fetchWellKnownDoc GETs url and decodes the well-known manifest. It is the one
@@ -238,6 +272,12 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 		doc, ferr := fetchWellKnownDoc(fetchCtx, r.http, url)
 		if ferr != nil {
 			return "", ferr
+		}
+		// The document version gate runs before the endpoint is so much as looked
+		// at, and only on this face: the key face reads a JWKS document that
+		// carries no manifest version.
+		if verr := helpers.CheckWellKnownManifestVersion(manifestVer(doc.Ver)); verr != nil {
+			return "", fmt.Errorf("resolvers: %w", verr)
 		}
 		if doc.Endpoint == "" {
 			return "", fmt.Errorf("%w: host=%q", ErrNoEndpoint, host)

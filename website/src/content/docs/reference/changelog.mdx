@@ -8,6 +8,37 @@ and protocol history, see [`proto/CHANGELOG.md`](https://github.com/RAMP-Protoco
 
 ## Unreleased
 
+**SDK endpoint resolvers enforce `WellKnownManifest.ver`, and the manifest version
+gets its own constant (SDK behaviour change; no wire change).** The
+`/.well-known/ramp.json` document's `ver` has stated a consumer-side rule since the
+manifest was unified, and no SDK applied it: the Go, Python and TypeScript endpoint
+resolvers decoded the endpoint and dropped `ver` unread, so a manifest at any
+version, or with no version at all, was accepted. The rule is now stated in full and
+enforced. A consumer reads `ver` before any other member of the document, accepts a
+recognised **major** version whatever the minor (a minor revision of the manifest is
+additive, and a reader ignores members it does not know), and refuses an
+unrecognised major, a value that is not `MAJOR.MINOR`, or an absent `ver` (a `ver`
+that is not a JSON string is refused as absent, in all three languages) — the
+document sits at a fixed, unversioned path and is read before any signature is
+checked, so a layout the reader cannot classify must not supply the endpoint a
+signed call is then sent to. The refusal is a verdict, surfaced as
+`resolvers.ErrManifestVersionRefused` / `ManifestVersionRefusedError` /
+`ManifestVersionRefused`, classified `not sent` by the client tier like the other
+resolver verdicts, and never cached. It applies to the endpoint face only: the
+well-known key resolver reads a JWK Set document that carries no manifest version,
+and a test in each language pins that a key document carrying a `ver` still resolves.
+The value has one owner, `helpers.WellKnownManifestVersion` (`WellKnownManifestVersion`
+in Python and TypeScript), pinned to the wire-constants corpus beside
+`ProtocolVersion` and deliberately not derived from it — the two are separate
+namespaces, and the coupling runs one way: a manifest layout change bumps both
+numbers, a protocol change that leaves the manifest untouched bumps only
+`ProtocolVersion`. A new shared corpus, `manifest-version-vectors.json`, pins the
+verdict across the three languages, and a conformance guard holds the proto
+comment to every clause the corpus exercises. **Compatibility:** a manifest served
+without `ver` was accepted before this change and is refused after it. The field
+has been required by the wire shape since the unified manifest was introduced, so
+a conforming producer already stamps it.
+
 **`TransactionRequest.agent_request_acceptance` adds an agent-signed proof of
 the complete ordered request set (additive wire change).** The agent signs the
 ordered list of `(offer signature, exchange)` references it committed to, plus

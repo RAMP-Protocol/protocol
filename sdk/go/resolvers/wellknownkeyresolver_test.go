@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -98,5 +99,31 @@ func TestWellKnownKeyResolver_allowlist(t *testing.T) {
 	})
 	if _, err := r.Resolve(context.Background(), "ex.v1"); !errors.Is(err, helpers.ErrUnknownKey) {
 		t.Errorf("disallowed key err = %v, want ErrUnknownKey", err)
+	}
+}
+
+// The manifest version gate is the endpoint face's alone. A key document is a
+// plain JWK Set, not a manifest: it carries no WellKnownManifest.ver, and one that
+// happens to carry a `ver` the endpoint face would refuse still resolves keys.
+// This pins that decision — moving the gate into the shared fetch fails here.
+func TestWellKnownKeyResolver_isNotGatedOnAManifestVersion(t *testing.T) {
+	pub, _, _ := ed25519.GenerateKey(nil)
+	x := base64.RawURLEncoding.EncodeToString(pub)
+	for _, tc := range []struct{ name, verMember string }{
+		{"no ver", ""},
+		{"unrecognised major", `"ver":"2.0",`},
+		{"non-string ver", `"ver":1,`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprintf(w, `{%s"keys":[{"kid":"ex.v1","kty":"OKP","crv":"Ed25519","x":%q}]}`, tc.verMember, x)
+			}))
+			defer srv.Close()
+			r := resolvers.NewWellKnownKeyResolver(srv.URL, resolvers.WellKnownOptions{TTL: time.Hour})
+			got, err := r.Resolve(context.Background(), "ex.v1")
+			if err != nil || !got.Equal(pub) {
+				t.Fatalf("resolve = %v, %v; a key document is not gated on a manifest version", got, err)
+			}
+		})
 	}
 }

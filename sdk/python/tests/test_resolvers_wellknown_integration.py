@@ -16,6 +16,7 @@ on the missing faces, not on a fixture error.
 
 from __future__ import annotations
 
+import json
 import queue
 import threading
 from datetime import timedelta
@@ -44,6 +45,7 @@ from ramp_sdk.keyresolver import StaticKeyResolver
 from ramp_sdk.resolvers import (  # type: ignore[import-not-found]
     DirectoryUnavailableError,
     EndpointRefusedError,
+    ManifestVersionRefusedError,
     NoEndpointError,
     WellKnownEndpointResolver,
     WellKnownKeyResolver,
@@ -208,6 +210,38 @@ def test_endpoint_decode_failure_raises_directory_unavailable() -> None:
             r.resolve_endpoint(origin.host)
     finally:
         origin.close()
+
+
+def test_wellknown_key_is_not_gated_on_a_manifest_version() -> None:
+    """The manifest version gate is the endpoint face's alone. A key document is a
+    plain JWK Set, not a manifest: it carries no ``WellKnownManifest.ver``, and one
+    that happens to carry a ``ver`` the endpoint face would refuse still resolves
+    keys. Pins that decision — gating the key face fails here."""
+    k = make_key()
+    for ver_member in ("", '"ver":"2.0",', '"ver":1,'):
+        origin = Origin()
+        entry = json.dumps(jwks_entry("ex.v1", k.x))
+        origin.set_jwks(f'{{{ver_member}"keys":[{entry}]}}')
+        try:
+            r = WellKnownKeyResolver(f"{origin.url}/keys.json", ttl=HOUR)
+            assert r.resolve("ex.v1") == k.raw_pub, ver_member
+        finally:
+            origin.close()
+
+
+def test_endpoint_non_string_version_is_refused_as_a_verdict() -> None:
+    """A ``ver`` that is not a JSON string is refused as absent — a VERDICT, the
+    answer Go and TS give — not a decode failure the client would retry."""
+    for doc in ('{"ver":1,%s}', '{"ver":null,%s}', '{"ver":{"major":1},%s}'):
+        origin = Origin()
+        ep = f"http://{origin.host}/ramp.v1.ExchangeService"
+        origin.set_manifest(doc % f'"role":"ROLE_EXCHANGE","endpoint":"{ep}"')
+        try:
+            r = WellKnownEndpointResolver(scheme="http")
+            with pytest.raises(ManifestVersionRefusedError):
+                r.resolve_endpoint(origin.host)
+        finally:
+            origin.close()
 
 
 def test_endpoint_missing_field_raises_no_endpoint() -> None:

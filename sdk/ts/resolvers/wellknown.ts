@@ -2,12 +2,16 @@
 // kid-keyed) and WellKnownEndpointResolver (host-keyed ramp.json → endpoint).
 // Both port the Go oracle's lazy-fetch + TTL-cache + single-flight coalescing and
 // its fail-closed taxonomy: a fetch/decode failure throws DirectoryUnavailable;
-// an unknown kid is `undefined`; a manifest with no endpoint throws NoEndpoint.
+// an unknown kid is `undefined`; a manifest whose `ver` is not a recognised major
+// (or is absent) throws ManifestVersionRefused before anything else is read — on
+// the endpoint face only, the key face reads a JWKS document that carries no
+// manifest version; a manifest with no endpoint throws NoEndpoint.
 
 import { endpointRefusal } from "../src/endpoint-rule.ts";
 import { invalidHost } from "../src/host-ref.ts";
 import { isBareHost } from "../src/hosts.ts";
-import { DirectoryUnavailable, EndpointRefused, NoEndpoint } from "./errors.ts";
+import { manifestVersionRefusal } from "../src/wire.ts";
+import { DirectoryUnavailable, EndpointRefused, ManifestVersionRefused, NoEndpoint } from "./errors.ts";
 import { type FetchLike, defaultFetch, fetchStrict } from "./http.ts";
 import { ed25519KeysFromJwks } from "./jwks.ts";
 
@@ -182,6 +186,12 @@ class EndpointResolverImpl implements WellKnownEndpointResolver {
       doc = JSON.parse(body);
     } catch (err) {
       throw new DirectoryUnavailable(`manifest decode ${url}`, { cause: err });
+    }
+    // The document version gate runs before the endpoint is so much as looked
+    // at, and never caches: the next resolve fetches again.
+    const versionRefusal = manifestVersionRefusal((doc as { ver?: unknown } | null)?.ver);
+    if (versionRefusal !== undefined) {
+      throw new ManifestVersionRefused(versionRefusal);
     }
     const endpoint = (doc as { endpoint?: unknown }).endpoint;
     if (typeof endpoint !== "string" || endpoint === "") {

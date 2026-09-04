@@ -90,6 +90,11 @@ _CORPUS_SPECS: list[tuple[pathlib.Path, Callable[[Any], Any], str]] = [
     (GO_TESTDATA / "host-rule-vectors.json", lambda d: d["is_bare_host"], "is-bare-host"),
     (GO_TESTDATA / "host-rule-vectors.json", lambda d: d["host_anchored"], "host-anchored"),
     (
+        GO_TESTDATA / "manifest-version-vectors.json",
+        lambda d: d["manifest_version"],
+        "manifest-version",
+    ),
+    (
         GO_RESOLVERS_TESTDATA / "endpoint-vet-vectors.json",
         lambda d: d["endpoint_vet"],
         "endpoint-vet",

@@ -25,7 +25,7 @@ func manifestHandler(endpoint *string, hits *int) http.Handler {
 		if hits != nil {
 			*hits++
 		}
-		doc := map[string]any{"role": "ROLE_EXCHANGE"}
+		doc := map[string]any{"ver": helpers.WellKnownManifestVersion, "role": "ROLE_EXCHANGE"}
 		if endpoint != nil {
 			doc["endpoint"] = *endpoint
 		}
@@ -375,7 +375,7 @@ func TestWellKnownEndpointResolver_leaderCancellationDoesNotPoisonWaiters(t *tes
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&hits, 1)
 		<-gate // hold the fetch open until both callers are queued
-		_ = json.NewEncoder(w).Encode(map[string]any{"endpoint": ep})
+		_ = json.NewEncoder(w).Encode(map[string]any{"ver": helpers.WellKnownManifestVersion, "endpoint": ep})
 	}))
 	defer srv.Close()
 	ep = srv.URL + "/ramp.v1.ExchangeService"

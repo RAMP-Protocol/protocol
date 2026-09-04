@@ -2,12 +2,12 @@
 
 Mirrors the sdk/ts sibling sdk/ts/tests/wire.parity.test.ts.
 
-``ramp_sdk.wire`` MUST expose the seven wire constants with the EXACT values the
+``ramp_sdk.wire`` MUST expose the eight wire constants with the EXACT values the
 sdk/go oracle carries. The shared vectors at
 sdk/go/helpers/testdata/wire-constants-vectors.json carry {name, value},
 referenced from the real Go exported constants (never hand-typed). The Go layer
 splits RequestIDHeader across helpers/constants.go and core/requestid.go; the
-single Python wire module exposes all seven once.
+single Python wire module exposes all eight once.
 
 RED now purely because ``ramp_sdk.wire`` does not exist yet.
 """
@@ -30,6 +30,7 @@ _ATTR_FOR = {
     "ConnectProtocolVersionHeader": "ConnectProtocolVersionHeader",
     "ConnectProtocolVersion": "ConnectProtocolVersion",
     "ProtocolVersion": "ProtocolVersion",
+    "WellKnownManifestVersion": "WellKnownManifestVersion",
     "RequestIDHeader": "RequestIDHeader",
     "SignatureAgentHeader": "SignatureAgentHeader",
 }

@@ -26,6 +26,7 @@ import pytest
 from conftest import GO_RESOLVERS_TESTDATA, load_json
 from ramp_sdk.hosts import is_bare_host
 from ramp_sdk.resolvers import EndpointRefusedError, WellKnownEndpointResolver
+from ramp_sdk.wire import WellKnownManifestVersion
 
 _DOC = load_json(GO_RESOLVERS_TESTDATA / "endpoint-vet-vectors.json")
 _REFUSED = [v for v in _DOC["endpoint_vet"] if v["refused"]]
@@ -51,7 +52,10 @@ def _serving_manifest(endpoint: str) -> httpx.Client:
     """A manifest server that always answers with the endpoint under test."""
 
     def handler(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"role": "ROLE_EXCHANGE", "endpoint": endpoint})
+        return httpx.Response(
+            200,
+            json={"ver": WellKnownManifestVersion, "role": "ROLE_EXCHANGE", "endpoint": endpoint},
+        )
 
     return httpx.Client(transport=httpx.MockTransport(handler))
 

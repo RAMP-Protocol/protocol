@@ -138,6 +138,7 @@ from .resolvers import (
     EndpointRefusedError,
     KeyExpiredError,
     KeyRevokedError,
+    ManifestVersionRefusedError,
     NoEndpointError,
     ResolverError,
     UnknownKeyError,
@@ -159,6 +160,8 @@ from .wire import (
     ProtocolVersion,
     RequestIDHeader,
     SignatureAgentHeader,
+    WellKnownManifestVersion,
+    manifest_version_refusal,
 )
 
 __all__ = [
@@ -197,6 +200,7 @@ __all__ = [
     "MAX_REGISTRATION_SCHEMA_DEPTH",
     "MAX_REGISTRATION_SCHEMA_EVALUATIONS",
     "MAX_REGISTRATION_SCHEMA_REF_HOPS",
+    "ManifestVersionRefusedError",
     "Mode",
     "MultisigVerdict",
     "NoEndpointError",
@@ -232,6 +236,7 @@ __all__ = [
     "Verifier",
     "WBAKeyResolver",
     "WBA_DIRECTORY_PATH",
+    "WellKnownManifestVersion",
     "WellKnownEndpointResolver",
     "WellKnownKeyResolver",
     "Window",
@@ -261,6 +266,7 @@ __all__ = [
     "is_bare_domain",
     "is_bare_host",
     "is_safe_schema_pattern",
+    "manifest_version_refusal",
     "jcs_acceptance_payload",
     "jcs_request_acceptance_payload",
     "known_restriction_token",

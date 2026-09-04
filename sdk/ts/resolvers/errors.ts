@@ -86,3 +86,19 @@ export class EndpointRefused extends ResolverError {
     this.name = "EndpointRefused";
   }
 }
+
+/** A /.well-known/ramp.json was fetched and parsed but carries a
+ * WellKnownManifest.ver this resolver does not accept: an unrecognised major
+ * version, a value that is not MAJOR.MINOR, or no version at all. The rule is
+ * manifestVersionRefusal in src/wire.ts.
+ *
+ * Like EndpointRefused it is a VERDICT — final, not a transport failure to
+ * retry — and it is never cached. The gate runs before any other member of the
+ * document is read, for the reason stated once on WellKnownManifest.ver in the
+ * proto. */
+export class ManifestVersionRefused extends ResolverError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "ManifestVersionRefused";
+  }
+}

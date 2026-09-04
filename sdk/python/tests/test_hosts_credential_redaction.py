@@ -25,6 +25,7 @@ import pytest
 
 from ramp_sdk.hosts import host_anchored, host_of
 from ramp_sdk.resolvers import EndpointRefusedError, WellKnownEndpointResolver
+from ramp_sdk.wire import WellKnownManifestVersion
 
 _SECRET = "s3cr3t"  # noqa: S105 - a test fixture, not a credential
 
@@ -58,7 +59,10 @@ def _serving(endpoint: str) -> httpx.Client:
     """A manifest server that always answers with the endpoint under test."""
 
     def handler(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"role": "ROLE_EXCHANGE", "endpoint": endpoint})
+        return httpx.Response(
+            200,
+            json={"ver": WellKnownManifestVersion, "role": "ROLE_EXCHANGE", "endpoint": endpoint},
+        )
 
     return httpx.Client(transport=httpx.MockTransport(handler))
 
@@ -96,9 +100,7 @@ def test_a_well_formed_credential_still_gets_the_rules_own_message() -> None:
     r = WellKnownEndpointResolver(http=_serving(f"https://u:{_SECRET}@exchange.example/v1"))
     with pytest.raises(EndpointRefusedError) as caught:
         r.resolve_endpoint("exchange.example")
-    assert str(caught.value) == (
-        "host='exchange.example' advertises an endpoint carrying userinfo"
-    )
+    assert str(caught.value) == ("host='exchange.example' advertises an endpoint carrying userinfo")
 
 
 # The SERVING HOST, not the advertised endpoint. Every case above feeds the

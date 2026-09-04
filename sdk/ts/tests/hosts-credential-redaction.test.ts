@@ -20,6 +20,7 @@ import { describe, expect, it } from "vitest";
 import { hostAnchored, hostOf } from "../src/hosts.ts";
 import { createWellKnownEndpointResolver } from "../resolvers/index.ts";
 import type { FetchLike } from "../resolvers/http.ts";
+import { WellKnownManifestVersion } from "../src/wire.ts";
 
 const SECRET = "s3cr3t";
 
@@ -50,7 +51,8 @@ const credentialRefs = [
 
 const serving = (endpoint: string): FetchLike => async () => ({
 	status: 200,
-	text: async () => JSON.stringify({ role: "ROLE_EXCHANGE", endpoint }),
+	text: async () =>
+		JSON.stringify({ ver: WellKnownManifestVersion, role: "ROLE_EXCHANGE", endpoint }),
 });
 
 /** The message of whatever `call` throws, or undefined when it does not. */

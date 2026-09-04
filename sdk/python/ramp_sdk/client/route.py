@@ -18,7 +18,11 @@ from typing import Protocol, runtime_checkable
 from ramp_sdk._endpoint_rule import endpoint_refusal
 from ramp_sdk._hostref import _redact_userinfo as redact_userinfo
 from ramp_sdk.hosts import is_bare_host
-from ramp_sdk.resolvers.errors import EndpointRefusedError, NoEndpointError
+from ramp_sdk.resolvers.errors import (
+    EndpointRefusedError,
+    ManifestVersionRefusedError,
+    NoEndpointError,
+)
 
 from .errors import CallError, CallErrorKind, not_sent
 
@@ -33,8 +37,9 @@ class EndpointResolver(Protocol):
 
     An implementation's FAILURE decides how a caller is told to react, so it is part of the
     contract rather than an implementation detail. A failure that is a VERDICT — the host
-    is unusable, the host is not allowed, the manifest advertises no endpoint, or it
-    advertises one that must not be used — MUST raise
+    is unusable, the host is not allowed, the manifest carries a version this reader does
+    not accept, advertises no endpoint, or advertises one that must not be used — MUST
+    raise :class:`~ramp_sdk.resolvers.errors.ManifestVersionRefusedError`,
     :class:`~ramp_sdk.resolvers.errors.NoEndpointError`,
     :class:`~ramp_sdk.resolvers.errors.EndpointRefusedError`, or the ``ValueError``
     ``is_bare_host`` raises; those surface as ``NOT_SENT``, which tells the caller not to
@@ -98,7 +103,10 @@ def vet_exchange_endpoint(
         # way — an injected one can.
         kind = (
             CallErrorKind.NOT_SENT
-            if isinstance(exc, NoEndpointError | EndpointRefusedError | ValueError)
+            if isinstance(
+                exc,
+                ManifestVersionRefusedError | NoEndpointError | EndpointRefusedError | ValueError,
+            )
             else CallErrorKind.UNREACHABLE
         )
         raise CallError(
