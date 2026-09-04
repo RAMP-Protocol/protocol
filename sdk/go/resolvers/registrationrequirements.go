@@ -171,7 +171,7 @@ func (r *WellKnownRequirementsReader) ResolveRegistrationRequirements(
 	if !doc.describesExchange() {
 		return RegistrationRequirements{}, fmt.Errorf("%w: host=%q", ErrManifestNotExchange, exchange)
 	}
-	reqs := RegistrationRequirements{TermsDigest: doc.TermsDigest, Verdict: helpers.SchemaNotPublished}
+	reqs := RegistrationRequirements{TermsDigest: doc.termsDigest(), Verdict: helpers.SchemaNotPublished}
 	// The schema is compiled from the bytes AS SERVED, because every cap the rules
 	// state is defined over those bytes. json.RawMessage is the sub-document the
 	// decoder saw, so nothing has re-encoded it on the way here.
@@ -204,14 +204,49 @@ func (d *wellKnownDoc) describesExchange() bool {
 	return false
 }
 
+// absentMember reports whether a raw manifest member carries no value at all —
+// the key was not served, or it was served as JSON null. Both are the contract's
+// "absent", and null needs naming because encoding/json decodes it into a string
+// without complaint, leaving the zero value behind: a caller that only checked the
+// error would read a null digest as a present, empty one.
+func absentMember(raw json.RawMessage) bool {
+	return len(raw) == 0 || string(raw) == "null"
+}
+
+// termsDigest returns the manifest's terms_digest, or nil when the Exchange
+// publishes none.
+//
+// A member carrying anything but a string reads as ABSENT rather than as a fault.
+// The manifest is a third party's document and this is one optional member of it,
+// so the alternative is failing a document the endpoint and key faces would have
+// read fine — see the wellKnownDoc field comment. It is also what both ports
+// already do with the same member, so the three agree on the answer rather than
+// on an error.
+func (d *wellKnownDoc) termsDigest() *string {
+	if absentMember(d.TermsDigest) {
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(d.TermsDigest, &s); err != nil {
+		return nil
+	}
+	return &s
+}
+
 // registrationSchemaBytes returns the published data_schema exactly as served, or
 // nil when the block or the member is absent. Absent and blank are the same answer
 // to the caller — CompileRegistrationSchema reads either as "publishes none" — but
 // the two are distinguished here anyway so a blank member reaches the rule that
 // defines blankness rather than a rule invented at this layer.
+//
+// A block that is not an object reads as absent, for the reason termsDigest gives.
 func (d *wellKnownDoc) registrationSchemaBytes() []byte {
-	if d.AccountRegistration == nil {
+	if absentMember(d.AccountRegistration) {
 		return nil
 	}
-	return d.AccountRegistration.DataSchema
+	var block accountRegistration
+	if err := json.Unmarshal(d.AccountRegistration, &block); err != nil {
+		return nil
+	}
+	return block.DataSchema
 }

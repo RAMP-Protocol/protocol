@@ -61,13 +61,23 @@ type wellKnownDoc struct {
 	// because one fetch decodes the whole document and a second struct over the
 	// same bytes would be a second place for the member names to drift.
 	//
+	// All three are RAW, and that is what keeps the sharing safe. A typed field
+	// here would make every face fail on a member only one of them reads: a
+	// manifest publishing terms_digest as a number would fail the whole decode,
+	// and a decode failure is classified as a transport failure — retryable —
+	// so an Exchange with one off-spec member would turn every usage report and
+	// every key resolution against it into an endless retry. Raw bytes move that
+	// question to the face that asks it, where a member of the wrong type is
+	// simply absent. See termsDigest and registrationSchemaBytes, which is also
+	// where the two ports already put it.
+	//
 	// NONE of them is ever cached: the endpoint cache stores the endpoint string
 	// and nothing else, so a caller cannot reach a stale digest through any face
 	// in this package. That is a property the terms_digest rule depends on — see
 	// WellKnownRequirementsReader.
-	Role                json.RawMessage      `json:"role"`
-	TermsDigest         *string              `json:"terms_digest"`
-	AccountRegistration *accountRegistration `json:"account_registration"`
+	Role                json.RawMessage `json:"role"`
+	TermsDigest         json.RawMessage `json:"terms_digest"`
+	AccountRegistration json.RawMessage `json:"account_registration"`
 }
 
 // accountRegistration is the manifest block describing how to open an account.
