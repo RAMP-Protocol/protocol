@@ -9,6 +9,7 @@ import {
 } from "../resolvers/index.ts";
 import { compileRegistrationSchema } from "../src/regschema.ts";
 import { retrievalAuthFailureDetail } from "../src/errordetail.ts";
+import { invalidHost } from "../src/host-ref.ts";
 
 /** A send that records what it was given and answers a fixed body. */
 function recordingSend(
@@ -226,6 +227,10 @@ describe("register", () => {
     for (const [thrown, kind] of [
       [new ExchangeNotPermitted("blocked"), "not_sent"],
       [new ManifestNotExchange("host=exchange.test"), "not_sent"],
+      // Reachable only through an INJECTED reader with its own host rule — the verb's
+      // own recipient check runs this one first. Retryable would be wrong: a value that
+      // is not a host will not become one on a later attempt.
+      [invalidHost("exchange.test/path", "not a bare domain"), "not_sent"],
       [new Error("connection reset"), "unreachable"],
     ] as const) {
       const { send, seen } = recordingSend({});

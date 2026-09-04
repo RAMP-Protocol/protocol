@@ -14,6 +14,7 @@ import httpx
 import pytest
 from test_client import FACES, _IDS, Face, Recorder, _config  # noqa: PLC2701
 
+from ramp_sdk._hostref import _invalid_host  # noqa: PLC2701
 from ramp_sdk.client import CallError, CallErrorKind
 from ramp_sdk.regschema import compile_registration_schema
 from ramp_sdk.resolvers import (
@@ -231,6 +232,10 @@ def test_register_classifies_a_refused_requirements_read_as_final(face: Face) ->
     for raised, kind in (
         (ExchangeNotPermittedError("blocked"), CallErrorKind.NOT_SENT),
         (ManifestNotExchangeError("wrong role"), CallErrorKind.NOT_SENT),
+        # Reachable only through an INJECTED reader with its own host rule — the verb's
+        # own recipient check runs this one first. Retryable would be wrong: a value that
+        # is not a host will not become one on a later attempt.
+        (_invalid_host("exchange.test/path", "not a bare domain"), CallErrorKind.NOT_SENT),
         (RuntimeError("connection reset"), CallErrorKind.UNREACHABLE),
     ):
         with pytest.raises(CallError) as caught:

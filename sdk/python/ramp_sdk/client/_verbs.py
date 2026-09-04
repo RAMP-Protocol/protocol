@@ -636,7 +636,13 @@ def _apply_registration_requirements(cfg: ClientConfig, op: str, sent: dict[str,
     exchange = _str_field(sent, "exchange")
     try:
         reqs = reader.resolve_registration_requirements(exchange)
-    except (ExchangeNotPermittedError, ManifestNotExchangeError) as exc:
+    # ValueError is the invalid-host refusal: the host helpers are L1 and deliberately
+    # raise a bare error for it, so this is the shape there is to catch, and it is the
+    # same one the routing tier catches for the same reason. The verb's own recipient
+    # check runs the host rule first, so the SDK's own reader never reaches here that
+    # way — an INJECTED one can, and calling its refusal retryable would have a caller
+    # retry a verdict.
+    except (ExchangeNotPermittedError, ManifestNotExchangeError, ValueError) as exc:
         # A value this deployment or the Exchange refused is FINAL; anything else is a
         # transport failure worth retrying. The same split the routing tier makes, so a
         # caller branches on one taxonomy whichever check declined.

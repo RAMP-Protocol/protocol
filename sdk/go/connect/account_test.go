@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	rampserver "github.com/RAMP-Protocol/protocol/sdk/go/connectserver"
 	"github.com/RAMP-Protocol/protocol/sdk/go/core"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
 
 // ---------------------------------------------------------------------------
@@ -298,6 +300,64 @@ func TestRegister_ARootViolationRendersWithNoMemberName(t *testing.T) {
 	// separator everywhere.
 	if !strings.Contains(msg, "/vat_id: ") {
 		t.Fatalf("refusal does not address the offending member: %v", msg)
+	}
+}
+
+// refusingRequirements is a reader that declines every read with one error, so the
+// classification of that error is the only thing the test varies.
+type refusingRequirements struct{ err error }
+
+func (r refusingRequirements) ResolveRegistrationRequirements(
+	_ context.Context, _ string,
+) (resolvers.RegistrationRequirements, error) {
+	return resolvers.RegistrationRequirements{}, r.err
+}
+
+// A failed READ is classified the way the routing tier classifies its own: a value
+// this deployment or the Exchange refused is FINAL, anything else is a transport
+// failure worth retrying. Without the split a caller retries a refusal forever.
+//
+// All three verdicts are reachable only through an INJECTED reader — the verb's own
+// recipient check runs the host rule first, and the SDK's reader applies the other
+// two itself — which is exactly why they need a test: nothing else exercises them,
+// and a consumer that injects a reader is the case this classification exists for.
+func TestRegister_ClassifiesARefusedRequirementsRead(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want rampconnect.CallErrorKind
+	}{
+		{"not a host", fmt.Errorf("%w: %q is not a bare domain",
+			helpers.ErrInvalidHost, "exchange.test/path"), rampconnect.CallNotSent},
+		{"this deployment refused the host", fmt.Errorf("%w: blocked",
+			resolvers.ErrExchangeNotPermitted), rampconnect.CallNotSent},
+		{"the document is not an Exchange's", fmt.Errorf("%w: wrong role",
+			resolvers.ErrManifestNotExchange), rampconnect.CallNotSent},
+		{"the read never completed", errors.New("connection reset"),
+			rampconnect.CallUnreachable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sig := newSigningFixture(t)
+			origin := &recordingAccount{billingRef: "acct-1"}
+			domain, _ := selfAdvertisingExchange(t, sig, origin)
+
+			client := rampconnect.NewClient("http://home.invalid",
+				append(allowLoopback(t),
+					rampconnect.WithSigner(sig.signer),
+					rampconnect.WithRegistrationRequirements(refusingRequirements{tc.err}),
+				)...)
+
+			_, err := client.Register(context.Background(),
+				&rampv1.RegisterRequest{Exchange: domain})
+
+			var cerr *rampconnect.CallError
+			if !errors.As(err, &cerr) || cerr.Kind != tc.want {
+				t.Fatalf("err = %v, want kind %v", err, tc.want)
+			}
+			if origin.gotRegister != nil {
+				t.Fatal("a registration whose requirements read failed reached the wire")
+			}
+		})
 	}
 }
 

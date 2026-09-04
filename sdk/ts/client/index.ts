@@ -63,7 +63,7 @@ import {
 	type RegistrationRequirements,
 } from "../resolvers/index.ts";
 import type { EndpointResolver } from "./route.ts";
-import { vetExchangeEndpoint } from "./route.ts";
+import { isInvalidHostRefusal, vetExchangeEndpoint } from "./route.ts";
 import { createUnarySend } from "./send.ts";
 import {
 	DEFAULT_CALL_TIMEOUT_MS,
@@ -836,9 +836,16 @@ async function applyRegistrationRequirements(
 		);
 	} catch (err) {
 		// A value this deployment or the Exchange refused is FINAL; anything else is a
-		// transport failure worth retrying. The same split the routing tier makes, so a
-		// caller branches on one taxonomy whichever check declined.
-		if (err instanceof ExchangeNotPermitted || err instanceof ManifestNotExchange) {
+		// transport failure worth retrying. The same split the routing tier makes, and
+		// the same three causes: a value that is not a host will not become one on a
+		// later attempt either. The verb's own recipient check runs the host rule first,
+		// so the SDK's own reader never reaches here that way — an INJECTED one can, and
+		// classifying its refusal as retryable would have a caller retry a verdict.
+		if (
+			err instanceof ExchangeNotPermitted ||
+			err instanceof ManifestNotExchange ||
+			isInvalidHostRefusal(err)
+		) {
 			throw notSent(op, err);
 		}
 		throw new RampCallError({ kind: "unreachable", op, cause: err });
