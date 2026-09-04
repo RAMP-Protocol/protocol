@@ -192,6 +192,15 @@ the agent's own user, so the Exchange's own enforcement stays the deciding check
 The 16KB cap is measured over the bytes **as served**, in every language, so a
 schema padded past it on the wire is refused at both ends rather than at one.
 
+A payload the pre-check does refuse comes back naming the offending members, as the
+same typed `RegistrationFailure` detail an Exchange attaches when it refuses the same
+payload — so an agent reads one shape whichever side declined, and its tooling needs
+one renderer rather than two. The detail's `domain` names the client's own tier rather
+than the Exchange, which never saw the request. Each entry addresses a member by RFC
+6901 pointer, with the empty pointer addressing `registration_data` itself; the
+constraint text beside it is developer-facing and validator-defined, so branch on the
+pointer and the typed reason, never on that prose.
+
 - **Self-contained.** Every `$ref`, `$dynamicRef` and `$recursiveRef` begins with
   `#`. A consumer never resolves a reference that leaves the document — doing so
   turns every reader into a fetch aimed at a URL the schema's author chose.

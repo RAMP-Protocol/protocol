@@ -1607,7 +1607,9 @@ Python and TS ship symmetric **decoders** (`parse_error_detail` / `error_detail_
 reason enum a Go exchange emitted, never on a human string. Emit and decode are pinned
 to one shared oracle corpus (`error-detail-vectors.json`) replayed by all three
 languages, so the typed-failure contract is verified end-to-end across the language
-boundary rather than trusted to match by inspection.
+boundary rather than trusted to match by inspection. The details a client SYNTHESIZES —
+where no peer wrote the values and all three have to author the same ones — are pinned
+separately and for a different reason; see "Details the SDK writes itself are pinned".
 
 ## Discovery answers are grouped per URI, not flattened
 
@@ -1767,7 +1769,12 @@ So the client's failure carries the sentence as a value, beside the token rather
 it. `Reason` is the peer's machine token; putting prose there was a mistake this SDK made
 once and reverted, and the same mistake in the other direction would be no better.
 
-What it holds is the TYPED reason's developer message and nothing else. An answer that did
+What it holds is the TYPED reason's developer message and nothing else. It is not filled
+from a detail this SDK BUILT ITSELF either — the content leg's sentence around an edge's
+token, or the registration pre-check's around schema failures. Those carry a typed reason,
+so the rule below about untyped answers would not have stopped them; what stops them is
+that the words are ours, and a field that exists so a layer can attribute prose to a remote
+party cannot sometimes hold our own. An answer that did
 not come from a RAMP service — a draining load balancer, a proxy's own page — carries no
 message of its own, and the text a transport synthesizes for one is that transport's:
 connect-go writes a status line where a fetch-based client writes nothing. Filling the
@@ -2072,3 +2079,70 @@ The claim is scoped to that seam deliberately. A caller that injects a whole
 ownership of that fetch and the guard is that caller's to install — which is a
 different bargain from an option that quietly weakens a fetch the SDK still
 performs.
+
+## A refusal the client computed carries the same answer the Exchange would have sent
+
+A registering client pre-checks its payload against the schema the Exchange publishes, so
+a payload that will be refused is refused locally, before anything is signed. That check
+produces the same structured list of offending members the Exchange produces from the same
+validator — and the client flattened it into a sentence and dropped the list.
+
+The consequence is a layer that has to parse members back out of prose, which is precisely
+what the failure contract says a layer must never be asked to do. A consumer rendering
+both sources through one renderer, so an agent gets the same remedy whichever side
+declined, could not: it had a typed detail from the Exchange and a string from the client,
+and it would have read them as two different problems. The refusal now carries the detail
+beside the sentence, and the sentence stays because it is what a caller sees who never
+opens the detail at all.
+
+Its DOMAIN names the client's own tier. The Exchange never saw the request, so attributing
+the verdict to it would be the same conflation the peer-message rule already refuses —
+that field exists so a consumer can attribute words to a remote party, and a domain works
+the same way for a surface. The value the field may carry is deliberately open in the
+contract: no rule, and an EXAMPLE rather than a set, which is right for a grouping key
+that would otherwise have to move every time a tier does. What the values in use actually
+obey is narrower, and worth stating because nothing had: a `Service` suffix names an RPC
+service the contract DEFINES, and a bare noun names a tier that is not one and appears in
+no descriptor — a delivery edge, or the client itself. The suffix is what tells a reader
+which they have. A conformance guard now holds every committed domain to that, and found a
+vector naming a registration service the contract has never defined.
+
+The field errors travel as PATHS wherever the three languages have to agree. Each pointer
+is a projection of the payload, which all three compute identically; the constraint text
+beside it comes from a different JSON Schema library in each, and the contract says so of
+that field — validator-defined, not stable across implementations. Pinning the prose would
+pin an accident of which library each port happens to use.
+
+One rendering bug came out of the same place. An empty pointer addresses the whole object,
+which is how a missing required member and every other whole-object failure is reported,
+and the renderer wrote `path + ": " + error` unconditionally — so the most ordinary
+registration failure there is rendered as a member with no name.
+
+## Details the SDK writes itself are pinned, not just the ones it reads
+
+Decoding a peer's `ErrorDetail` was already held to one corpus in all three languages.
+Two details are not decoded at all. The content leg promotes a delivery edge's refusal
+token into a typed reason and writes the envelope around it, because an edge answers a
+small JSON object rather than a protobuf. The registration pre-check builds one from
+failures no peer ever saw. In both, the failing surface, the sentence and the reason are
+AUTHORED — three times, in three languages, from three copies of one decision — and
+nothing compared them.
+
+That is the shape that drifts without anything going red, and it had. The token table
+under the edge leg is not derivable from the enum's own spelling: `expired` is
+`URL_EXPIRED` and `pop_expired` is `PROOF_EXPIRED`, which is why the proto records the
+token beside each value. Two of the three SDKs never read that record. They computed each
+reason's name by uppercasing the token and prefixing it, which lands on the recorded value
+for two of the eleven tokens and on nothing for the other nine — so nine refusals a real
+edge emits carried a typed reason in one language and none in the other two, and the
+inverse held too: any string whose uppercase happened to spell an enum suffix was
+promoted, including spellings no edge sends. Every suite was green, because none of them
+compared a language's answer to the record.
+
+Both details are now one corpus, driven from the real client rather than described, and
+every recorded token is a row — including the two that must stay UNTYPED. The protocol
+records one token against TWO values, one per checker, so the body cannot say which ran
+and no language may choose; and a spelling no edge emits is recorded as untyped precisely
+so a port that derives names from tokens cannot come back green. A second conformance
+guard reads the annotations out of the `.proto` source and holds the corpus to them, so
+the record rather than any one language is what the three are measured against.

@@ -198,7 +198,16 @@ whole object) plus the violated constraint. The text states the constraint and
 refusal travels back over the wire, so the validating library's own messages, which
 quote the failing value, are deliberately not used. The list is deduplicated by
 pointer and keyword and sorted before the 64-item cap, so the same entries survive in
-every language.
+every language. The POINTERS survive identically; the constraint text does not, and
+the contract says so of that field — it is validator-defined and not stable across
+implementations, so branch on the pointer and the typed reason, never on the prose.
+
+The client's own pre-check returns this same list, on the `CallError` it refuses with,
+as a `RegistrationFailure` detail reachable through `ErrorDetailFrom`. That is
+deliberate: an agent developer's tooling renders the Exchange's refusal and the local
+one through the same code, and a structured list on one side and a sentence on the
+other would read as two different problems. Its `domain` names the client rather than
+the Exchange, which never saw the request.
 
 **Also:** RFC 7638 `Thumbprint`, ADR-019 `ErrorDetail` constructors +
 `AsConnectError`/`ErrorDetailFrom`/`Reason`, `NewIdempotencyKey`, scope helpers,

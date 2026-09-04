@@ -44,6 +44,34 @@ So a consumer reads it instead of parsing it back out of a rendered error; it is
 unbounded, and bounding it belongs to whoever displays it. And Python's `ClientConfig` gains `sign_window`, so the
 RFC 9421 freshness knob sits at the tier Go and TypeScript already surface it at.
 
+A refusal the pre-check computes carries what it computed. The offending members travel as
+a typed `RegistrationFailure` detail beside the sentence, so a consumer that renders the
+Exchange's refusal and the client's own through one renderer reads one shape either way
+rather than parsing members back out of prose. Its domain names the client's own tier: the
+Exchange never saw the request. The field errors are compared across languages by POINTER
+only — the constraint text beside each comes from a different JSON Schema library in each
+port and the contract calls it validator-defined — and an empty pointer, which is how a
+missing required member is reported, now renders without a leading separator instead of as
+a member with no name.
+
+Two corrections to the content leg travel with it. The delivery edge's refusal tokens are
+recorded in the proto beside each `RetrievalAuthFailureReason`, and the mapping is not
+derivable — `expired` is `URL_EXPIRED`, `pop_expired` is `PROOF_EXPIRED`. Both JSON ports
+had computed each name by uppercasing the token instead, which matches the record for two
+of the eleven tokens, so nine refusals a real edge emits reached a TypeScript or Python
+caller with no typed reason at all while any spelling that happened to match an enum
+suffix was promoted. Both now carry the record. And an invalid-host refusal from an
+injected requirements reader is classified `not_sent` in all three rather than retried in
+two, which is what each port's own routing leg already answered.
+
+A new shared corpus pins the details the SDK builds itself rather than receives — the two
+above — over every recorded edge token, including the two that must stay untyped, replayed
+in all three languages. Two conformance guards sit under it: one holds every committed
+`ErrorDetail.domain` to the shape it claims (a `Service` suffix names a service the
+contract defines, a bare noun names a tier that is not one), and one holds the corpus to
+the token annotations in the `.proto` source. The first found a vector naming a
+registration service the contract has never defined; that fixture is corrected.
+
 *Parity record:* six new mapped symbols and one Go-idiomatic exclusion; the reader's Go
 factory folds into the Python class constructor as every other `NewX` does, so the
 shrink-only allowlist baseline moves 16 → 17 as a reviewed bump under that one recorded
