@@ -26,9 +26,10 @@ const (
 	// DOCUMENT layout, stamped on WellKnownManifest.ver by every party that serves
 	// one. It is a namespace separate from ProtocolVersion and is never derived
 	// from it: a change to the manifest layout bumps both numbers, a protocol
-	// change that leaves the manifest untouched bumps only ProtocolVersion. The
-	// two read the same today by coincidence, not by rule. The receive-side
-	// check a manifest reader applies is CheckWellKnownManifestVersion.
+	// change that leaves the manifest untouched bumps only ProtocolVersion. Both
+	// read "1.0" today because neither has moved yet; neither is derived from
+	// the other. The receive-side check a manifest reader applies is
+	// CheckWellKnownManifestVersion.
 	WellKnownManifestVersion = "1.0"
 	// RequestIDHeader correlates a request across services and the edge.
 	RequestIDHeader = "X-Request-ID"

@@ -588,6 +588,30 @@ describe("the offer-derived leg", () => {
 			flakyClient.reportUsage({ exchange: "issuer.test" }),
 		).rejects.toMatchObject({ kind: "unreachable" });
 	});
+
+	it("does not send when the manifest's version is refused", async () => {
+		// A manifest whose version the reader refuses is a VERDICT: the manifest was
+		// fetched and parsed, and nothing about a retry changes the version served.
+		// Mirrors the Go taxonomy test for the same refusal.
+		const { ManifestVersionRefused } = await import("../resolvers/errors.ts");
+		const { send, seen } = recordingSend({});
+		const client = createClient("https://home.test", {
+			endpointResolver: {
+				resolveEndpoint: async () => {
+					throw new ManifestVersionRefused('ver "2.0" has major 2, accept major 1');
+				},
+			},
+			guardedSend: send,
+		});
+		const err = (await client
+			.reportUsage({ exchange: "issuer.test" })
+			.catch((e: unknown) => e)) as RampCallError;
+		expect(err.kind).toBe("not_sent");
+		// The route flattens the resolver's error into the cause message; the
+		// refusal's wording must survive so an operator can tell it from an outage.
+		expect((err.cause as Error).message).toContain("accept major 1");
+		expect(seen).toHaveLength(0);
+	});
 });
 
 describe("the broker face", () => {

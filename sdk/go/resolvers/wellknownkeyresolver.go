@@ -13,9 +13,11 @@ import (
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
-// WellKnownKeyResolver fetches a JWKS-shaped document from a URL (the publisher's
-// /.well-known/ramp.json keys) and caches resolved keys with a TTL. The wire form
-// is the RFC 7517 subset:
+// WellKnownKeyResolver fetches a JWKS-shaped document from one fixed,
+// operator-chosen URL and caches resolved keys with a TTL. The document is a
+// plain RFC 7517 JWK Set, not a WellKnownManifest — a manifest carries no keys
+// member, and a JWK Set carries no manifest version, so the endpoint face's
+// version gate does not apply here. The wire form is the RFC 7517 subset:
 //
 //	{"keys":[{"kid":"agent1.v1","kty":"OKP","crv":"Ed25519","x":"<base64url>"}]}
 //

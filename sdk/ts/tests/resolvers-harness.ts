@@ -90,10 +90,12 @@ export function jwksEntry(kid: string, x: string): Record<string, unknown> {
 	return { kid, kty: "OKP", crv: "Ed25519", x };
 }
 
-/** Serialize a WellKnownManifest projection ({role, endpoint}); omit endpoint to
- * model a valid-but-inert manifest. */
-export function manifestJson(endpoint?: string): string {
-	const doc: Record<string, unknown> = { ver: WellKnownManifestVersion, role: "ROLE_EXCHANGE" };
+/** Serialize a WellKnownManifest projection ({ver, role, endpoint}); omit
+ * endpoint to model a valid-but-inert manifest, and pass `ver: null` to omit the
+ * version member and model a manifest with no version at all. */
+export function manifestJson(endpoint?: string, ver: string | null = WellKnownManifestVersion): string {
+	const doc: Record<string, unknown> = { role: "ROLE_EXCHANGE" };
+	if (ver !== null) doc.ver = ver;
 	if (endpoint !== undefined) doc.endpoint = endpoint;
 	return JSON.stringify(doc);
 }

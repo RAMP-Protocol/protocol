@@ -13,8 +13,11 @@ bumps only `ProtocolVersion`). Go `helpers.CheckWellKnownManifestVersion` /
 `ManifestVersionRefusedError`, TS `manifestVersionRefusal` / `ManifestVersionRefused`
 carry the pure rule; the endpoint resolvers apply it on the endpoint face only and
 wrap the refusal as `resolvers.ErrManifestVersionRefused` (same name in each
-port), which the client tier classifies as not-sent. The key resolvers are
-unchanged — they read JWKS documents, not manifests. New corpus
+port), which the client tier classifies as not-sent. A `ver` that is not a JSON
+string is refused as absent — a verdict, not a decode failure to retry — and the
+value a refusal echoes is clipped to 64 characters, in all three languages. The
+key resolvers are unchanged — they read JWK Set documents, not manifests — and a
+test in each language pins that a key document carrying a `ver` still resolves. New corpus
 `sdk/go/helpers/testdata/manifest-version-vectors.json` (`manifest_version`
 list; columns `name`, `ver`, `present`, `accepted`), replayed in all three
 languages and registered in the parity matrix. `conformance/manifest_version_rule_test.go`

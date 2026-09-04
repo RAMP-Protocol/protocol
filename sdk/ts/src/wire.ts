@@ -30,9 +30,9 @@ export const ProtocolVersion = "1.0";
  * layout, stamped on WellKnownManifest.ver by every party that serves one. A
  * namespace separate from ProtocolVersion and never derived from it: a change
  * to the manifest layout bumps both numbers, a protocol change that leaves the
- * manifest untouched bumps only ProtocolVersion. The two read the same today by
- * coincidence, not by rule. The receive-side check a manifest reader applies is
- * manifestVersionRefusal.
+ * manifest untouched bumps only ProtocolVersion. Both read "1.0" today because
+ * neither has moved yet; neither is derived from the other. The receive-side
+ * check a manifest reader applies is manifestVersionRefusal.
  */
 export const WellKnownManifestVersion = "1.0";
 /** RequestIDHeader correlates a request across services and the edge. */
@@ -59,19 +59,20 @@ function parseMajor(ver: string): string | undefined {
  * The receive-side rule for WellKnownManifest.ver, as a pure verdict.
  *
  * Returns undefined when the document is accepted — its MAJOR equals the major
- * of WellKnownManifestVersion, whatever the MINOR, because a minor revision of
- * the manifest is additive by definition and a reader ignores members it does
- * not know. Otherwise returns the reason: an unrecognised major, a value that is
- * not MAJOR.MINOR, or an absent member (undefined, null, or any non-string is
- * how a missing `ver` arrives from JSON.parse). Absent is refused rather than
- * tolerated because the field is required by the wire shape and a document with
- * no version is one whose layout the reader cannot classify; the manifest sits
- * at a fixed, unversioned path and is read before any signature is checked, so
- * the gate fails closed.
+ * of WellKnownManifestVersion, whatever the MINOR. Otherwise returns the reason:
+ * an unrecognised major, a value that is not MAJOR.MINOR, or an absent member
+ * (undefined, null, or any non-string is how a missing `ver` arrives from
+ * JSON.parse). Absent is refused because a document with no version is one whose
+ * layout the reader cannot classify. Why a minor is accepted, and why the gate
+ * runs before any other member is read and fails closed, is stated once on
+ * WellKnownManifest.ver in the proto.
  *
  * The message names the value found so an operator can tell a version mismatch
- * from a network failure. The three SDK languages pin this verdict to a shared
- * corpus. The error a resolver throws for a refusal is ManifestVersionRefused.
+ * from a network failure, clipped to MAX_ECHOED_VER characters: the body is read
+ * up to 1 MiB and a refusal is never cached, so an unclipped echo would let a
+ * hostile origin size every error. The three SDK languages pin this verdict to a
+ * shared corpus. The error a resolver throws for a refusal is
+ * ManifestVersionRefused.
  */
 export function manifestVersionRefusal(ver: unknown): string | undefined {
 	const acceptMajor = parseMajor(WellKnownManifestVersion);
@@ -83,10 +84,18 @@ export function manifestVersionRefusal(ver: unknown): string | undefined {
 	}
 	const major = parseMajor(ver);
 	if (major === undefined) {
-		return `ver ${JSON.stringify(ver)} is not MAJOR.MINOR, accept major ${acceptMajor}`;
+		return `ver ${JSON.stringify(echoVer(ver))} is not MAJOR.MINOR, accept major ${acceptMajor}`;
 	}
 	if (major !== acceptMajor) {
-		return `ver ${JSON.stringify(ver)} has major ${major}, accept major ${acceptMajor}`;
+		return `ver ${JSON.stringify(echoVer(ver))} has major ${major}, accept major ${acceptMajor}`;
 	}
 	return undefined;
+}
+
+/** How much of a refused `ver` an error message repeats. Go and Python clip at
+ * the same length, so an operator reading three SDKs' logs sees the same prefix. */
+const MAX_ECHOED_VER = 64;
+
+function echoVer(ver: string): string {
+	return ver.length <= MAX_ECHOED_VER ? ver : `${ver.slice(0, MAX_ECHOED_VER)}...`;
 }

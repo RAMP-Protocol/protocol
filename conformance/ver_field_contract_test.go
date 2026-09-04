@@ -37,7 +37,7 @@ package conformance
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -69,14 +69,13 @@ var verExemptMessages = map[string]string{
 // generator. Read as data (see the file header on why this is not an import).
 const wireConstantsVectors = "../sdk/go/helpers/testdata/wire-constants-vectors.json"
 
-// protocolVersion returns the RAMP protocol version the SDK exports, read from the
-// committed vector so this guard never restates the literal. Errors are fatal
-// rather than skipped: a missing file or entry means the guard has lost its
-// anchor, and silently passing would be worse than failing.
-var protocolVersion = sync.OnceValues(func() (string, error) {
+// wireVectors loads the committed vector once. Errors are fatal rather than
+// skipped: a missing file means the guard has lost its anchor, and silently
+// passing would be worse than failing.
+var wireVectors = sync.OnceValues(func() (map[string]string, error) {
 	b, err := os.ReadFile(wireConstantsVectors)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	var doc struct {
 		Vectors []struct {
@@ -85,47 +84,41 @@ var protocolVersion = sync.OnceValues(func() (string, error) {
 		} `json:"vectors"`
 	}
 	if err := json.Unmarshal(b, &doc); err != nil {
-		return "", err
+		return nil, err
 	}
+	byName := make(map[string]string, len(doc.Vectors))
 	for _, v := range doc.Vectors {
-		if v.Name == "ProtocolVersion" {
-			return v.Value, nil
-		}
+		byName[v.Name] = v.Value
 	}
-	return "", errNoProtocolVersionVector
+	return byName, nil
 })
 
-// manifestVersion reads the SDK's WellKnownManifestVersion the same way. It is a
-// separate read on purpose: the two constants are separate namespaces, and a
-// guard that checked the manifest comment against ProtocolVersion would be the
-// coupling the contract forbids, written into the thing that guards it.
-var manifestVersion = sync.OnceValues(func() (string, error) {
-	b, err := os.ReadFile(wireConstantsVectors)
-	if err != nil {
-		return "", err
-	}
-	var doc struct {
-		Vectors []struct {
-			Name  string `json:"name"`
-			Value string `json:"value"`
-		} `json:"vectors"`
-	}
-	if err := json.Unmarshal(b, &doc); err != nil {
-		return "", err
-	}
-	for _, v := range doc.Vectors {
-		if v.Name == "WellKnownManifestVersion" {
-			return v.Value, nil
+// wireConstant returns a reader for one named entry of the vector, so this guard
+// never restates a literal. A missing entry is an error for the same reason a
+// missing file is.
+func wireConstant(name string) func() (string, error) {
+	return func() (string, error) {
+		byName, err := wireVectors()
+		if err != nil {
+			return "", err
 		}
+		v, ok := byName[name]
+		if !ok {
+			return "", fmt.Errorf("%s carries no %s entry — this guard reads the expected `ver` value from there",
+				wireConstantsVectors, name)
+		}
+		return v, nil
 	}
-	return "", errNoManifestVersionVector
-})
+}
 
 var (
-	errNoProtocolVersionVector = errors.New(
-		wireConstantsVectors + " carries no ProtocolVersion entry — this guard reads the expected `ver` value from there")
-	errNoManifestVersionVector = errors.New(
-		wireConstantsVectors + " carries no WellKnownManifestVersion entry — this guard reads the manifest's expected `ver` value from there")
+	// protocolVersion is the RAMP protocol version the SDK exports.
+	protocolVersion = wireConstant("ProtocolVersion")
+	// manifestVersion is the SDK's WellKnownManifestVersion. It is a separate
+	// lookup on purpose: the two constants are separate namespaces, and a guard
+	// that checked the manifest comment against ProtocolVersion would be the
+	// coupling the contract forbids, written into the thing that guards it.
+	manifestVersion = wireConstant("WellKnownManifestVersion")
 )
 
 // expectedVersionToken is the quoted form a `ver` comment must contain, e.g. `"1.0"`.

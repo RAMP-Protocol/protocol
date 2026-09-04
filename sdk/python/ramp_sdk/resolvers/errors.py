@@ -72,9 +72,8 @@ class ManifestVersionRefusedError(ResolverError):
     version, a value that is not ``MAJOR.MINOR``, or no version at all. The rule is
     :func:`ramp_sdk.wire.manifest_version_refusal`.
 
-    Checked BEFORE any other member of the document is read. The manifest sits at
-    a fixed, unversioned path and is read before any signature is checked, so a
-    layout the reader cannot classify must not supply the endpoint a signed call
-    is then sent to. Like :class:`EndpointRefusedError` it is a VERDICT — final,
-    not a transport failure to retry — and it is never cached.
+    Like :class:`EndpointRefusedError` it is a VERDICT — final, not a transport
+    failure to retry — and it is never cached. The gate runs before any other
+    member of the document is read, for the reason stated once on
+    ``WellKnownManifest.ver`` in the proto.
     """

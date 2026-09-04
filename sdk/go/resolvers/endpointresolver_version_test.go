@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,5 +120,37 @@ func TestWellKnownEndpointResolver_versionGatePrecedesEndpointGate(t *testing.T)
 	}
 	if errors.Is(err, resolvers.ErrNoEndpoint) {
 		t.Errorf("error = %v; ErrNoEndpoint must not be reached when the version is refused", err)
+	}
+}
+
+// A `ver` that is not a JSON string is refused as absent — a VERDICT, the answer
+// Python and TS give — rather than failing the decode, which the client tier
+// would classify as unreachable and retry forever against a document that will
+// not change. The refusal is one sentinel under two names, so either matches.
+func TestWellKnownEndpointResolver_refusesANonStringVersionAsAVerdict(t *testing.T) {
+	for _, tc := range []struct{ name, doc string }{
+		{"number", `{"ver":1,"role":"ROLE_EXCHANGE","endpoint":%q}`},
+		{"null", `{"ver":null,"role":"ROLE_EXCHANGE","endpoint":%q}`},
+		{"object", `{"ver":{"major":1},"role":"ROLE_EXCHANGE","endpoint":%q}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var srv *httptest.Server
+			srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprintf(w, tc.doc, srv.URL+"/ramp.v1.ExchangeService")
+			}))
+			defer srv.Close()
+			_, err := newVersionTestResolver().ResolveEndpoint(context.Background(), hostOf(t, srv))
+			if !errors.Is(err, resolvers.ErrManifestVersionRefused) {
+				t.Fatalf("err = %v, want the version verdict: a non-string ver is absent, not a decode failure", err)
+			}
+			if !errors.Is(err, helpers.ErrManifestVersionRefused) {
+				t.Error("the helpers sentinel must match too: it is the same sentinel under two names")
+			}
+			// Refused AS ABSENT, the wording Python and TS produce for the same
+			// document — not as a malformed string spelled from the raw bytes.
+			if !strings.Contains(err.Error(), "ver is absent") {
+				t.Errorf("err = %v, want a non-string ver reported as absent", err)
+			}
+		})
 	}
 }

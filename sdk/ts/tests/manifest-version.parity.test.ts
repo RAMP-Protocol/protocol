@@ -12,14 +12,10 @@
 
 import { describe, expect, it } from "vitest";
 import vectorsFile from "../../go/helpers/testdata/manifest-version-vectors.json";
-import {
-	EndpointRefused,
-	ManifestVersionRefused,
-	NoEndpoint,
-	createWellKnownEndpointResolver,
-} from "../resolvers/index.ts";
+import { ManifestVersionRefused, createWellKnownEndpointResolver } from "../resolvers/index.ts";
 import type { FetchLike } from "../resolvers/http.ts";
 import { WellKnownManifestVersion, manifestVersionRefusal } from "../src/wire.ts";
+import { manifestJson } from "./resolvers-harness.ts";
 
 type ManifestVersionVector = { name: string; ver: string; present: boolean; accepted: boolean };
 type ManifestVersionVectorsFile = { manifest_version: ManifestVersionVector[] };
@@ -36,16 +32,13 @@ const ENDPOINT = `https://${HOST}/ramp.v1.ExchangeService`;
 /** The value the resolver sees: the string when present, undefined when absent. */
 const verOf = (v: ManifestVersionVector): string | undefined => (v.present ? v.ver : undefined);
 
-/** A manifest server that answers with the vector's ver and a usable endpoint. */
-function serving(body: Record<string, unknown>): FetchLike {
-	return async () => ({ status: 200, text: async () => JSON.stringify(body) });
+/** A manifest server that answers with a fixed body. */
+function serving(body: string): FetchLike {
+	return async () => ({ status: 200, text: async () => body });
 }
 
-function manifestFor(v: ManifestVersionVector): Record<string, unknown> {
-	const body: Record<string, unknown> = { role: "ROLE_EXCHANGE", endpoint: ENDPOINT };
-	if (v.present) body.ver = v.ver;
-	return body;
-}
+/** The vector's manifest with a usable endpoint; an absent row omits `ver`. */
+const manifestFor = (v: ManifestVersionVector): string => manifestJson(ENDPOINT, verOf(v) ?? null);
 
 const resolverOver = (fetchFn: FetchLike) =>
 	createWellKnownEndpointResolver({ fetch: fetchFn, ttlMs: 3_600_000, scheme: "https" });
@@ -78,19 +71,17 @@ describe("manifest-version corpus", () => {
 
 	for (const v of refused) {
 		it(`resolver refuses with the version verdict: ${v.name}`, async () => {
-			const err = await resolverOver(serving(manifestFor(v)))
-				.resolveEndpoint(HOST)
-				.then(() => undefined, (e: unknown) => e);
-			expect(err).toBeInstanceOf(ManifestVersionRefused);
-			// A refused document's endpoint is usable, so the refusal is the version
-			// gate and no other verdict class.
-			expect(err).not.toBeInstanceOf(NoEndpoint);
-			expect(err).not.toBeInstanceOf(EndpointRefused);
+			// A refused document's endpoint is usable, so the refusal can only be the
+			// version gate — and ManifestVersionRefused is its own class, not a
+			// subclass of any other verdict, so the instance check is the whole assertion.
+			await expect(resolverOver(serving(manifestFor(v))).resolveEndpoint(HOST)).rejects.toBeInstanceOf(
+				ManifestVersionRefused,
+			);
 		});
 	}
 
 	it("the version gate precedes the endpoint gate", async () => {
-		const r = resolverOver(serving({ ver: "2.0", role: "ROLE_EXCHANGE" }));
+		const r = resolverOver(serving(manifestJson(undefined, "2.0")));
 		await expect(r.resolveEndpoint(HOST)).rejects.toBeInstanceOf(ManifestVersionRefused);
 	});
 
@@ -99,10 +90,7 @@ describe("manifest-version corpus", () => {
 		let hits = 0;
 		const fetchFn: FetchLike = async () => {
 			hits += 1;
-			return {
-				status: 200,
-				text: async () => JSON.stringify({ ver: served, role: "ROLE_EXCHANGE", endpoint: ENDPOINT }),
-			};
+			return { status: 200, text: async () => manifestJson(ENDPOINT, served) };
 		};
 		const r = resolverOver(fetchFn);
 		await expect(r.resolveEndpoint(HOST)).rejects.toBeInstanceOf(ManifestVersionRefused);

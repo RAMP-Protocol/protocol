@@ -17,14 +17,16 @@ version, or with no version at all, was accepted. The rule is now stated in full
 enforced. A consumer reads `ver` before any other member of the document, accepts a
 recognised **major** version whatever the minor (a minor revision of the manifest is
 additive, and a reader ignores members it does not know), and refuses an
-unrecognised major, a value that is not `MAJOR.MINOR`, or an absent `ver` — the
+unrecognised major, a value that is not `MAJOR.MINOR`, or an absent `ver` (a `ver`
+that is not a JSON string is refused as absent, in all three languages) — the
 document sits at a fixed, unversioned path and is read before any signature is
 checked, so a layout the reader cannot classify must not supply the endpoint a
 signed call is then sent to. The refusal is a verdict, surfaced as
 `resolvers.ErrManifestVersionRefused` / `ManifestVersionRefusedError` /
 `ManifestVersionRefused`, classified `not sent` by the client tier like the other
 resolver verdicts, and never cached. It applies to the endpoint face only: the
-well-known key resolver reads a JWKS document that carries no manifest version.
+well-known key resolver reads a JWK Set document that carries no manifest version,
+and a test in each language pins that a key document carrying a `ver` still resolves.
 The value has one owner, `helpers.WellKnownManifestVersion` (`WellKnownManifestVersion`
 in Python and TypeScript), pinned to the wire-constants corpus beside
 `ProtocolVersion` and deliberately not derived from it — the two are separate

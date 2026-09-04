@@ -23,15 +23,18 @@ var ErrManifestVersionRefused = errors.New("helpers: well-known manifest version
 // MAJOR.MINOR (two runs of ASCII digits joined by one dot), and the empty string,
 // which is how an absent field arrives.
 //
-// Absent is refused rather than tolerated because the field is required by the
-// wire shape and a document with no version is one whose layout the reader cannot
-// classify. The manifest sits at a fixed, unversioned path and is read before any
-// signature is checked, so the gate fails closed.
+// Absent is refused rather than tolerated: the field is required by the wire
+// shape, and a document with no version is one whose layout the reader cannot
+// classify. Why the gate runs before any other member is read, and fails closed,
+// is stated once on WellKnownManifest.ver in the proto.
 //
 // The returned error wraps ErrManifestVersionRefused and names the value found,
-// so an operator can tell a version mismatch from a network failure. The
-// function is pure: the same input always yields the same verdict, and the three
-// SDK languages pin that verdict to a shared corpus.
+// so an operator can tell a version mismatch from a network failure. The echo is
+// clipped to maxEchoedVer bytes: the document body is read up to 1 MiB and a
+// refusal is never cached, so an unclipped echo would let a hostile origin size
+// every error a resolve produces. The function is pure: the same input always
+// yields the same verdict, and the three SDK languages pin that verdict to a
+// shared corpus.
 func CheckWellKnownManifestVersion(ver string) error {
 	acceptMajor := majorOf(WellKnownManifestVersion)
 	if ver == "" {
@@ -39,12 +42,25 @@ func CheckWellKnownManifestVersion(ver string) error {
 	}
 	major, ok := parseMajor(ver)
 	if !ok {
-		return fmt.Errorf("%w: ver %q is not MAJOR.MINOR, accept major %s", ErrManifestVersionRefused, ver, acceptMajor)
+		return fmt.Errorf("%w: ver %q is not MAJOR.MINOR, accept major %s", ErrManifestVersionRefused, echoVer(ver), acceptMajor)
 	}
 	if major != acceptMajor {
-		return fmt.Errorf("%w: ver %q has major %s, accept major %s", ErrManifestVersionRefused, ver, major, acceptMajor)
+		return fmt.Errorf("%w: ver %q has major %s, accept major %s", ErrManifestVersionRefused, echoVer(ver), major, acceptMajor)
 	}
 	return nil
+}
+
+// maxEchoedVer bounds how much of a refused `ver` the error message repeats. A
+// real version is a few bytes; anything longer is only ever going to be shown.
+const maxEchoedVer = 64
+
+// echoVer is ver clipped for an error message. Python and TS clip at the same
+// length, so an operator reading three SDKs' logs sees the same prefix.
+func echoVer(ver string) string {
+	if len(ver) <= maxEchoedVer {
+		return ver
+	}
+	return ver[:maxEchoedVer] + "..."
 }
 
 // majorOf is parseMajor over a value this package owns, so a malformed constant

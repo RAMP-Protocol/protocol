@@ -19,12 +19,9 @@ import httpx
 import pytest
 
 from conftest import GO_TESTDATA, load_json
-from ramp_sdk.resolvers import (
-    EndpointRefusedError,
-    ManifestVersionRefusedError,
-    NoEndpointError,
-    WellKnownEndpointResolver,
-)
+from resolvers_harness import manifest_json
+
+from ramp_sdk.resolvers import ManifestVersionRefusedError, WellKnownEndpointResolver
 from ramp_sdk.wire import WellKnownManifestVersion, manifest_version_refusal
 
 _VECTORS = load_json(GO_TESTDATA / "manifest-version-vectors.json")["manifest_version"]
@@ -43,12 +40,10 @@ def _ver_of(vector: dict) -> str | None:
 
 def _serving(vector: dict) -> httpx.Client:
     """A manifest server that answers with the vector's ver and a usable endpoint."""
-    doc: dict[str, object] = {"role": "ROLE_EXCHANGE", "endpoint": _ENDPOINT}
-    if vector["present"]:
-        doc["ver"] = vector["ver"]
+    body = manifest_json(_ENDPOINT, ver=_ver_of(vector))
 
     def handler(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=doc)
+        return httpx.Response(200, text=body)
 
     return httpx.Client(transport=httpx.MockTransport(handler))
 
@@ -80,18 +75,18 @@ def test_resolver_accepts_and_reads_the_endpoint(vector: dict) -> None:
 
 @pytest.mark.parametrize("vector", _REFUSED, ids=[v["name"] for v in _REFUSED])
 def test_resolver_refuses_with_the_version_verdict(vector: dict) -> None:
-    with pytest.raises(ManifestVersionRefusedError) as excinfo:
+    # A refused document's endpoint is usable, so the refusal can only be the
+    # version gate — and ManifestVersionRefusedError is its own class, not a
+    # subclass of any other verdict, so the raises() is the whole assertion.
+    with pytest.raises(ManifestVersionRefusedError):
         _resolver(_serving(vector)).resolve_endpoint(_HOST)
-    # A refused document's endpoint is usable, so the refusal is the version gate
-    # and no other verdict class.
-    assert not isinstance(excinfo.value, NoEndpointError | EndpointRefusedError)
 
 
 def test_version_gate_precedes_the_endpoint_gate() -> None:
     """A wrong-version manifest that ALSO advertises nothing reports the version."""
 
     def handler(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"ver": "2.0", "role": "ROLE_EXCHANGE"})
+        return httpx.Response(200, text=manifest_json(None, ver="2.0"))
 
     r = _resolver(httpx.Client(transport=httpx.MockTransport(handler)))
     with pytest.raises(ManifestVersionRefusedError):
@@ -106,9 +101,7 @@ def test_a_refusal_is_not_cached() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         nonlocal hits
         hits += 1
-        return httpx.Response(
-            200, json={"ver": served[0], "role": "ROLE_EXCHANGE", "endpoint": _ENDPOINT}
-        )
+        return httpx.Response(200, text=manifest_json(_ENDPOINT, ver=served[0]))
 
     r = _resolver(httpx.Client(transport=httpx.MockTransport(handler)))
     with pytest.raises(ManifestVersionRefusedError):

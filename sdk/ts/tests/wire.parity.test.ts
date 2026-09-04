@@ -1,12 +1,12 @@
-// Wire-constants parity (TypeScript side): wire.ts exposes the seven wire
+// Wire-constants parity (TypeScript side): wire.ts exposes the eight wire
 // constants with the exact values the Go oracle carries.
 //
-// sdk/ts `wire.ts` MUST expose the seven wire constants with the EXACT values the
+// sdk/ts `wire.ts` MUST expose the eight wire constants with the EXACT values the
 // sdk/go oracle carries. The shared vectors at
 // sdk/go/helpers/testdata/wire-constants-vectors.json carry {name, value},
 // referenced from the real Go exported constants (never hand-typed). The Go
 // layer splits RequestIDHeader across helpers/constants.go and core/requestid.go;
-// the single TS wire module exposes all seven once.
+// the single TS wire module exposes all eight once.
 //
 // RED now purely because sdk/ts/src/wire.ts does not exist yet.
 import { describe, it, expect } from "vitest";

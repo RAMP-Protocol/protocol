@@ -25,7 +25,7 @@ from ramp_sdk.client import Client, ClientConfig, NOT_CANONICAL_WIRE_NAMING
 from ramp_sdk.client import BrokerClient
 from ramp_sdk.client.errors import CallError, CallErrorKind
 from ramp_sdk.core import Mode, StaticOfferKeyResolver, Verifier, sign_offer_jcs
-from ramp_sdk.resolvers.errors import NoEndpointError
+from ramp_sdk.resolvers.errors import ManifestVersionRefusedError, NoEndpointError
 from ramp_sdk.signing_transport import SigningTransport
 
 REQUESTER = {"id": "agent-1", "domain": "agent.test", "type": "REQUESTER_TYPE_AGENT"}
@@ -568,6 +568,28 @@ def test_a_resolver_verdict_is_final_and_its_transport_failure_is_not(face: Face
             )
         )
     assert flaky.value.kind is CallErrorKind.UNREACHABLE
+
+
+@pytest.mark.parametrize("face", FACES, ids=_IDS)
+def test_an_unaccepted_manifest_version_is_not_sent(face: Face) -> None:
+    """A manifest whose version the reader refuses is a VERDICT: the manifest was
+    fetched and parsed, and nothing about a retry changes the version served.
+    Mirrors the Go taxonomy test for the same refusal."""
+
+    class Refusing:
+        def resolve_endpoint(self, host: str) -> str:  # noqa: ARG002
+            raise ManifestVersionRefusedError("ver '2.0' has major 2, accept major 1")
+
+    rec = Recorder({})
+    with pytest.raises(CallError) as excinfo:
+        face.run(
+            face.client(_config(endpoint_resolver=Refusing()), rec).report_usage(
+                {"exchange": "issuer.test"}
+            )
+        )
+    assert excinfo.value.kind is CallErrorKind.NOT_SENT
+    assert isinstance(excinfo.value.__cause__, ManifestVersionRefusedError)
+    assert rec.seen == []
 
 
 # ---------------------------------------------------------------------------
