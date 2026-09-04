@@ -29,6 +29,14 @@ _SCHEMA = (
     b'{"type":"object","required":["legal_entity"],'
     b'"properties":{"legal_entity":{"type":"string"}}}'
 )
+#: Fails two ways at once: a required member is absent, which is a whole-object violation
+#: the wire reports with an EMPTY path, and a member that IS present breaks its pattern,
+#: which is reported against its own pointer. One refusal carrying both is what a consumer
+#: has to render, and the empty path is the half easiest to render wrong.
+_BOTH_SHAPES_SCHEMA = (
+    b'{"type":"object","required":["legal_entity"],'
+    b'"properties":{"vat_id":{"type":"string","pattern":"^[A-Z]{2}[0-9]+$"}}}'
+)
 
 
 class _Resolver:
@@ -58,6 +66,25 @@ def _account_config(reqs: Any = None, **overrides: Any) -> Any:
         ),
         **overrides,
     )
+
+
+def _refused_by_the_schema(face: Face, schema_source: bytes, payload: dict[str, Any]) -> CallError:
+    """Drive a pre-check refusal against ``schema_source``, so the tests below share one
+    arrangement and differ only in what they read off the failure."""
+    schema, verdict = compile_registration_schema(schema_source)
+    assert verdict == "accepted"
+    reqs = _Requirements(RegistrationRequirements(schema=schema, verdict=verdict))
+    rec = Recorder({"ver": "1.0", "billing_ref": "acct-1"})
+
+    with pytest.raises(CallError) as caught:
+        face.run(
+            face.client(_account_config(reqs), rec).register(
+                {"exchange": "exchange.test", "registration_data": payload}
+            )
+        )
+    assert caught.value.kind is CallErrorKind.MALFORMED
+    assert rec.seen == []
+    return caught.value
 
 
 @pytest.mark.parametrize("face", FACES, ids=_IDS)
@@ -130,6 +157,36 @@ def test_register_pre_checks_the_published_schema(face: Face) -> None:
         )
     )
     assert len(rec.seen) == 1
+
+
+@pytest.mark.parametrize("face", FACES, ids=_IDS)
+def test_register_pre_check_refusal_carries_its_field_errors(face: Face) -> None:
+    """What the pre-check computed is what the caller gets. An Exchange attaches this same
+    list, from this same validator, when it refuses the same payload — so a consumer that
+    renders one refusal renders both, and nothing has to parse the members back out of a
+    sentence."""
+    err = _refused_by_the_schema(face, _BOTH_SHAPES_SCHEMA, {"vat_id": "de1"})
+
+    assert err.detail is not None
+    failure = err.detail.registration_failure
+    assert failure is not None
+    assert failure.reason.value == "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA"
+    # The PATHS are what this asserts, never the constraint prose beside them: that text
+    # comes from each language's validator library, and the contract calls it
+    # non-authoritative for exactly that reason.
+    assert [f.path or "" for f in failure.field_errors or []] == ["", "/vat_id"]
+
+
+@pytest.mark.parametrize("face", FACES, ids=_IDS)
+def test_register_renders_a_whole_object_violation_with_no_member_name(face: Face) -> None:
+    """An empty path addresses the whole object, which is how a missing required member is
+    reported. Rendering a bare ``": ..."`` there would read as a member with no name."""
+    err = _refused_by_the_schema(face, _BOTH_SHAPES_SCHEMA, {"vat_id": "de1"})
+
+    assert "publishes: : " not in str(err)
+    # The member that HAS a name still carries it, so the fix did not drop the separator
+    # everywhere.
+    assert "/vat_id: " in str(err)
 
 
 @pytest.mark.parametrize("face", FACES, ids=_IDS)
@@ -243,6 +300,18 @@ def test_peer_message_stays_empty_for_a_detail_the_sdk_synthesized() -> None:
         ),
     )
     # The typed reason still reaches the caller — this is not about losing it.
+    assert err.detail is not None
+    assert err.peer_message == ""
+
+
+@pytest.mark.parametrize("face", FACES, ids=_IDS)
+def test_peer_message_stays_empty_for_a_pre_check_detail(face: Face) -> None:
+    """The registration pre-check is the same rule with no peer involved at all: the
+    request never left the process, so there is no remote party whose words this field
+    could hold. A detail is present because the schema failures are worth carrying; the
+    sentence around them is ours."""
+    err = _refused_by_the_schema(face, _SCHEMA, {"trading_name": "Acme"})
+
     assert err.detail is not None
     assert err.peer_message == ""
 

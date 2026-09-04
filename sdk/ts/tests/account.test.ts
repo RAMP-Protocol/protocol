@@ -30,6 +30,35 @@ function bodyOf(req: UnaryRequest): Record<string, unknown> {
 const SCHEMA =
   '{"type":"object","required":["legal_entity"],"properties":{"legal_entity":{"type":"string"}}}';
 
+/** Fails two ways at once: a required member is absent, which is a whole-object
+ * violation the wire reports with an EMPTY path, and a member that IS present breaks
+ * its pattern, which is reported against its own pointer. One refusal carrying both is
+ * what a consumer has to render, and the empty path is the half easiest to render
+ * wrong. */
+const BOTH_SHAPES_SCHEMA =
+  '{"type":"object","required":["legal_entity"],' +
+  '"properties":{"vat_id":{"type":"string","pattern":"^[A-Z]{2}[0-9]+$"}}}';
+
+/** Drive a pre-check refusal against `schema`, so the tests below share one
+ * arrangement and differ only in what they read off the failure. */
+async function refusedByTheSchema(
+  schemaSource: string,
+  payload: Record<string, unknown>,
+): Promise<RampCallError> {
+  const { schema, verdict } = compileRegistrationSchema(schemaSource);
+  expect(verdict).toBe("accepted");
+  const { send, seen } = recordingSend({ ver: "1.0", billing_ref: "acct-1" });
+
+  const err = await client(send, { termsDigest: undefined, schema, verdict })
+    .register({ exchange: "exchange.test", registration_data: payload })
+    .catch((e: unknown) => e);
+
+  expect(err).toBeInstanceOf(RampCallError);
+  expect((err as RampCallError).kind).toBe("malformed");
+  expect(seen).toHaveLength(0);
+  return err as RampCallError;
+}
+
 const ENDPOINT = "https://exchange.test";
 const endpointResolver = { resolveEndpoint: async () => ENDPOINT };
 
@@ -141,6 +170,36 @@ describe("register", () => {
     expect(seen).toHaveLength(1);
   });
 
+  // What the pre-check computed is what the caller gets. An Exchange attaches this same
+  // list, from this same validator, when it refuses the same payload — so a consumer that
+  // renders one refusal renders both, and nothing has to parse the members back out of a
+  // sentence.
+  it("carries the field errors the pre-check found", async () => {
+    const err = await refusedByTheSchema(BOTH_SHAPES_SCHEMA, { vat_id: "de1" });
+
+    expect(err.detail?.registration_failure?.reason).toBe(
+      "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA",
+    );
+    // The PATHS are what this asserts, never the constraint prose beside them: that text
+    // comes from each language's validator library, and the contract calls it
+    // non-authoritative for exactly that reason.
+    const paths = (err.detail?.registration_failure?.field_errors ?? []).map(
+      (f) => f.path ?? "",
+    );
+    expect(paths).toEqual(["", "/vat_id"]);
+  });
+
+  // An empty path addresses the whole object, which is how a missing required member is
+  // reported. Rendering a bare ": ..." there would read as a member with no name.
+  it("renders a whole-object violation with no member name", async () => {
+    const err = await refusedByTheSchema(BOTH_SHAPES_SCHEMA, { vat_id: "de1" });
+
+    expect(err.message).not.toContain("publishes: : ");
+    // The member that HAS a name still carries it, so the fix did not drop the separator
+    // everywhere.
+    expect(err.message).toContain("/vat_id: ");
+  });
+
   // A schema the SDK REFUSES is skipped, never a veto. The contract is explicit that
   // refusing locally and declining to send would turn a rule about reading a third
   // party's document into a denial of service against the caller's own user, so the
@@ -246,6 +305,17 @@ describe("the peer's own sentence", () => {
       ),
     });
     // The typed reason still reaches the caller — this is not about losing it.
+    expect(err.detail).toBeDefined();
+    expect(err.peerMessage).toBe("");
+  });
+
+  // The registration pre-check is the same rule with no peer involved at all: the
+  // request never left the process, so there is no remote party whose words this field
+  // could hold. A detail is present because the schema failures are worth carrying; the
+  // sentence around them is ours.
+  it("stays empty for a detail the registration pre-check synthesized", async () => {
+    const err = await refusedByTheSchema(SCHEMA, { trading_name: "Acme" });
+
     expect(err.detail).toBeDefined();
     expect(err.peerMessage).toBe("");
   });

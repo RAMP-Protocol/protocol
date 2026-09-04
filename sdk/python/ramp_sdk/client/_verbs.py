@@ -28,6 +28,7 @@ from wire.models import (
     RefreshCatalogResponse,
     RegisterRequest,
     RegisterResponse,
+    RegistrationFailureReason,
     RemoveResourcesRequest,
     RemoveResourcesResponse,
     ResourceQuery,
@@ -46,6 +47,7 @@ from ramp_sdk.core import (
     VerifiedOffer,
     Verifier,
 )
+from ramp_sdk.errordetail import registration_failure_detail
 from ramp_sdk.idempotency import generate_idempotency_key
 from ramp_sdk.regschema import check_registration_data
 from ramp_sdk.resolvers import (
@@ -547,6 +549,14 @@ def _plan_offer_derived(
 # Neither message carries an idempotency key, so neither verb takes one.
 # ---------------------------------------------------------------------------
 
+#: The ErrorDetail domain for a refusal THIS CLIENT computed, before anything was sent.
+#: It names the failing surface, which here is the client's own tier: the Exchange never
+#: saw the request, so naming it would attribute a local verdict to a party that reached
+#: none. The naming rule the value follows — a Service suffix for an RPC service that
+#: exists in the contract, a bare noun for a tier that does not — is recorded on the Go
+#: oracle's ``edgeErrorDomain``, beside ``_EDGE_ERROR_DOMAIN``'s twin.
+_CLIENT_ERROR_DOMAIN = "ramp.v1.Client"
+
 
 def plan_register(cfg: ClientConfig, request: dict[str, Any]) -> Plan:
     """Assemble a registration for the Exchange the request names.
@@ -643,9 +653,27 @@ def _apply_registration_requirements(cfg: ClientConfig, op: str, sent: dict[str,
     data = sent.get("registration_data")
     fails = reqs.schema.validate(data if isinstance(data, dict) else None) if reqs.schema else []
     if fails:
-        named = "; ".join(f"{f.get('path', '')}: {f.get('error', '')}" for f in fails)
-        raise malformed(
-            op, f"registration_data does not match the schema {exchange} publishes: {named}"
+        # An empty path addresses the whole object, which is how a missing required
+        # member and every other whole-object failure is reported. Rendering a bare
+        # ": ..." there would read as a member with no name.
+        named = "; ".join(
+            f"{p}: {f.get('error', '')}" if (p := f.get("path", "")) else f.get("error", "")
+            for f in fails
+        )
+        # The failures travel as a typed detail, not only as prose. An Exchange attaches
+        # this same list when it refuses the same payload, so a consumer that renders one
+        # refusal renders both, and nothing has to parse the members back out of a
+        # sentence.
+        raise CallError(
+            kind=CallErrorKind.MALFORMED,
+            op=op,
+            cause=f"registration_data does not match the schema {exchange} publishes: {named}",
+            detail=registration_failure_detail(
+                _CLIENT_ERROR_DOMAIN,
+                "registration_data does not match the published data_schema",
+                RegistrationFailureReason.REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
+                fails,
+            ),
         )
 
 

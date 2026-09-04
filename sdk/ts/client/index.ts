@@ -26,6 +26,7 @@ import {
   signRequestAcceptance,
   ACCEPTANCE_SIGNATURE_ALGORITHM,
 } from "../src/acceptance.ts";
+import { registrationFailureDetail } from "../src/errordetail.ts";
 import { redactUserinfo } from "../src/host-ref.ts";
 import { isBareDomain } from "../src/hosts.ts";
 import { generateIdempotencyKey } from "../src/idempotency.ts";
@@ -728,6 +729,14 @@ async function dispute(
 // Neither message carries an idempotency key, so neither verb takes CallOptions.
 // ---------------------------------------------------------------------------
 
+/** The ErrorDetail domain for a refusal THIS CLIENT computed, before anything was
+ * sent. It names the failing surface, which here is the client's own tier: the
+ * Exchange never saw the request, so naming it would attribute a local verdict to a
+ * party that reached none. The naming rule the value follows — a Service suffix for
+ * an RPC service that exists in the contract, a bare noun for a tier that does not —
+ * is recorded on the Go oracle's edgeErrorDomain, beside EDGE_ERROR_DOMAIN's twin. */
+const CLIENT_ERROR_DOMAIN = "ramp.v1.Client";
+
 /**
  * register creates the calling agent's account at the Exchange the request names.
  *
@@ -842,13 +851,27 @@ async function applyRegistrationRequirements(
 	// SDK refused. One branch, deliberately.
 	const fails = reqs.schema?.validate(sent.registration_data ?? {}) ?? [];
 	if (fails.length > 0) {
-		const named = fails.map((f) => `${f.path}: ${f.error}`).join("; ");
-		throw malformed(
+		// An empty path addresses the whole object, which is how a missing required
+		// member and every other whole-object failure is reported. Rendering a bare
+		// ": ..." there would read as a member with no name.
+		const named = fails.map((f) => (f.path ? `${f.path}: ${f.error}` : f.error)).join("; ");
+		// The failures travel as a typed detail, not only as prose. An Exchange attaches
+		// this same list when it refuses the same payload, so a consumer that renders one
+		// refusal renders both, and nothing has to parse the members back out of a
+		// sentence.
+		throw new RampCallError({
+			kind: "malformed",
 			op,
-			new Error(
+			cause: new Error(
 				`registration_data does not match the schema ${stringField(sent, "exchange")} publishes: ${named}`,
 			),
-		);
+			detail: registrationFailureDetail(
+				CLIENT_ERROR_DOMAIN,
+				"registration_data does not match the published data_schema",
+				"REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA",
+				fails,
+			),
+		});
 	}
 }
 
