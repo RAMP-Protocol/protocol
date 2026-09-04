@@ -233,7 +233,7 @@ func buildErrorDetailVectors(t *testing.T) []errorDetailVector {
 		rampv1.CatalogRejectionReason_CATALOG_REJECTION_REASON_TENANT_MISMATCH)
 
 	registrationFailure := RegistrationFailureDetail(
-		"ramp.v1.RegistrationService", "domain not verified",
+		"ramp.v1.ExchangeService", "domain not verified",
 		rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED)
 
 	// The schema-enforcement refusal: the one detail that carries per-member
