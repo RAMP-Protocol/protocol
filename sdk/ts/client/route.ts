@@ -11,7 +11,7 @@
 // own manifest and then checked, rather than taken on trust or, worse, read from
 // configuration.
 
-import { EndpointRefused, NoEndpoint } from "./../resolvers/errors.ts";
+import { EndpointRefused, ManifestVersionRefused, NoEndpoint } from "./../resolvers/errors.ts";
 import { endpointRefusal } from "../src/endpoint-rule.ts";
 import { isBareHost } from "../src/hosts.ts";
 import { redactUserinfo } from "../src/host-ref.ts";
@@ -25,10 +25,11 @@ import { RampCallError, notSent } from "./errors.ts";
  *
  * An implementation's FAILURE decides how a caller is told to react, so it is part of the
  * contract rather than an implementation detail. A failure that is a VERDICT — the host
- * is unusable, the host is not allowed, the manifest advertises no endpoint, or it
- * advertises one that must not be used — MUST throw the resolver tier's NoEndpoint or
- * EndpointRefused, or the invalid-host error isBareHost raises; those surface as
- * `not_sent`, which tells the caller not to retry. Anything else is read as a transport
+ * is unusable, the host is not allowed, the manifest carries a version this reader does
+ * not accept, advertises no endpoint, or advertises one that must not be used — MUST
+ * throw the resolver tier's ManifestVersionRefused, NoEndpoint or EndpointRefused, or
+ * the invalid-host error isBareHost raises; those surface as `not_sent`, which tells
+ * the caller not to retry. Anything else is read as a transport
  * failure and reported as `unreachable`, i.e. worth retrying. An implementation that
  * throws a bare error for a refusal therefore has its final answer retried indefinitely.
  */
@@ -153,6 +154,12 @@ export function isInvalidHostRefusal(cause: unknown): boolean {
 // is not a host will not become one on a later attempt. This module checks it before
 // resolving, so the SDK's own resolver never reaches here that way — an injected one can.
 function isVerdict(cause: unknown): boolean {
-	if (cause instanceof NoEndpoint || cause instanceof EndpointRefused) return true;
+	if (
+		cause instanceof ManifestVersionRefused ||
+		cause instanceof NoEndpoint ||
+		cause instanceof EndpointRefused
+	) {
+		return true;
+	}
 	return isInvalidHostRefusal(cause);
 }

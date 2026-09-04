@@ -86,3 +86,16 @@ class ManifestNotExchangeError(ResolverError):
     make the check advisory. Peer of Go ``ErrManifestNotExchange`` / TS
     ``ManifestNotExchange``.
     """
+
+
+class ManifestVersionRefusedError(ResolverError):
+    """A ``/.well-known/ramp.json`` was fetched and parsed but carries a
+    ``WellKnownManifest.ver`` this resolver does not accept: an unrecognised major
+    version, a value that is not ``MAJOR.MINOR``, or no version at all. The rule is
+    :func:`ramp_sdk.wire.manifest_version_refusal`.
+
+    Like :class:`EndpointRefusedError` it is a VERDICT — final, not a transport
+    failure to retry — and it is never cached. The gate runs before any other
+    member of the document is read, for the reason stated once on
+    ``WellKnownManifest.ver`` in the proto.
+    """

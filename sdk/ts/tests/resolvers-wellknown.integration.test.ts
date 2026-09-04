@@ -30,6 +30,7 @@ import {
 import {
 	DirectoryUnavailable,
 	EndpointRefused,
+	ManifestVersionRefused,
 	NoEndpoint,
 	createStaticKeyResolver,
 	createWellKnownEndpointResolver,
@@ -128,6 +129,22 @@ describe("createWellKnownKeyResolver", () => {
 	// JWKS extraction is skip-not-fail — one malformed key must not kill the
 	// whole publisher key set; survivors still resolve, bad entries become
 	// unknown (undefined).
+	it("is not gated on a manifest version", async () => {
+		// The manifest version gate is the endpoint face's alone. A key document is
+		// a plain JWK Set, not a manifest: it carries no WellKnownManifest.ver, and
+		// one that happens to carry a `ver` the endpoint face would refuse still
+		// resolves keys. Pins that decision — gating the key face fails here.
+		const k = await makeKey();
+		for (const verMember of ["", '"ver":"2.0",', '"ver":1,']) {
+			origin = await startOrigin();
+			origin.setJwks(`{${verMember}"keys":[${JSON.stringify(jwksEntry("ex.v1", k.x))}]}`);
+			const r = createWellKnownKeyResolver(`${origin.url}/keys.json`, { ttlMs: HOUR_MS, fetch: loopbackFetch });
+			expect(await r.resolve("ex.v1"), verMember).toEqual(k.rawPub);
+			await origin.close();
+			origin = undefined;
+		}
+	});
+
 	it("skips malformed JWKS entries (missing kid / non-Ed25519 / bad-length x) and resolves survivors", async () => {
 		const good = await makeKey();
 		const nonEd = await makeKey();
@@ -233,6 +250,22 @@ describe("createWellKnownEndpointResolver", () => {
 			await expect(r.resolveEndpoint(origin.host)).rejects.toBeInstanceOf(DirectoryUnavailable);
 		} finally {
 			await origin.close();
+		}
+	});
+
+	it("refuses a non-string ver as a verdict, not a decode failure", async () => {
+		// A `ver` that is not a JSON string is refused as absent — a VERDICT, the
+		// answer Go and Python give — not a DirectoryUnavailable the client would retry.
+		for (const ver of ["1", "null", '{"major":1}']) {
+			const origin = await startOrigin();
+			const ep = `http://${origin.host}/ramp.v1.ExchangeService`;
+			origin.setManifest(`{"ver":${ver},"role":"ROLE_EXCHANGE","endpoint":"${ep}"}`);
+			try {
+				const r = createWellKnownEndpointResolver({ scheme: "http", fetch: loopbackFetch });
+				await expect(r.resolveEndpoint(origin.host), ver).rejects.toBeInstanceOf(ManifestVersionRefused);
+			} finally {
+				await origin.close();
+			}
 		}
 	});
 

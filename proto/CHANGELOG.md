@@ -77,6 +77,32 @@ factory folds into the Python class constructor as every other `NewX` does, so t
 shrink-only allowlist baseline moves 16 → 17 as a reviewed bump under that one recorded
 class.
 
+**SDK endpoint resolvers enforce `WellKnownManifest.ver`; `WellKnownManifestVersion`
+exported (SDK behaviour change; no wire change).** The manifest's `ver` comment now
+states the full receive-side rule — read before any other member, accept a
+recognised MAJOR whatever the MINOR, refuse an unrecognised MAJOR, a non
+`MAJOR.MINOR` value and an absent `ver` — and the direction of coupling to the
+protocol version (a manifest layout change bumps both; a protocol change alone
+bumps only `ProtocolVersion`). Go `helpers.CheckWellKnownManifestVersion` /
+`helpers.ErrManifestVersionRefused`, Python `manifest_version_refusal` /
+`ManifestVersionRefusedError`, TS `manifestVersionRefusal` / `ManifestVersionRefused`
+carry the pure rule; the endpoint resolvers apply it on the endpoint face only and
+wrap the refusal as `resolvers.ErrManifestVersionRefused` (same name in each
+port), which the client tier classifies as not-sent. A `ver` that is not a JSON
+string is refused as absent — a verdict, not a decode failure to retry — and the
+value a refusal echoes is clipped to 64 characters, in all three languages. The
+key resolvers are unchanged — they read JWK Set documents, not manifests — and a
+test in each language pins that a key document carrying a `ver` still resolves. New corpus
+`sdk/go/helpers/testdata/manifest-version-vectors.json` (`manifest_version`
+list; columns `name`, `ver`, `present`, `accepted`), replayed in all three
+languages and registered in the parity matrix. `conformance/manifest_version_rule_test.go`
+pins the proto comment to the corpus in both directions;
+`ver_field_contract_test.go` now reads the manifest's expected value from the
+`WellKnownManifestVersion` vector entry rather than `ProtocolVersion`, so the guard
+no longer couples the two namespaces. Test fixtures that serve a manifest to the
+real resolver now carry `ver`. Compatibility: a manifest without `ver` was accepted
+before and is refused now.
+
 **`TransactionRequest.agent_request_acceptance` adds an agent-signed complete
 ordered request-set proof (additive wire change).** The proof signs ordered
 `(offer_sig, exchange)` references plus requester and idempotency key using the

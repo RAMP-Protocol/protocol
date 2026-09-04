@@ -21,6 +21,10 @@
       "value": "1.0"
     },
     {
+      "name": "WellKnownManifestVersion",
+      "value": "1.0"
+    },
+    {
       "name": "RequestIDHeader",
       "value": "X-Request-ID"
     },

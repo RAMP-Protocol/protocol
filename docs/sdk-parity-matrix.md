@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 139 symbols at cross-language parity · 17 documented divergences · 184 Go-idiomatic exclusions · 36 conformance corpora, each tri-replayed.
+**At a glance:** 143 symbols at cross-language parity · 17 documented divergences · 184 Go-idiomatic exclusions · 37 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -38,6 +38,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `CatalogRejectionDetail` | `catalog_rejection_detail` | `catalogRejectionDetail` |
 | `CheckAudience` | `check_audience` | `checkAudience` |
 | `CheckRegistrationData` | `check_registration_data` | `checkRegistrationData` |
+| `CheckWellKnownManifestVersion` | `manifest_version_refusal` | `manifestVersionRefusal` |
 | `CompileRegistrationSchema` | `compile_registration_schema` | `compileRegistrationSchema` |
 | `ConnectProtocolVersion` | `ConnectProtocolVersion` | `ConnectProtocolVersion` |
 | `ConnectProtocolVersionHeader` | `ConnectProtocolVersionHeader` | `ConnectProtocolVersionHeader` |
@@ -47,6 +48,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `DisputeFailureDetail` | `dispute_failure_detail` | `disputeFailureDetail` |
 | `DomainVerificationFailureDetail` | `domain_verification_failure_detail` | `domainVerificationFailureDetail` |
 | `EntryVerdict` | `EntryVerdict` | `EntryVerdict` |
+| `ErrManifestVersionRefused` | `ManifestVersionRefusedError` | `ManifestVersionRefused` |
 | `ErrUnknownKey` | `UnknownKeyError` | `UnknownKey` |
 | `FormatMoney` | `format_money` | `formatMoney` |
 | `HashURL` | `hash_url` | `hashUrl` |
@@ -111,6 +113,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `VerifyRequest` | `verify_request` | `verifyRequestServer` |
 | `VerifyRequestAcceptance` | `verify_request_acceptance_jcs` | `verifyRequestAcceptance` |
 | `VerifyURLEd25519` | `verify_ed25519_signed_url` | `verifyEd25519SignedUrl` |
+| `WellKnownManifestVersion` | `WellKnownManifestVersion` | `WellKnownManifestVersion` |
 
 ### resolvers — L2 I/O (key/endpoint resolution, active-key, SSRF-guarded fetch)
 
@@ -130,6 +133,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `ErrKeyExpired` | `KeyExpiredError` | `KeyExpired` |
 | `ErrKeyRevoked` | `KeyRevokedError` | `KeyRevoked` |
 | `ErrManifestNotExchange` | `ManifestNotExchangeError` | `ManifestNotExchange` |
+| `ErrManifestVersionRefused` | `ManifestVersionRefusedError` | `ManifestVersionRefused` |
 | `ErrNoEndpoint` | `NoEndpointError` | `NoEndpoint` |
 | `ErrRevocationUnevaluated` | `RevocationUnevaluatedError` | `RevocationUnevaluated` |
 | `ErrUnknownKey` | `UnknownKeyError` | `UnknownKey` |
@@ -418,6 +422,7 @@ Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness
 | `helpers/testdata/host-rule-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/idempotency-validate-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/licenseterm-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/manifest-version-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/money-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/multisig-chain-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/offer-verify-vectors.json` | ✅ | ✅ | ✅ |

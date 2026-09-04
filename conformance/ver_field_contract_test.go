@@ -37,7 +37,7 @@ package conformance
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -59,8 +59,9 @@ var (
 // stale, and an entry whose comment has since adopted the standard advisory
 // wording fails as a no-longer-needed exemption.
 var verExemptMessages = map[string]string{
-	"WellKnownManifest": "the /.well-known/ramp.json document's own schema version — a separate " +
-		"namespace from the RPC envelope, stated MUST-equal rather than advisory",
+	"WellKnownManifest": "the /.well-known/ramp.json document's own layout version — a separate " +
+		"namespace from the RPC envelope, gated on its MAJOR by consumers rather than advisory; " +
+		"its expected value is the SDK's WellKnownManifestVersion, not ProtocolVersion",
 }
 
 // wireConstantsVectors is the committed cross-language oracle for the SDK's wire
@@ -68,14 +69,13 @@ var verExemptMessages = map[string]string{
 // generator. Read as data (see the file header on why this is not an import).
 const wireConstantsVectors = "../sdk/go/helpers/testdata/wire-constants-vectors.json"
 
-// protocolVersion returns the RAMP protocol version the SDK exports, read from the
-// committed vector so this guard never restates the literal. Errors are fatal
-// rather than skipped: a missing file or entry means the guard has lost its
-// anchor, and silently passing would be worse than failing.
-var protocolVersion = sync.OnceValues(func() (string, error) {
+// wireVectors loads the committed vector once. Errors are fatal rather than
+// skipped: a missing file means the guard has lost its anchor, and silently
+// passing would be worse than failing.
+var wireVectors = sync.OnceValues(func() (map[string]string, error) {
 	b, err := os.ReadFile(wireConstantsVectors)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	var doc struct {
 		Vectors []struct {
@@ -84,18 +84,42 @@ var protocolVersion = sync.OnceValues(func() (string, error) {
 		} `json:"vectors"`
 	}
 	if err := json.Unmarshal(b, &doc); err != nil {
-		return "", err
+		return nil, err
 	}
+	byName := make(map[string]string, len(doc.Vectors))
 	for _, v := range doc.Vectors {
-		if v.Name == "ProtocolVersion" {
-			return v.Value, nil
-		}
+		byName[v.Name] = v.Value
 	}
-	return "", errNoProtocolVersionVector
+	return byName, nil
 })
 
-var errNoProtocolVersionVector = errors.New(
-	wireConstantsVectors + " carries no ProtocolVersion entry — this guard reads the expected `ver` value from there")
+// wireConstant returns a reader for one named entry of the vector, so this guard
+// never restates a literal. A missing entry is an error for the same reason a
+// missing file is.
+func wireConstant(name string) func() (string, error) {
+	return func() (string, error) {
+		byName, err := wireVectors()
+		if err != nil {
+			return "", err
+		}
+		v, ok := byName[name]
+		if !ok {
+			return "", fmt.Errorf("%s carries no %s entry — this guard reads the expected `ver` value from there",
+				wireConstantsVectors, name)
+		}
+		return v, nil
+	}
+}
+
+var (
+	// protocolVersion is the RAMP protocol version the SDK exports.
+	protocolVersion = wireConstant("ProtocolVersion")
+	// manifestVersion is the SDK's WellKnownManifestVersion. It is a separate
+	// lookup on purpose: the two constants are separate namespaces, and a guard
+	// that checked the manifest comment against ProtocolVersion would be the
+	// coupling the contract forbids, written into the thing that guards it.
+	manifestVersion = wireConstant("WellKnownManifestVersion")
+)
 
 // expectedVersionToken is the quoted form a `ver` comment must contain, e.g. `"1.0"`.
 func expectedVersionToken(t *testing.T) string {
@@ -103,6 +127,18 @@ func expectedVersionToken(t *testing.T) string {
 	v, err := protocolVersion()
 	if err != nil {
 		t.Fatalf("read the SDK protocol version: %v", err)
+	}
+	return strconv.Quote(v)
+}
+
+// expectedManifestVersionToken is the quoted form the MANIFEST's `ver` comment must
+// contain. Read from its own constant, so a bump of either namespace alone goes
+// red on exactly the comment it invalidates.
+func expectedManifestVersionToken(t *testing.T) string {
+	t.Helper()
+	v, err := manifestVersion()
+	if err != nil {
+		t.Fatalf("read the SDK manifest version: %v", err)
 	}
 	return strconv.Quote(v)
 }
@@ -176,17 +212,23 @@ func TestVerFieldsDocumentTheirContract(t *testing.T) {
 	}
 
 	token := expectedVersionToken(t)
+	manifestToken := expectedManifestVersionToken(t)
 	for _, f := range fields {
 		if f.comment == "" {
 			t.Errorf("%s:%d %s.ver carries no doc comment — every `ver` must state the expected value and its receive-side rule",
 				f.file, f.line, f.message)
 			continue
 		}
-		if !statesExpectedValue(f.comment, token) {
-			t.Errorf("%s:%d %s.ver does not state the expected value — the comment must name %s (the SDK's ProtocolVersion, per %s) so an integrator learns what to stamp",
-				f.file, f.line, f.message, token, wireConstantsVectors)
+		_, exempt := verExemptMessages[f.message]
+		want, owner := token, "ProtocolVersion"
+		if exempt {
+			want, owner = manifestToken, "WellKnownManifestVersion"
 		}
-		if _, exempt := verExemptMessages[f.message]; exempt {
+		if !statesExpectedValue(f.comment, want) {
+			t.Errorf("%s:%d %s.ver does not state the expected value — the comment must name %s (the SDK's %s, per %s) so an integrator learns what to stamp",
+				f.file, f.line, f.message, want, owner, wireConstantsVectors)
+		}
+		if exempt {
 			continue
 		}
 		if !statesAdvisoryContract(f.comment) {
@@ -234,9 +276,20 @@ func TestVerContractDetectors_MetaPositive(t *testing.T) {
 	if !statesAdvisoryContract(std) {
 		t.Error("detector missed the advisory rule in the standard comment")
 	}
-	manifest := "// RAMP protocol version of THIS MANIFEST DOCUMENT's schema. MUST equal " + token + ";"
-	if !statesExpectedValue(manifest, token) {
+	mtoken := expectedManifestVersionToken(t)
+	manifest := "// Version of THIS MANIFEST DOCUMENT's layout — " + mtoken + ", stamped from WellKnownManifestVersion."
+	if !statesExpectedValue(manifest, mtoken) {
 		t.Error("detector missed the expected value in the manifest comment")
+	}
+}
+
+// TestManifestVersionTokenIsReadSeparately pins that the manifest's expected
+// value has its own source. The two read the same today, so a guard that quietly
+// used ProtocolVersion for both would pass — this test fails the day the vector
+// entry goes missing, which is the day the guard would silently start coupling.
+func TestManifestVersionTokenIsReadSeparately(t *testing.T) {
+	if _, err := manifestVersion(); err != nil {
+		t.Fatalf("the manifest version must be readable from its own vector entry: %v", err)
 	}
 }
 
@@ -274,8 +327,8 @@ func TestVerContractDetectors_MetaNegative(t *testing.T) {
 	}
 	// The manifest comment states a value but NOT the advisory rule — that
 	// asymmetry is exactly what makes its exemption necessary.
-	if statesAdvisoryContract("// MUST equal " + token + "; consumers REJECT unrecognised major versions.") {
-		t.Error("detector treated the MUST-equal manifest rule as the advisory contract")
+	if statesAdvisoryContract("// They REJECT an unrecognised MAJOR, a value that is not MAJOR.MINOR, and an ABSENT `ver`.") {
+		t.Error("detector treated the manifest's major-version gate as the advisory contract")
 	}
 }
 

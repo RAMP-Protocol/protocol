@@ -41,11 +41,11 @@ import (
 // `Ver: req.GetVer()` and the constant form `Ver: helpers.ProtocolVersion` do not.
 //
 // The struct-literal form is the whole scope, and widening it is not free: a
-// matcher that also read `x.Ver = "…"` would flag WellKnownManifest.Ver, whose
-// quoted literal is CORRECT — that field versions the /.well-known/ramp.json
-// document schema, a separate namespace stated MUST-equal and deliberately not
-// stamped from ProtocolVersion. Widening therefore needs a message-level
-// carve-out, not a looser regex.
+// matcher that also read `x.Ver = "…"` would flag WellKnownManifest.Ver, which
+// is stamped from a DIFFERENT constant — WellKnownManifestVersion, the version
+// of the /.well-known/ramp.json document layout, a separate namespace never
+// derived from ProtocolVersion. Widening therefore needs a message-level
+// carve-out that knows which constant each message stamps, not a looser regex.
 var bareVerLiteralRe = regexp.MustCompile(`\bVer:\s*"[^"]*"`)
 
 // stampsBareVerLiteral is the pure predicate, extracted so the meta-tests can

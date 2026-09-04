@@ -36,10 +36,12 @@ import (
 //
 // An implementation's ERROR decides how a caller is told to react, so it is part
 // of the contract rather than an implementation detail. A failure that is a
-// VERDICT — the host is unusable, the host is not allowed, the manifest advertises
-// no endpoint, or it advertises one that must not be used — MUST wrap
-// helpers.ErrInvalidHost, resolvers.ErrNoEndpoint or resolvers.ErrEndpointRefused;
-// those three surface as CallNotSent, which tells the caller not to retry.
+// VERDICT — the host is unusable, the host is not allowed, the manifest carries a
+// version this reader does not accept, advertises no endpoint, or advertises one
+// that must not be used — MUST wrap helpers.ErrInvalidHost,
+// resolvers.ErrManifestVersionRefused, resolvers.ErrNoEndpoint or
+// resolvers.ErrEndpointRefused; those four surface as CallNotSent, which tells
+// the caller not to retry.
 // Anything else is read as a transport failure and reported as CallUnreachable,
 // i.e. worth retrying. An implementation that returns a bare error for a refusal
 // therefore has its final answer retried indefinitely.
@@ -116,6 +118,7 @@ func vetExchangeEndpoint(ctx context.Context, resolver EndpointResolver, exchang
 		// reaches here that way — an injected one can.
 		kind := CallUnreachable
 		if errors.Is(err, helpers.ErrInvalidHost) ||
+			errors.Is(err, resolvers.ErrManifestVersionRefused) ||
 			errors.Is(err, resolvers.ErrNoEndpoint) ||
 			errors.Is(err, resolvers.ErrEndpointRefused) {
 			kind = CallNotSent

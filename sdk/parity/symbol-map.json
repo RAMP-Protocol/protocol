@@ -605,10 +605,25 @@
       "python": "parse_money",
       "ts": "parseMoney"
     },
+    "helpers.CheckWellKnownManifestVersion": {
+      "allowlist_reason": null,
+      "python": "manifest_version_refusal",
+      "ts": "manifestVersionRefusal"
+    },
+    "helpers.ErrManifestVersionRefused": {
+      "allowlist_reason": null,
+      "python": "ManifestVersionRefusedError",
+      "ts": "ManifestVersionRefused"
+    },
     "helpers.ProtocolVersion": {
       "allowlist_reason": null,
       "python": "ProtocolVersion",
       "ts": "ProtocolVersion"
+    },
+    "helpers.WellKnownManifestVersion": {
+      "allowlist_reason": null,
+      "python": "WellKnownManifestVersion",
+      "ts": "WellKnownManifestVersion"
     },
     "helpers.Reason": {
       "allowlist_reason": null,
@@ -864,6 +879,11 @@
       "allowlist_reason": null,
       "python": "ManifestNotExchangeError",
       "ts": "ManifestNotExchange"
+    },
+    "resolvers.ErrManifestVersionRefused": {
+      "allowlist_reason": null,
+      "python": "ManifestVersionRefusedError",
+      "ts": "ManifestVersionRefused"
     },
     "resolvers.ErrNoEndpoint": {
       "allowlist_reason": null,

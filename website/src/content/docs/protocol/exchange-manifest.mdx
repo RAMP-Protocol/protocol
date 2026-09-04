@@ -103,7 +103,7 @@ The Exchange's offer-signing keys are **not** carried in `ramp.json`. They live 
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `ver` | string | Yes | Schema version of this manifest **document** — a namespace separate from the RPC envelope `ver`, not coupled to it. MUST equal `"1.0"`; consumers reject unrecognised major versions |
+| `ver` | string | Yes | Version of this manifest **document**'s layout — `"1.0"`, stamped from the SDK's `WellKnownManifestVersion`, a namespace separate from the RPC envelope `ver` and never derived from it. A manifest layout change bumps both numbers; a protocol change that leaves the manifest untouched bumps only the envelope's. Consumers read it before any other member: a recognised major is accepted whatever the minor, an unrecognised major, a malformed value, or an absent `ver` is refused |
 | `role` | string | Yes | `ROLE_EXCHANGE` for an Exchange manifest |
 | `domain` | string | Yes | Canonical domain of this Exchange |
 | `name` | string | No | Human-readable Exchange name |

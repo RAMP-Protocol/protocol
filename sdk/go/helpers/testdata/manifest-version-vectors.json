@@ -1,0 +1,94 @@
+{
+  "manifest_version": [
+    {
+      "name": "current",
+      "ver": "1.0",
+      "present": true,
+      "accepted": true
+    },
+    {
+      "name": "same_major_next_minor",
+      "ver": "1.1",
+      "present": true,
+      "accepted": true
+    },
+    {
+      "name": "same_major_large_minor",
+      "ver": "1.99",
+      "present": true,
+      "accepted": true
+    },
+    {
+      "name": "next_major",
+      "ver": "2.0",
+      "present": true,
+      "accepted": false
+    },
+    {
+      "name": "prerelease_major",
+      "ver": "0.3",
+      "present": true,
+      "accepted": false
+    },
+    {
+      "name": "two_digit_major",
+      "ver": "10.0",
+      "present": true,
+      "accepted": false
+    },
+    {
+      "name": "absent",
+      "ver": "",
+      "present": false,
+      "accepted": false
+    },
+    {
+      "name": "empty",
+      "ver": "",
+      "present": true,
+      "accepted": false
+    },
+    {
+      "name": "major_only",
+      "ver": "1",
+      "present": true,
+      "accepted": false
+    },
+    {
+      "name": "patch_component",
+      "ver": "1.0.0",
+      "present": true,
+      "accepted": false
+    },
+    {
+      "name": "leading_v",
+      "ver": "v1.0",
+      "present": true,
+      "accepted": false
+    },
+    {
+      "name": "non_digit_minor",
+      "ver": "1.a",
+      "present": true,
+      "accepted": false
+    },
+    {
+      "name": "leading_space",
+      "ver": " 1.0",
+      "present": true,
+      "accepted": false
+    },
+    {
+      "name": "trailing_dot",
+      "ver": "1.",
+      "present": true,
+      "accepted": false
+    },
+    {
+      "name": "leading_zero_major",
+      "ver": "01.0",
+      "present": true,
+      "accepted": false
+    }
+  ]
+}

@@ -67,8 +67,8 @@ func TestWellKnownDoc_anOffSpecOptionalMemberDoesNotFailTheEndpointFace(t *testi
 			// rather than from a value fixed before the listener has a port.
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = fmt.Fprintf(w, `{"role":"ROLE_EXCHANGE","endpoint":"https://%s",%s}`,
-					req.Host, tc.member)
+				_, _ = fmt.Fprintf(w, `{"ver":%q,"role":"ROLE_EXCHANGE","endpoint":"https://%s",%s}`,
+					helpers.WellKnownManifestVersion, req.Host, tc.member)
 			}))
 			defer srv.Close()
 			host := hostOf(t, srv)
@@ -97,8 +97,8 @@ func TestWellKnownDoc_anOffSpecOptionalMemberDoesNotFailTheKeyFace(t *testing.T)
 	for _, tc := range offSpecMembers {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := httptest.NewServer(literalManifest(fmt.Sprintf(
-				`{"role":"ROLE_EXCHANGE","keys":[{"kid":"ex.v1","kty":"OKP","crv":"Ed25519","x":%q}],%s}`,
-				x, tc.member), nil))
+				`{"ver":%q,"role":"ROLE_EXCHANGE","keys":[{"kid":"ex.v1","kty":"OKP","crv":"Ed25519","x":%q}],%s}`,
+				helpers.WellKnownManifestVersion, x, tc.member), nil))
 			defer srv.Close()
 
 			r := resolvers.NewWellKnownKeyResolver(srv.URL, resolvers.WellKnownOptions{TTL: time.Hour})
@@ -117,7 +117,8 @@ func TestWellKnownDoc_anOffSpecOptionalMemberReadsAsAbsent(t *testing.T) {
 	for _, tc := range offSpecMembers {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := httptest.NewServer(literalManifest(fmt.Sprintf(
-				`{"role":"ROLE_EXCHANGE","endpoint":"https://exchange.test",%s}`, tc.member), nil))
+				`{"ver":%q,"role":"ROLE_EXCHANGE","endpoint":"https://exchange.test",%s}`,
+				helpers.WellKnownManifestVersion, tc.member), nil))
 			defer srv.Close()
 
 			got, err := loopbackReader(nil).ResolveRegistrationRequirements(

@@ -229,12 +229,13 @@ import "github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
   `NewWBAKeyResolver` (WBA directory, revocation/expiry-aware, with a `Run` poller).
 - **Endpoint resolver** — `NewWellKnownEndpointResolver` discovers an Exchange's
   own service endpoint (`WellKnownManifest.endpoint`) from `/.well-known/ramp.json`,
-  host-keyed and cached per host. Two sentinels, and the difference decides whether
-  a caller should retry: `ErrNoEndpoint` when the manifest was read and advertises
-  none, `ErrEndpointRefused` when it advertises one this resolver will not hand back
-  — on a host unrelated to the one that served the manifest, or carrying userinfo.
-  Both are verdicts, so both are final; anything else is a transport failure and
-  worth retrying. The key is an offer-supplied host, so the cache evicts
+  host-keyed and cached per host. Three sentinels, and the difference decides whether
+  a caller should retry: `ErrManifestVersionRefused` when the manifest was read and
+  carries a `ver` this reader does not accept (or none at all), `ErrNoEndpoint` when
+  it advertises no endpoint, `ErrEndpointRefused` when it advertises one this resolver
+  will not hand back — on a host unrelated to the one that served the manifest, or
+  carrying userinfo. All three are verdicts, so all three are final; anything else is
+  a transport failure and worth retrying. The key is an offer-supplied host, so the cache evicts
   least-recently-used at a fixed cap and concurrent lookups for one host coalesce to
   a single fetch.
 - **Active-key selection** — `ActiveEd25519Key` / `ActiveEd25519KeyWithExpiry` pick

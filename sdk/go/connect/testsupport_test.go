@@ -21,6 +21,7 @@ import (
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/core"
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -62,7 +63,11 @@ func loopbackManifestServerWith(
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/ramp.json", func(w http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
-		doc := map[string]any{"endpoint": origin, "role": "ROLE_EXCHANGE"}
+		doc := map[string]any{
+			"ver":      helpers.WellKnownManifestVersion,
+			"endpoint": origin,
+			"role":     "ROLE_EXCHANGE",
+		}
 		if extra != nil {
 			for k, v := range extra() {
 				doc[k] = v
