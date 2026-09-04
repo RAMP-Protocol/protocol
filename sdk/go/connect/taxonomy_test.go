@@ -265,6 +265,19 @@ func TestCallError_CarriesThePeersSentence(t *testing.T) {
 		}
 		assertPeerMessage(t, err, "")
 	})
+
+	// The registration pre-check is the same rule with no peer involved at all: the
+	// request never left the process, so there is no remote party whose words this
+	// field could hold. A detail is present because the schema failures are worth
+	// carrying; the sentence around them is ours.
+	t.Run("a detail the registration pre-check synthesized leaves it empty", func(t *testing.T) {
+		cerr, _ := refusedByTheSchema(t, legalEntitySchema, map[string]any{"trading_name": "Acme"})
+
+		if _, ok := rampconnect.ErrorDetailFrom(cerr); !ok {
+			t.Fatalf("no typed detail on a refused registration: %v", cerr)
+		}
+		assertPeerMessage(t, cerr, "")
+	})
 }
 
 func assertPeerMessage(t *testing.T, err error, want string) {

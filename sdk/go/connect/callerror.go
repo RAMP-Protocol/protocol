@@ -65,8 +65,11 @@ func (k CallErrorKind) String() string { return failure.Name(callErrorKindNames,
 // Detail carries the typed protocol reason when there is one. On an RPC path it
 // is the ErrorDetail the peer emitted; on the content path it is SYNTHESIZED
 // locally from the edge's refusal token, because the edge answers a small JSON
-// object rather than a protobuf. ErrorDetailFrom reads both, so a caller branches
-// on one vocabulary either way.
+// object rather than a protobuf; and on a registration refused by the client's own
+// pre-check it is synthesized from the schema failures that pre-check found, which
+// are the failures the Exchange would have named had the request been sent.
+// ErrorDetailFrom reads all three, so a caller branches on one vocabulary whichever
+// side declined.
 type CallError struct {
 	Kind   CallErrorKind
 	Op     string
@@ -91,6 +94,14 @@ type CallError struct {
 	// nothing, so carrying it would make this field's value a property of the
 	// language rather than of the answer. That text is still reachable through
 	// the cause, where it reads as what it is.
+	//
+	// It is equally NOT filled from a detail this SDK BUILT ITSELF — the content
+	// leg's refusal sentence, or the registration pre-check's. Those details carry
+	// a typed reason, so the envelope rule above would not stop them; what stops
+	// them is that the sentence around the reason is ours. A field that exists so a
+	// layer can attribute prose to a remote party cannot sometimes hold our words.
+	// In Go only the decode site fills this, so the rule holds structurally; the
+	// two ports state it where their constructors could otherwise derive it.
 	//
 	// NON-AUTHORITATIVE, and the contract says so of the field it comes from.
 	// Branch on Kind or on the typed reason, never on this text. It is also

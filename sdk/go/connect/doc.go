@@ -21,8 +21,9 @@
 // protovalidate interceptor (NewValidateInterceptor, the single definition the
 // server binding also composes), and the READ direction of the ADR-019
 // ErrorDetail↔Connect bridge (ErrorDetailFrom — a client reads the typed error
-// detail an upstream emitted, whether a peer sent it or the content leg
-// synthesized it).
+// detail behind a failure, whether a peer sent it, the content leg synthesized it
+// from an edge's refusal token, or a registration pre-check synthesized it from the
+// schema failures it found before sending).
 //
 // It depends one-directionally on core (Verifier, DiscoveryResult, VerifiedOffer
 // guard, signing transport, ReplayStore) and on resolvers for the one thing this

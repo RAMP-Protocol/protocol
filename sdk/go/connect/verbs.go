@@ -24,6 +24,15 @@ const defaultProofWindow = 30 * time.Second
 // edgeErrorDomain is the ErrorDetail domain for a refusal by a delivery edge. It
 // is the failing surface, not the fetched resource: the field is a stable
 // grouping key for tooling, so it names the tier that refused.
+//
+// This is also where the naming rule for every domain this SDK writes is recorded,
+// because a value that groups nothing consistently groups nothing at all. A domain
+// suffixed Service names an RPC service that EXISTS in the contract — an answer
+// from ramp.v1.ExchangeService came from that service. A domain that is a bare noun
+// names a TIER that is not a service and never appears in the descriptor: this one,
+// for a delivery edge, and clientErrorDomain for a refusal the client computed
+// before sending. The suffix is what tells a reader which of the two they have, so
+// a conformance guard holds every committed domain to it.
 const edgeErrorDomain = "ramp.v1.Edge"
 
 // ReportUsage files a usage report with the Exchange that ISSUED the offer —

@@ -31,6 +31,13 @@ import (
 // same agent returns the same account handle, so a key would be ceremony rather
 // than a guarantee.
 
+// clientErrorDomain is the ErrorDetail domain for a refusal THIS CLIENT computed,
+// before anything was sent. It names the failing surface, which here is the client's
+// own tier: the Exchange never saw the request, so naming it would attribute a local
+// verdict to a party that reached none. The naming rule the value follows is recorded
+// on edgeErrorDomain, beside the other detail this SDK builds itself.
+const clientErrorDomain = "ramp.v1.Client"
+
 // Register creates the calling agent's account at the Exchange the request names.
 //
 // The caller's identity is the request SIGNATURE. Nothing in the message says who
@@ -182,24 +189,44 @@ func (c *Client) applyRegistrationRequirements(
 	// this SDK refused. One branch, deliberately: distinguishing them here would be
 	// distinguishing two cases the caller must treat the same.
 	if fails := reqs.Schema.Validate(sent.GetRegistrationData().AsMap()); len(fails) > 0 {
-		return malformed(op, fmt.Errorf(
-			"registration_data does not match the schema %s publishes: %s",
-			sent.GetExchange(), renderFieldErrors(fails)))
+		// The failures travel as a typed detail, not only as prose. The Exchange
+		// attaches this same list when it refuses the same payload, computed by this
+		// same validator, so a consumer that renders one refusal renders both — and
+		// asking it to parse the members back out of a sentence is the thing
+		// PeerMessage exists to say a layer must never be asked to do.
+		return &CallError{
+			Kind: CallMalformed,
+			Op:   op,
+			Err: fmt.Errorf("registration_data does not match the schema %s publishes: %s",
+				sent.GetExchange(), renderFieldErrors(fails)),
+			Detail: helpers.RegistrationFailureDetail(
+				clientErrorDomain,
+				"registration_data does not match the published data_schema",
+				rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
+				fails...,
+			),
+		}
 	}
 	return nil
 }
 
 // renderFieldErrors names the offending members in a refusal a human reads. The
-// same failures travel to a caller as a typed detail when an Exchange refuses;
-// this is the local pre-check's own rendering, and it stays a sentence because
-// nothing branches on it.
+// same failures also travel as the typed detail on that refusal, and an Exchange
+// attaches them the same way; this is the local pre-check's own rendering, and it
+// stays a sentence because nothing branches on it.
 func renderFieldErrors(fails []*rampv1.RegistrationFieldError) string {
 	out := ""
 	for i, f := range fails {
 		if i > 0 {
 			out += "; "
 		}
-		out += f.GetPath() + ": " + f.GetError()
+		// An empty path addresses the whole object, which is how a missing required
+		// member and every other whole-object failure is reported. Rendering a bare
+		// ": ..." there would read as a member with no name.
+		if p := f.GetPath(); p != "" {
+			out += p + ": "
+		}
+		out += f.GetError()
 	}
 	return out
 }

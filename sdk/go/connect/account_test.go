@@ -83,6 +83,14 @@ const digestAB = "sha256:abababababababababababababababababababababababababababa
 const legalEntitySchema = `{"type":"object","required":["legal_entity"],` +
 	`"properties":{"legal_entity":{"type":"string"}}}`
 
+// bothShapesSchema fails two ways at once: a required member is absent, which is a
+// whole-object violation the wire reports with an EMPTY path, and a member that IS
+// present breaks its pattern, which is reported against its own pointer. One
+// refusal carrying both is what a consumer has to render, and the empty path is the
+// half that is easiest to render wrong.
+const bothShapesSchema = `{"type":"object","required":["legal_entity"],` +
+	`"properties":{"vat_id":{"type":"string","pattern":"^[A-Z]{2}[0-9]+$"}}}`
+
 // ---------------------------------------------------------------------------
 // Register
 // ---------------------------------------------------------------------------
@@ -213,6 +221,83 @@ func TestRegister_PreChecksThePublishedSchema(t *testing.T) {
 		RegistrationData: registrationData(t, map[string]any{"legal_entity": "Acme"}),
 	}); err != nil {
 		t.Fatalf("conforming payload refused: %v", err)
+	}
+}
+
+// refusedByTheSchema drives a pre-check refusal against schema, so the tests below
+// share one arrangement and differ only in what they read off the failure.
+func refusedByTheSchema(
+	t *testing.T, schema string, payload map[string]any,
+) (*rampconnect.CallError, *recordingAccount) {
+	t.Helper()
+	sig := newSigningFixture(t)
+	origin := &recordingAccount{billingRef: "acct-1"}
+	domain, _ := selfAdvertisingExchangeWith(t, sig, origin, func() map[string]any {
+		return map[string]any{
+			"account_registration": map[string]any{
+				"data_schema": json.RawMessage(schema),
+			},
+		}
+	})
+
+	client := rampconnect.NewClient("http://home.invalid",
+		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
+	_, err := client.Register(context.Background(), &rampv1.RegisterRequest{
+		Exchange:         domain,
+		RegistrationData: registrationData(t, payload),
+	})
+
+	var cerr *rampconnect.CallError
+	if !errors.As(err, &cerr) || cerr.Kind != rampconnect.CallMalformed {
+		t.Fatalf("err = %v, want a malformed CallError", err)
+	}
+	if origin.gotRegister != nil {
+		t.Fatal("a payload refused by the local pre-check reached the wire")
+	}
+	return cerr, origin
+}
+
+// What the pre-check computed is what the caller gets. An Exchange attaches this
+// same list, from this same validator, when it refuses the same payload — so a
+// consumer that renders one refusal renders both, and nothing has to parse the
+// members back out of a sentence.
+func TestRegister_PreCheckRefusalCarriesItsFieldErrors(t *testing.T) {
+	cerr, _ := refusedByTheSchema(t, bothShapesSchema, map[string]any{"vat_id": "de1"})
+
+	detail, ok := rampconnect.ErrorDetailFrom(cerr)
+	if !ok {
+		t.Fatalf("the pre-check refusal carries no typed detail: %v", cerr)
+	}
+	if got := detail.GetRegistrationFailure().GetReason(); got !=
+		rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA {
+		t.Fatalf("reason = %v, want INVALID_REGISTRATION_DATA", got)
+	}
+
+	// The PATHS are what this asserts, never the constraint prose beside them: that
+	// text comes from each language's validator library, and the contract calls it
+	// non-authoritative for exactly that reason.
+	var paths []string
+	for _, f := range detail.GetRegistrationFailure().GetFieldErrors() {
+		paths = append(paths, f.GetPath())
+	}
+	if got, want := strings.Join(paths, ","), ",/vat_id"; got != want {
+		t.Fatalf("field-error paths = %q, want %q", got, want)
+	}
+}
+
+// An empty path addresses the whole object, which is how a missing required member
+// is reported. Rendering a bare ": ..." there would read as a member with no name.
+func TestRegister_ARootViolationRendersWithNoMemberName(t *testing.T) {
+	cerr, _ := refusedByTheSchema(t, bothShapesSchema, map[string]any{"vat_id": "de1"})
+
+	msg := cerr.Error()
+	if strings.Contains(msg, "publishes: : ") {
+		t.Fatalf("a whole-object violation rendered as a member with no name: %v", msg)
+	}
+	// The member that HAS a name still carries it, so the fix did not drop the
+	// separator everywhere.
+	if !strings.Contains(msg, "/vat_id: ") {
+		t.Fatalf("refusal does not address the offending member: %v", msg)
 	}
 }
 
