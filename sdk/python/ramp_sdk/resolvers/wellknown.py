@@ -8,8 +8,11 @@ is SKIP-NOT-FAIL: a key with an empty kid, a non-OKP/Ed25519 type, or a
 wrong-length ``x`` is skipped and one bad key never fails the whole set.
 
 ``WellKnownEndpointResolver`` is host-keyed: it fetches
-``{scheme}://{host}/.well-known/ramp.json`` and reads the ``endpoint`` field
-(ignoring unknown fields). Both port the Go oracle's lazy-fetch + TTL cache +
+``{scheme}://{host}/.well-known/ramp.json``, refuses the document unless its
+``ver`` carries a recognised major (``ManifestVersionRefusedError``), then reads
+the ``endpoint`` field (ignoring unknown fields). The version gate is this
+face's alone — the key face reads a JWKS document that carries no manifest
+version. Both port the Go oracle's lazy-fetch + TTL cache +
 single-flight coalescing and its fail-closed taxonomy.
 """
 
@@ -29,8 +32,10 @@ from ramp_sdk.resolvers._http import default_client, fetch_strict
 from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
     EndpointRefusedError,
+    ManifestVersionRefusedError,
     NoEndpointError,
 )
+from ramp_sdk.wire import manifest_version_refusal
 
 if TYPE_CHECKING:
     import httpx
@@ -40,7 +45,6 @@ _DEFAULT_TTL = timedelta(minutes=5)
 
 NowFn = Callable[[], datetime]
 AllowFn = Callable[[str], bool]
-
 
 
 def _now_utc() -> datetime:
@@ -162,13 +166,14 @@ class WellKnownEndpointResolver:
     def resolve_endpoint(self, host: str) -> str:
         """Return the endpoint ``host`` advertises in its well-known manifest.
 
-        Four exits, and a caller classifying retryability needs all four. Three are
+        Five exits, and a caller classifying retryability needs all five. Four are
         verdicts and FINAL: ``ValueError`` when ``host`` is not a bare host, raised
-        before anything is fetched; ``NoEndpointError`` when the manifest is
-        reachable but advertises nothing; ``EndpointRefusedError`` when it advertises
-        an endpoint the rule will not hand back. The fourth,
-        ``DirectoryUnavailableError``, is a transport failure — unreachable or
-        undecodable — and is the only one worth retrying.
+        before anything is fetched; ``ManifestVersionRefusedError`` when the manifest
+        carries a ``ver`` this reader does not accept, or none at all;
+        ``NoEndpointError`` when the manifest is reachable but advertises nothing;
+        ``EndpointRefusedError`` when it advertises an endpoint the rule will not
+        hand back. The fifth, ``DirectoryUnavailableError``, is a transport failure
+        — unreachable or undecodable — and is the only one worth retrying.
         """
         # Checked BEFORE the allow overlay and before the cache. The fetch URL is
         # built by concatenation, so a value carrying a path or a query would
@@ -206,6 +211,11 @@ class WellKnownEndpointResolver:
             doc = json.loads(body)
         except ValueError as exc:
             raise DirectoryUnavailableError(f"manifest decode {url}") from exc
+        # The document version gate runs before the endpoint is so much as looked
+        # at, and never caches: the next resolve fetches again.
+        refusal = manifest_version_refusal(doc.get("ver") if isinstance(doc, dict) else None)
+        if refusal is not None:
+            raise ManifestVersionRefusedError(refusal)
         endpoint = doc.get("endpoint") if isinstance(doc, dict) else None
         if not isinstance(endpoint, str) or endpoint == "":
             raise NoEndpointError(f"host={host}")

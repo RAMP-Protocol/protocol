@@ -37,8 +37,8 @@ func TestLibraryAdoptionGuard_KeyResolverUsesGoJoseJWKS(t *testing.T) {
 	}
 
 	// The hand-rolled JWK struct the key face decodes lives in the shared
-	// wellKnownDoc.Keys in endpointresolver.go — it must keep only the Endpoint
-	// field and promote the go-jose key set.
+	// wellKnownDoc.Keys in endpointresolver.go — it must keep only the scalar
+	// manifest members (Ver, Endpoint) and promote the go-jose key set.
 	epSrc := readResolverSource(t, "endpointresolver.go")
 	for _, forbidden := range []string{
 		"Kty string `json:\"kty\"`",
@@ -47,7 +47,7 @@ func TestLibraryAdoptionGuard_KeyResolverUsesGoJoseJWKS(t *testing.T) {
 	} {
 		if strings.Contains(epSrc, forbidden) {
 			t.Errorf("endpointresolver.go still declares the hand-rolled JWK struct field %q; "+
-				"the key face must decode via go-jose jose.JSONWebKeySet, keeping only the Endpoint field", forbidden)
+				"the key face must decode via go-jose jose.JSONWebKeySet, keeping only the scalar manifest members", forbidden)
 		}
 	}
 }

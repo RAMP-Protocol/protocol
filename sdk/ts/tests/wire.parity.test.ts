@@ -28,6 +28,7 @@ const exportFor: Record<string, keyof typeof wire> = {
 	ConnectProtocolVersionHeader: "ConnectProtocolVersionHeader",
 	ConnectProtocolVersion: "ConnectProtocolVersion",
 	ProtocolVersion: "ProtocolVersion",
+	WellKnownManifestVersion: "WellKnownManifestVersion",
 	RequestIDHeader: "RequestIDHeader",
 	SignatureAgentHeader: "SignatureAgentHeader",
 };

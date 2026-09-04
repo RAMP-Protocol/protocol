@@ -11,6 +11,7 @@ export {
 	EndpointRefused,
 	KeyExpired,
 	KeyRevoked,
+	ManifestVersionRefused,
 	NoEndpoint,
 	ResolverError,
 	RevocationUnevaluated,

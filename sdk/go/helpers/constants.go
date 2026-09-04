@@ -18,9 +18,18 @@ const (
 	// rather than a literal hunt across every message builder. Senders MUST stamp
 	// it; receivers treat `ver` as advisory — see "Protocol version" in ramp.proto
 	// for the receive-side rule, which is stated once, there. The
-	// /.well-known/ramp.json document carries its own schema version in a
-	// separate namespace, which this constant does NOT supply.
+	// /.well-known/ramp.json document carries its own document version in a
+	// separate namespace, which this constant does NOT supply — that is
+	// WellKnownManifestVersion below.
 	ProtocolVersion = "1.0"
+	// WellKnownManifestVersion is the version of the /.well-known/ramp.json
+	// DOCUMENT layout, stamped on WellKnownManifest.ver by every party that serves
+	// one. It is a namespace separate from ProtocolVersion and is never derived
+	// from it: a change to the manifest layout bumps both numbers, a protocol
+	// change that leaves the manifest untouched bumps only ProtocolVersion. The
+	// two read the same today by coincidence, not by rule. The receive-side
+	// check a manifest reader applies is CheckWellKnownManifestVersion.
+	WellKnownManifestVersion = "1.0"
 	// RequestIDHeader correlates a request across services and the edge.
 	RequestIDHeader = "X-Request-ID"
 	// SignatureAgentHeader carries the signer's Web Bot Auth key-directory URL

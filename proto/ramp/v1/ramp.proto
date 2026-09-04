@@ -121,9 +121,12 @@ import "ramp/v1/vocab.proto";
 // That guard binds what this project emits; it cannot bind a third party, which
 // is the accepted limit of the advisory model.
 //
-// WellKnownManifest.ver is a SEPARATE namespace — the schema version of the
-// /.well-known/ramp.json document, not of the RPC envelope. It is stated
-// MUST-equal there and is NOT stamped from ProtocolVersion. Do not couple them.
+// WellKnownManifest.ver is a SEPARATE namespace — the version of the
+// /.well-known/ramp.json document's layout, not of the RPC envelope. It is
+// stamped from the SDK's WellKnownManifestVersion, never from ProtocolVersion,
+// and consumers gate on its MAJOR rather than treating it as advisory. The
+// coupling runs one way: a manifest change bumps both numbers, a protocol change
+// that leaves the manifest untouched bumps only ProtocolVersion.
 // ============================================================================
 
 // ============================================================================
@@ -3215,9 +3218,21 @@ message WellKnownManifest {
     expression: "this.terms_digest == '' || this.terms_uri != ''"
   };
 
-  // RAMP protocol version of THIS MANIFEST DOCUMENT's schema — a namespace
-  // separate from the RPC envelope `ver`, deliberately not coupled to it.
-  // MUST equal "1.0"; consumers REJECT unrecognised major versions.
+  // Version of THIS MANIFEST DOCUMENT's layout — "1.0", stamped by the party
+  // that serves the document from the SDK's WellKnownManifestVersion, never from
+  // ProtocolVersion. A namespace separate from the RPC envelope `ver`: a change
+  // to this document's layout bumps both numbers, a protocol change that leaves
+  // the document untouched bumps only the envelope's, so a reader that parses
+  // only manifests upgrades when the manifest changes and at no other time.
+  //
+  // Consumers read `ver` before any other member. They ACCEPT a recognised
+  // MAJOR version whatever the MINOR — a minor revision of the manifest is
+  // additive, and a reader ignores members it does not know. They REJECT an
+  // unrecognised MAJOR, a value that is not MAJOR.MINOR, and an ABSENT `ver`:
+  // the document sits at a fixed, unversioned path and is read before any
+  // signature is checked, so a layout the reader cannot classify must not
+  // supply the endpoint a signed call is then sent to. The SDK endpoint
+  // resolvers apply this rule in all three languages, pinned to one corpus.
   string ver = 1;
 
   // Role this manifest describes.

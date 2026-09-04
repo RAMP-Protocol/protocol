@@ -17,6 +17,7 @@ import type { AddressInfo } from "node:net";
 import { WBAFileSchema } from "../../../gen/ts/wire/schemas.ts";
 import { decodeBase64Url } from "../src/base64url.ts";
 import { thumbprint } from "../src/thumbprint.ts";
+import { WellKnownManifestVersion } from "../src/wire.ts";
 
 // Well-known paths the origin serves. The WBA directory path is the fixed Web
 // Bot Auth path; the JWKS key doc and the endpoint manifest sit on distinct
@@ -92,7 +93,7 @@ export function jwksEntry(kid: string, x: string): Record<string, unknown> {
 /** Serialize a WellKnownManifest projection ({role, endpoint}); omit endpoint to
  * model a valid-but-inert manifest. */
 export function manifestJson(endpoint?: string): string {
-	const doc: Record<string, unknown> = { role: "ROLE_EXCHANGE" };
+	const doc: Record<string, unknown> = { ver: WellKnownManifestVersion, role: "ROLE_EXCHANGE" };
 	if (endpoint !== undefined) doc.endpoint = endpoint;
 	return JSON.stringify(doc);
 }

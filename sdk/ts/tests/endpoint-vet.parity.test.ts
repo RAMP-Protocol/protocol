@@ -21,6 +21,7 @@ import { createWellKnownEndpointResolver, EndpointRefused } from "../resolvers/i
 import { isBareHost } from "../src/hosts.ts";
 import type { FetchLike } from "../resolvers/http.ts";
 import vectorsFile from "../../go/resolvers/testdata/endpoint-vet-vectors.json";
+import { WellKnownManifestVersion } from "../src/wire.ts";
 
 type EndpointVetVector = { name: string; host: string; endpoint: string; refused: boolean };
 type EndpointVetVectorsFile = { endpoint_vet: EndpointVetVector[] };
@@ -31,7 +32,8 @@ const doc = vectorsFile as EndpointVetVectorsFile;
 function servingManifest(endpoint: string): FetchLike {
 	return async () => ({
 		status: 200,
-		text: async () => JSON.stringify({ role: "ROLE_EXCHANGE", endpoint }),
+		text: async () =>
+			JSON.stringify({ ver: WellKnownManifestVersion, role: "ROLE_EXCHANGE", endpoint }),
 	});
 }
 

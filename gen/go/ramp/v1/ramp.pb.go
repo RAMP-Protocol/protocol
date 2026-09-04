@@ -7349,9 +7349,21 @@ func (x *AccountRegistration) GetDataSchema() *structpb.Struct {
 // MUST ignore non-applicable fields based on `role`.
 type WellKnownManifest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// RAMP protocol version of THIS MANIFEST DOCUMENT's schema — a namespace
-	// separate from the RPC envelope `ver`, deliberately not coupled to it.
-	// MUST equal "1.0"; consumers REJECT unrecognised major versions.
+	// Version of THIS MANIFEST DOCUMENT's layout — "1.0", stamped by the party
+	// that serves the document from the SDK's WellKnownManifestVersion, never from
+	// ProtocolVersion. A namespace separate from the RPC envelope `ver`: a change
+	// to this document's layout bumps both numbers, a protocol change that leaves
+	// the document untouched bumps only the envelope's, so a reader that parses
+	// only manifests upgrades when the manifest changes and at no other time.
+	//
+	// Consumers read `ver` before any other member. They ACCEPT a recognised
+	// MAJOR version whatever the MINOR — a minor revision of the manifest is
+	// additive, and a reader ignores members it does not know. They REJECT an
+	// unrecognised MAJOR, a value that is not MAJOR.MINOR, and an ABSENT `ver`:
+	// the document sits at a fixed, unversioned path and is read before any
+	// signature is checked, so a layout the reader cannot classify must not
+	// supply the endpoint a signed call is then sent to. The SDK endpoint
+	// resolvers apply this rule in all three languages, pinned to one corpus.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Role this manifest describes.
 	Role Role `protobuf:"varint,2,opt,name=role,proto3,enum=ramp.v1.Role" json:"role,omitempty"`

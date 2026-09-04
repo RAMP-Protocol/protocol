@@ -64,3 +64,17 @@ class EndpointRefusedError(ResolverError):
     answered, and the answer is not usable. A caller that classifies retryability
     reads this as final rather than as something to try again in a moment.
     """
+
+
+class ManifestVersionRefusedError(ResolverError):
+    """A ``/.well-known/ramp.json`` was fetched and parsed but carries a
+    ``WellKnownManifest.ver`` this resolver does not accept: an unrecognised major
+    version, a value that is not ``MAJOR.MINOR``, or no version at all. The rule is
+    :func:`ramp_sdk.wire.manifest_version_refusal`.
+
+    Checked BEFORE any other member of the document is read. The manifest sits at
+    a fixed, unversioned path and is read before any signature is checked, so a
+    layout the reader cannot classify must not supply the endpoint a signed call
+    is then sent to. Like :class:`EndpointRefusedError` it is a VERDICT — final,
+    not a transport failure to retry — and it is never cached.
+    """

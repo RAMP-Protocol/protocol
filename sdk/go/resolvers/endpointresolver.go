@@ -41,9 +41,22 @@ var ErrNoEndpoint = errors.New("resolvers: well-known manifest has no endpoint")
 // again in a moment.
 var ErrEndpointRefused = errors.New("resolvers: well-known manifest advertises an unusable endpoint")
 
+// ErrManifestVersionRefused signals that a /.well-known/ramp.json was fetched and
+// parsed but carries a WellKnownManifest.ver this resolver does not accept: an
+// unrecognised major version, a value that is not MAJOR.MINOR, or no version at
+// all. The rule is helpers.CheckWellKnownManifestVersion; the error carries that
+// package's sentinel too, so either matches.
+//
+// Checked BEFORE any other member of the document is read. The manifest sits at
+// a fixed, unversioned path and is read before any signature is checked, so a
+// layout the reader cannot classify must not supply the endpoint a signed call
+// is then sent to. Like ErrEndpointRefused it is a VERDICT — final, not a
+// transport failure to retry — and it is never cached.
+var ErrManifestVersionRefused = errors.New("resolvers: well-known manifest version not accepted")
+
 // wellKnownDoc is the JSON projection of the subset of WellKnownManifest the SDK
-// resolvers read: the RFC 7517 key set (field 5) and the self-advertised
-// ExchangeService endpoint (field 12). One fetch decodes the whole document so a
+// resolvers read: the document version (field 1), the RFC 7517 key set (field 5)
+// and the self-advertised ExchangeService endpoint (field 12). One fetch decodes the whole document so a
 // single body serves both the key face (WellKnownKeyResolver) and the endpoint
 // face (WellKnownEndpointResolver).
 //
@@ -54,6 +67,7 @@ var ErrEndpointRefused = errors.New("resolvers: well-known manifest advertises a
 // the promoted-alongside Endpoint field from the same body.
 type wellKnownDoc struct {
 	jose.JSONWebKeySet
+	Ver      string `json:"ver"`
 	Endpoint string `json:"endpoint"`
 }
 
@@ -238,6 +252,12 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 		doc, ferr := fetchWellKnownDoc(fetchCtx, r.http, url)
 		if ferr != nil {
 			return "", ferr
+		}
+		// The document version gate runs before the endpoint is so much as looked
+		// at, and only on this face: the key face reads a JWKS document that
+		// carries no manifest version.
+		if verr := helpers.CheckWellKnownManifestVersion(doc.Ver); verr != nil {
+			return "", fmt.Errorf("%w: %w", ErrManifestVersionRefused, verr)
 		}
 		if doc.Endpoint == "" {
 			return "", fmt.Errorf("%w: host=%q", ErrNoEndpoint, host)

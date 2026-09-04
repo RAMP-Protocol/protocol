@@ -28,6 +28,8 @@ import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
+from ramp_sdk.wire import WellKnownManifestVersion
+
 from ramp_sdk.b64 import b64url_nopad
 from ramp_sdk.thumbprint import thumbprint
 
@@ -124,7 +126,7 @@ def jwks_key_doc_json(entries: list[dict[str, Any]]) -> str:
 def manifest_json(endpoint: str | None = None) -> str:
     """Serialize a WellKnownManifest projection ({role, endpoint}); omit endpoint
     to model a valid-but-inert manifest."""
-    doc: dict[str, Any] = {"role": "ROLE_EXCHANGE"}
+    doc: dict[str, Any] = {"ver": WellKnownManifestVersion, "role": "ROLE_EXCHANGE"}
     if endpoint is not None:
         doc["endpoint"] = endpoint
     return json.dumps(doc)
