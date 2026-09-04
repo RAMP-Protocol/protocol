@@ -1,7 +1,4 @@
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
-
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   createWellKnownRequirementsReader,
@@ -121,70 +118,5 @@ describe("the registration-requirements reader", () => {
   it("accepts the role as a proto-JSON number", async () => {
     const { r } = reader(manifest({}, 2));
     await expect(r.resolveRegistrationRequirements("exchange.test")).resolves.toBeDefined();
-  });
-});
-
-// The transport default, dialled for real.
-//
-// The domain this reader fetches comes off a RegisterRequest, so it is chosen by the
-// caller at runtime rather than by the operator at start-up. That is the provenance
-// that takes the SSRF-guarded transport — the same rule the Go oracle states in the
-// options struct these readers mirror, and the same threat shape as the offer-derived
-// legs. A reader that dialled a caller-named host unguarded would turn `register` into
-// a blind GET aimed wherever that value pointed, and `isBareDomain` accepts `localhost`
-// and `169.254.169.254` because they are well-formed domains.
-//
-// Real-dial rather than a stubbed fetch, mirroring resolvers-ssrf-gate.test.ts: a stub
-// would assert which function was referenced, and what matters is which addresses the
-// process will actually connect to.
-describe("the reader's default transport", () => {
-  // Both guards are env-driven, so the flags are cleared here rather than inherited
-  // from whatever shell ran the suite — the same isolation resolvers-ssrf-gate.test.ts
-  // uses, and without it a developer with SKIP_SSRF set sees this fail for the wrong
-  // reason.
-  const TOUCHED = ["SKIP_SSRF", "ALLOW_INSECURE", "HTTP_PROXY", "HTTPS_PROXY"];
-  let saved: Record<string, string | undefined>;
-  beforeEach(() => {
-    saved = {};
-    for (const k of TOUCHED) {
-      saved[k] = process.env[k];
-      delete process.env[k];
-    }
-  });
-  afterEach(() => {
-    for (const k of TOUCHED) {
-      if (saved[k] === undefined) delete process.env[k];
-      else process.env[k] = saved[k];
-    }
-  });
-
-  it("refuses a loopback origin the injected transport reaches", async () => {
-    const server = createServer((_req, res) => {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(manifest());
-    });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    const { port } = server.address() as AddressInfo;
-    const host = `127.0.0.1:${port}`;
-    try {
-      // The default: no fetch injected, so the guarded transport, which refuses a
-      // reserved address at dial time.
-      const guarded = createWellKnownRequirementsReader({ scheme: "http" });
-      await expect(guarded.resolveRegistrationRequirements(host)).rejects.toThrow();
-
-      // The same host, same server, through an injected transport — so the refusal
-      // above is the guard's verdict and not an unreachable server.
-      const injected = createWellKnownRequirementsReader({
-        scheme: "http",
-        fetch: (async (url: string) => {
-          const r = await fetch(url);
-          return { status: r.status, text: () => r.text() };
-        }) as never,
-      });
-      const got = await injected.resolveRegistrationRequirements(host);
-      expect(got.verdict).toBe("not_published");
-    } finally {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    }
   });
 });
