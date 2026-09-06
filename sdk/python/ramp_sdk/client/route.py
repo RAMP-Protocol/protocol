@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any, Protocol, runtime_checkable
 
 from ramp_sdk._endpoint_rule import endpoint_refusal
+from ramp_sdk._hostref import _is_invalid_host_refusal
 from ramp_sdk._hostref import _redact_userinfo as redact_userinfo
 from ramp_sdk.hosts import is_bare_host
 from ramp_sdk.resolvers.errors import (
@@ -41,9 +42,10 @@ class EndpointResolver(Protocol):
     not accept, advertises no endpoint, or advertises one that must not be used — MUST
     raise :class:`~ramp_sdk.resolvers.errors.ManifestVersionRefusedError`,
     :class:`~ramp_sdk.resolvers.errors.NoEndpointError`,
-    :class:`~ramp_sdk.resolvers.errors.EndpointRefusedError`, or the ``ValueError``
-    ``is_bare_host`` raises; those surface as ``NOT_SENT``, which tells the caller not to
-    retry. Anything else is read as a transport failure and reported as ``UNREACHABLE``,
+    :class:`~ramp_sdk.resolvers.errors.EndpointRefusedError`, or the invalid-host
+    ``ValueError`` ``is_bare_host`` raises — recognised by its wording, so an unrelated
+    ``ValueError`` is NOT one; those surface as ``NOT_SENT``, which tells the caller not
+    to retry. Anything else is read as a transport failure and reported as ``UNREACHABLE``,
     i.e. worth retrying. An implementation that raises a bare exception for a refusal
     therefore has its final answer retried indefinitely.
     """
@@ -97,16 +99,19 @@ def vet_exchange_endpoint(
         # allowed, the manifest was read and advertises no endpoint at all, or it
         # advertises one the resolver will not hand back.
         #
-        # ValueError is in the set because the resolver checks the host itself too, and a
-        # value that is not a host will not become one on a later attempt. This module
-        # checks it before resolving, so the SDK's own resolver never reaches here that
-        # way — an injected one can.
+        # The invalid-host refusal is in the set because the resolver checks the host
+        # itself too, and a value that is not a host will not become one on a later
+        # attempt. This module checks it before resolving, so the SDK's own resolver
+        # never reaches here that way — an injected one can. It is recognised through
+        # the one predicate the account leg also uses: catching the bare ValueError it
+        # is raised as would call every other ValueError final too, and a document a
+        # reader could not parse is a transport failure in the oracle and in TypeScript.
         kind = (
             CallErrorKind.NOT_SENT
             if isinstance(
-                exc,
-                ManifestVersionRefusedError | NoEndpointError | EndpointRefusedError | ValueError,
+                exc, ManifestVersionRefusedError | NoEndpointError | EndpointRefusedError
             )
+            or _is_invalid_host_refusal(exc)
             else CallErrorKind.UNREACHABLE
         )
         raise CallError(
@@ -150,9 +155,10 @@ class RegistrationRequirementsReader(Protocol):
     Exchange's, or it is one this reader cannot use — MUST raise
     :class:`~ramp_sdk.resolvers.errors.ExchangeNotPermittedError`,
     :class:`~ramp_sdk.resolvers.errors.ManifestNotExchangeError`,
-    :class:`~ramp_sdk.resolvers.errors.ManifestUnusableError`, or the ``ValueError``
-    raised for a value that is not a bare domain; those surface as ``NOT_SENT``, which
-    tells the caller not to retry. Anything else is read as a transport failure
+    :class:`~ramp_sdk.resolvers.errors.ManifestUnusableError`, or the invalid-host
+    ``ValueError`` raised for a value that is not a bare domain — recognised by its
+    wording, so an unrelated ``ValueError`` is NOT one; those surface as ``NOT_SENT``,
+    which tells the caller not to retry. Anything else is read as a transport failure
     and reported as ``UNREACHABLE``, i.e. worth retrying. An implementation that raises
     a bare exception for a refusal therefore has its final answer retried indefinitely.
 

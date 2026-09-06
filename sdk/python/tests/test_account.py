@@ -242,6 +242,11 @@ def test_register_classifies_a_refused_requirements_read_as_final(face: Face) ->
         # is not a host will not become one on a later attempt.
         (_invalid_host("exchange.test/path", "not a bare domain"), CallErrorKind.NOT_SENT),
         (RuntimeError("connection reset"), CallErrorKind.UNREACHABLE),
+        # A ValueError that is NOT the invalid-host refusal. json.JSONDecodeError
+        # subclasses ValueError, so catching the bare type would call a document an
+        # injected reader could not parse final — where the oracle and TypeScript both
+        # call it a transport failure.
+        (ValueError("expecting value: line 1 column 1"), CallErrorKind.UNREACHABLE),
     ):
         with pytest.raises(CallError) as caught:
             face.run(

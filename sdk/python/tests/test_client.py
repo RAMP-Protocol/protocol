@@ -571,6 +571,29 @@ def test_a_resolver_verdict_is_final_and_its_transport_failure_is_not(face: Face
 
 
 @pytest.mark.parametrize("face", FACES, ids=_IDS)
+def test_an_unrelated_value_error_from_a_resolver_is_not_a_verdict(face: Face) -> None:
+    """The invalid-host refusal is a bare ValueError in this port, and the routing leg
+    once matched that TYPE. json.JSONDecodeError subclasses ValueError, so an injected
+    resolver that could not parse a document had its transport failure reported as a
+    permanent verdict — where the oracle and TypeScript both call it retryable. The
+    refusal is recognised by its wording now, through the one predicate the account leg
+    also uses.
+    """
+
+    class Unparsed:
+        def resolve_endpoint(self, host: str) -> str:  # noqa: ARG002
+            raise ValueError("expecting value: line 1 column 1 (char 0)")
+
+    with pytest.raises(CallError) as caught:
+        face.run(
+            face.client(_config(endpoint_resolver=Unparsed()), Recorder({})).report_usage(
+                {"exchange": "issuer.test"}
+            )
+        )
+    assert caught.value.kind is CallErrorKind.UNREACHABLE
+
+
+@pytest.mark.parametrize("face", FACES, ids=_IDS)
 def test_an_unaccepted_manifest_version_is_not_sent(face: Face) -> None:
     """A manifest whose version the reader refuses is a VERDICT: the manifest was
     fetched and parsed, and nothing about a retry changes the version served.

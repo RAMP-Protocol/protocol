@@ -50,6 +50,7 @@ from ramp_sdk.core import (
 from ramp_sdk.errordetail import registration_failure_detail
 from ramp_sdk.idempotency import generate_idempotency_key
 from ramp_sdk.regschema import check_registration_data
+from ramp_sdk._hostref import _is_invalid_host_refusal
 from ramp_sdk.resolvers import (
     ExchangeNotPermittedError,
     ManifestNotExchangeError,
@@ -640,15 +641,11 @@ def _apply_registration_requirements(cfg: ClientConfig, op: str, sent: dict[str,
     # Every verdict this seam admits, and each is reachable only through an INJECTED
     # reader: the verb's own recipient check runs the host rule first, the SDK's own
     # reader raises the middle two itself, and it never raises ManifestUnusableError at
-    # all. Calling any of them retryable would have a caller retry a verdict. ValueError
-    # is the invalid-host refusal: the host helpers are L1 and deliberately raise a bare
-    # error for it, so this is the shape there is to catch, and it is the same one the
-    # routing tier catches for the same reason.
+    # all. Calling any of them retryable would have a caller retry a verdict.
     except (
         ExchangeNotPermittedError,
         ManifestNotExchangeError,
         ManifestUnusableError,
-        ValueError,
     ) as exc:
         # A value this deployment or the Exchange refused is FINAL; anything else is a
         # transport failure worth retrying. The same split the routing tier makes, so a
@@ -657,6 +654,8 @@ def _apply_registration_requirements(cfg: ClientConfig, op: str, sent: dict[str,
     except CallError:
         raise
     except Exception as exc:  # noqa: BLE001 - classified, then re-raised as one shape
+        if _is_invalid_host_refusal(exc):
+            raise not_sent(op, str(exc)) from exc
         raise CallError(kind=CallErrorKind.UNREACHABLE, op=op, cause=exc) from exc
     if reqs.terms_digest is not None:
         sent["terms_digest"] = reqs.terms_digest
