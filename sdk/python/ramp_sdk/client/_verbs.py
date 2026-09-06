@@ -53,6 +53,7 @@ from ramp_sdk.regschema import check_registration_data
 from ramp_sdk.resolvers import (
     ExchangeNotPermittedError,
     ManifestNotExchangeError,
+    ManifestUnusableError,
     WellKnownRequirementsReader,
     guarded_client,
 )
@@ -636,13 +637,19 @@ def _apply_registration_requirements(cfg: ClientConfig, op: str, sent: dict[str,
     exchange = _str_field(sent, "exchange")
     try:
         reqs = reader.resolve_registration_requirements(exchange)
-    # ValueError is the invalid-host refusal: the host helpers are L1 and deliberately
-    # raise a bare error for it, so this is the shape there is to catch, and it is the
-    # same one the routing tier catches for the same reason. The verb's own recipient
-    # check runs the host rule first, so the SDK's own reader never reaches here that
-    # way — an INJECTED one can, and calling its refusal retryable would have a caller
-    # retry a verdict.
-    except (ExchangeNotPermittedError, ManifestNotExchangeError, ValueError) as exc:
+    # Every verdict this seam admits, and each is reachable only through an INJECTED
+    # reader: the verb's own recipient check runs the host rule first, the SDK's own
+    # reader raises the middle two itself, and it never raises ManifestUnusableError at
+    # all. Calling any of them retryable would have a caller retry a verdict. ValueError
+    # is the invalid-host refusal: the host helpers are L1 and deliberately raise a bare
+    # error for it, so this is the shape there is to catch, and it is the same one the
+    # routing tier catches for the same reason.
+    except (
+        ExchangeNotPermittedError,
+        ManifestNotExchangeError,
+        ManifestUnusableError,
+        ValueError,
+    ) as exc:
         # A value this deployment or the Exchange refused is FINAL; anything else is a
         # transport failure worth retrying. The same split the routing tier makes, so a
         # caller branches on one taxonomy whichever check declined.

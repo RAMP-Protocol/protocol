@@ -64,6 +64,24 @@ suffix was promoted. Both now carry the record. And an invalid-host refusal from
 injected requirements reader is classified `not_sent` in all three rather than retried in
 two, which is what each port's own routing leg already answered.
 
+**The requirements seam gains a verdict for a document it cannot use (additive, no wire
+change).** `resolvers.ErrManifestUnusable` / `ManifestUnusableError` / `ManifestUnusable`
+says the document arrived and this reader cannot use it — final, not a transport failure,
+because the next fetch returns the same bytes. It exists because the reader seam is
+injectable: the SDK's own reader refuses three things and treats every other
+disappointment as absence or as an outage, so an implementation stricter than it — one
+validating the whole manifest, or refusing a version — held a permanent refusal the seam
+reported as transient and a caller retried indefinitely. One consequence for anyone
+re-pinning: this is a fourth verdict on that seam, and a classifier branching only on the
+older three drops it into its transport-failure bucket and retries something that will
+never succeed; add the new sentinel alongside. The SDK's own reader never returns it —
+an off-spec optional member still reads as absent, and an undecodable document is still a
+transport failure — so nothing changes for a caller that injects no reader. Python also
+stops treating an unrelated `ValueError` as a verdict on both the routing and the account
+leg: the invalid-host refusal is recognised by its wording now, as TypeScript already did,
+so an injected seam raising `json.JSONDecodeError` is retryable there as it is in the
+other two.
+
 A new shared corpus pins the details the SDK builds itself rather than receives — the two
 above — over every recorded edge token, including the two that must stay untyped, replayed
 in all three languages. Two conformance guards sit under it: one holds every committed

@@ -20,6 +20,7 @@ from ramp_sdk.regschema import compile_registration_schema
 from ramp_sdk.resolvers import (
     ExchangeNotPermittedError,
     ManifestNotExchangeError,
+    ManifestUnusableError,
     RegistrationRequirements,
     WellKnownRequirementsReader,
 )
@@ -232,6 +233,10 @@ def test_register_classifies_a_refused_requirements_read_as_final(face: Face) ->
     for raised, kind in (
         (ExchangeNotPermittedError("blocked"), CallErrorKind.NOT_SENT),
         (ManifestNotExchangeError("wrong role"), CallErrorKind.NOT_SENT),
+        # The SDK's own reader never raises this one: it reads an off-spec member as
+        # absent and treats an undecodable document as a transport failure. A stricter
+        # INJECTED reader raises it, and the document arrives unusable again next time.
+        (ManifestUnusableError('ver "2.0" has major 2'), CallErrorKind.NOT_SENT),
         # Reachable only through an INJECTED reader with its own host rule — the verb's
         # own recipient check runs this one first. Retryable would be wrong: a value that
         # is not a host will not become one on a later attempt.

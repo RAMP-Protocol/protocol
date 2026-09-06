@@ -238,6 +238,19 @@ import "github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
   a transport failure and worth retrying. The key is an offer-supplied host, so the cache evicts
   least-recently-used at a fixed cap and concurrent lookups for one host coalesce to
   a single fetch.
+- **Registration-requirements reader** — `NewWellKnownRequirementsReader` reads what
+  one Exchange asks of a registration — the terms revision submitting one accepts and
+  the schema its `registration_data` must match — from the same
+  `/.well-known/ramp.json`, and holds NO document cache: the contract requires the
+  digest to come from a freshly fetched manifest. Three
+  sentinels, same retry question as above: `ErrExchangeNotPermitted` when the
+  deployment's own overlay excluded the domain before anything was dialled,
+  `ErrManifestNotExchange` when the document describes another role, and
+  `ErrManifestUnusable` — which this reader never raises, and which exists because the
+  seam is injectable: a reader stricter than this one needs a way to say its refusal is
+  final. All three are verdicts; anything else is a transport failure and worth
+  retrying. An off-spec optional member reads as ABSENT rather than failing the
+  document, because the projection is shared with the two faces above.
 - **Active-key selection** — `ActiveEd25519Key` / `ActiveEd25519KeyWithExpiry` pick
   an identity's window-active key by document order; the `…Screened` variants fold in
   a revoked-thumbprint screen. `NewCachedOfferKeyResolver` caches the selected offer

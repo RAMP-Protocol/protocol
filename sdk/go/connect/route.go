@@ -61,11 +61,20 @@ type EndpointResolver interface {
 // one breaks the rule the field exists to record.
 //
 // Its ERROR decides how a caller is told to react, as the endpoint seam's does. A
-// failure that is a VERDICT — the domain is unusable, the deployment excludes it, or
-// the document served is not an Exchange's — MUST wrap helpers.ErrInvalidHost,
-// resolvers.ErrExchangeNotPermitted or resolvers.ErrManifestNotExchange; those
+// failure that is a VERDICT — the domain is unusable, the deployment excludes it,
+// the document served is not an Exchange's, or it is one this reader cannot use —
+// MUST wrap helpers.ErrInvalidHost, resolvers.ErrExchangeNotPermitted,
+// resolvers.ErrManifestNotExchange or resolvers.ErrManifestUnusable; those four
 // surface as CallNotSent, which tells the caller not to retry. Anything else is read
-// as a transport failure and reported as CallUnreachable.
+// as a transport failure and reported as CallUnreachable, i.e. worth retrying. An
+// implementation that returns a bare error for a refusal therefore has its final
+// answer retried indefinitely.
+//
+// ErrManifestUnusable is the one an implementation stricter than the SDK's own
+// reaches for. That reader refuses three things and treats every other
+// disappointment as absence or as a transport failure; one that validates the whole
+// document, or refuses a version, is holding a final answer this seam would
+// otherwise report as transient.
 type RegistrationRequirementsReader interface {
 	ResolveRegistrationRequirements(
 		ctx context.Context, exchange string,

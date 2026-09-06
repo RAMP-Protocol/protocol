@@ -143,6 +143,24 @@ class RegistrationRequirementsReader(Protocol):
     An implementation MUST NOT serve the answer from a cache. The contract requires a
     registering client to read the digest from a freshly fetched manifest, so a cached
     one breaks the rule the field exists to record.
+
+    An implementation's FAILURE decides how a caller is told to react, so it is part of
+    the contract rather than an implementation detail. A failure that is a VERDICT — the
+    domain is unusable, the deployment excludes it, the document served is not an
+    Exchange's, or it is one this reader cannot use — MUST raise
+    :class:`~ramp_sdk.resolvers.errors.ExchangeNotPermittedError`,
+    :class:`~ramp_sdk.resolvers.errors.ManifestNotExchangeError`,
+    :class:`~ramp_sdk.resolvers.errors.ManifestUnusableError`, or the ``ValueError``
+    raised for a value that is not a bare domain; those surface as ``NOT_SENT``, which
+    tells the caller not to retry. Anything else is read as a transport failure
+    and reported as ``UNREACHABLE``, i.e. worth retrying. An implementation that raises
+    a bare exception for a refusal therefore has its final answer retried indefinitely.
+
+    ``ManifestUnusableError`` is the one an implementation stricter than the SDK's own
+    reaches for. That reader refuses three things and treats every other disappointment
+    as absence or as a transport failure; one that validates the whole document, or
+    refuses a version, is holding a final answer this seam would otherwise report as
+    transient.
     """
 
     def resolve_registration_requirements(self, exchange: str) -> Any:  # pragma: no cover

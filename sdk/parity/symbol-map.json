@@ -880,6 +880,11 @@
       "python": "ManifestNotExchangeError",
       "ts": "ManifestNotExchange"
     },
+    "resolvers.ErrManifestUnusable": {
+      "allowlist_reason": null,
+      "python": "ManifestUnusableError",
+      "ts": "ManifestUnusable"
+    },
     "resolvers.ErrManifestVersionRefused": {
       "allowlist_reason": null,
       "python": "ManifestVersionRefusedError",

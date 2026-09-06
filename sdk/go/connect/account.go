@@ -178,7 +178,8 @@ func (c *Client) applyRegistrationRequirements(
 	if err != nil {
 		if errors.Is(err, helpers.ErrInvalidHost) ||
 			errors.Is(err, resolvers.ErrExchangeNotPermitted) ||
-			errors.Is(err, resolvers.ErrManifestNotExchange) {
+			errors.Is(err, resolvers.ErrManifestNotExchange) ||
+			errors.Is(err, resolvers.ErrManifestUnusable) {
 			return notSent(op, err)
 		}
 		return &CallError{Kind: CallUnreachable, Op: op, Err: err}

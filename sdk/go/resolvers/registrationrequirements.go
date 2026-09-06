@@ -26,6 +26,25 @@ var ErrExchangeNotPermitted = errors.New("resolvers: exchange domain not permitt
 // make the check advisory.
 var ErrManifestNotExchange = errors.New("resolvers: well-known manifest does not describe an exchange")
 
+// ErrManifestUnusable signals that the document arrived and this reader cannot
+// use it. It is a VERDICT and not a failed read: the bytes were served, and the
+// next attempt gets the same ones, so a caller told to retry retries forever.
+//
+// This reader never returns it. Its own refusals are the three above, and the two
+// ways a manifest can disappoint it are both deliberate non-errors: a member
+// carrying a type the contract does not admit reads as ABSENT, because the
+// projection is shared with the endpoint and key faces and one off-spec member
+// must not fail a document the other two would have read; and a document that
+// does not decode at all is a transport failure, because a proxy serving an error
+// page under a 200 may well not be serving one on the next try.
+//
+// It exists because this seam is injectable and a reader stricter than this one
+// has to be able to say so. A reader that validates the whole manifest against a
+// schema, or refuses a version, holds a refusal that is final and had no way to
+// declare it — and a refusal a caller cannot tell from an outage is one it retries
+// against a third party's origin until something else stops it.
+var ErrManifestUnusable = errors.New("resolvers: well-known manifest cannot be used by this reader")
+
 // RegistrationRequirements is what one Exchange asks of a registration: the terms
 // revision that submitting one accepts, and the schema its registration_data must
 // match.

@@ -13,6 +13,7 @@ export {
 	KeyExpired,
 	KeyRevoked,
 	ManifestNotExchange,
+	ManifestUnusable,
 	ManifestVersionRefused,
 	NoEndpoint,
 	ResolverError,

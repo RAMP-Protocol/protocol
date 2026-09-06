@@ -1758,6 +1758,56 @@ reason: refusing locally and declining to send would turn a rule about reading a
 party's document into a denial of service against the client's own user. Absent schema and
 unusable schema are therefore one branch, not two.
 
+## A seam that invites a stricter reader needs a word for that reader's refusals
+
+The requirements read is an injectable seam, offered deliberately: an application that
+wants an allow overlay, or a compiled-schema cache this tier will not hold, supplies its
+own reader. What the seam did not offer was a way for that reader to say a refusal was
+final. It classified on the three sentinels the SDK's own reader raises and read
+everything else as a transport failure — so a reader stricter than the SDK's, which is
+the only kind anyone writes their own for, had its permanent refusals reported as
+transient and retried against a third party's origin indefinitely.
+
+The first external implementation of the seam found it. That reader validates the whole
+manifest — the document must be JSON, must satisfy the manifest's own schema, must carry
+a version it recognises, must pass the protocol's field rules — and every one of those
+refusals is a property of the bytes that were served. None of them is in the SDK's three,
+so all of them arrived as "try again", forever.
+
+This is the shape recorded twice already in this file: a classification that changes with
+the resolver is not a classification, and a verdict the contract does not state gets
+inferred from whatever implementation the reader has at hand. `ErrManifestUnusable` states
+it. The document arrived, this reader cannot use it, and the next fetch returns the same
+bytes.
+
+**The SDK's own reader never raises it, and that is the point rather than an omission.**
+The two ways a manifest disappoints that reader are both deliberate non-errors, and each
+is load-bearing somewhere else. An optional member carrying a type the contract does not
+admit reads as ABSENT, because the projection is shared with the endpoint and key faces
+and one off-spec member must not fail a document those two would have read fine. A
+document that does not decode at all is a transport failure, because a proxy serving an
+error page under a 200 may well not be serving one on the next attempt, and the leg that
+shares this classification carries usage reports, where a wrongly-permanent refusal loses
+money. Both stay. The sentinel exists for the reader the SDK did not write.
+
+**The endpoint seam's sentinels were not reused, and no sentinel was shared between the
+two seams.** Their vocabularies are disjoint on purpose: one answers "can this endpoint be
+dialled", the other "can this document be read for what a registration owes", and the
+verdicts of each are properties of its own question. The single sentinel both seams honour
+is the invalid-host refusal, and only because it is the L1 host predicate both
+implementations run rather than a verdict either of them reaches. Widening the
+requirements seam to the endpoint seam's version refusal would have been the first
+crossing, and it would have said a manifest version is a registration concern, which it is
+not — a reader that refuses one now has a verdict of its own shape to wrap.
+
+**One cost, named because it is real and recurring.** A sentinel set is an allowlist, and
+an implementation that does not know a member exists gets its answer misread — which has
+now happened three times on this seam and its sibling. The alternative shape already ships
+one tier over: the content fetch returns a classified error whose finality the caller
+reads off a field, so an implementation declares its verdict instead of guessing which
+sentinel to wrap. Moving these two seams to that shape is the change that would close this
+rather than document it.
+
 ## The peer's token is ours to trust; the peer's sentence is only ours to carry
 
 A caller reading why a call failed had the failure class and the peer's refusal token, both

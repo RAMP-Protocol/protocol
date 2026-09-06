@@ -60,6 +60,7 @@ import {
 	createWellKnownRequirementsReader,
 	ExchangeNotPermitted,
 	ManifestNotExchange,
+	ManifestUnusable,
 	type RegistrationRequirements,
 } from "../resolvers/index.ts";
 import type { EndpointResolver } from "./route.ts";
@@ -97,7 +98,22 @@ export const DEFAULT_PROOF_WINDOW_SEC = 30;
  *
  * An implementation MUST NOT serve the answer from a cache. The contract requires a
  * registering client to read the digest from a freshly fetched manifest, so a cached one
- * breaks the rule the field exists to record. */
+ * breaks the rule the field exists to record.
+ *
+ * An implementation's FAILURE decides how a caller is told to react, so it is part of the
+ * contract rather than an implementation detail. A failure that is a VERDICT — the domain
+ * is unusable, the deployment excludes it, the document served is not an Exchange's, or it
+ * is one this reader cannot use — MUST throw the resolver tier's ExchangeNotPermitted,
+ * ManifestNotExchange or ManifestUnusable, or the invalid-host error isBareHost raises;
+ * those surface as `not_sent`, which tells the caller not to retry. Anything else is read
+ * as a transport failure and reported as `unreachable`, i.e. worth retrying. An
+ * implementation that throws a bare error for a refusal therefore has its final answer
+ * retried indefinitely.
+ *
+ * ManifestUnusable is the one an implementation stricter than the SDK's own reaches for.
+ * That reader refuses three things and treats every other disappointment as absence or as
+ * a transport failure; one that validates the whole document, or refuses a version, is
+ * holding a final answer this seam would otherwise report as transient. */
 export interface RegistrationRequirementsReader {
 	resolveRegistrationRequirements(exchange: string): Promise<RegistrationRequirements>;
 }
@@ -837,13 +853,16 @@ async function applyRegistrationRequirements(
 	} catch (err) {
 		// A value this deployment or the Exchange refused is FINAL; anything else is a
 		// transport failure worth retrying. The same split the routing tier makes, and
-		// the same three causes: a value that is not a host will not become one on a
-		// later attempt either. The verb's own recipient check runs the host rule first,
-		// so the SDK's own reader never reaches here that way — an INJECTED one can, and
-		// classifying its refusal as retryable would have a caller retry a verdict.
+		// the same causes: a value that is not a host will not become one on a later
+		// attempt either, and a document that arrived unusable arrives unusable again.
+		// The verb's own recipient check runs the host rule first, and the SDK's own
+		// reader never throws ManifestUnusable at all — so these reach here only through
+		// an INJECTED reader, and classifying its refusal as retryable would have a
+		// caller retry a verdict.
 		if (
 			err instanceof ExchangeNotPermitted ||
 			err instanceof ManifestNotExchange ||
+			err instanceof ManifestUnusable ||
 			isInvalidHostRefusal(err)
 		) {
 			throw notSent(op, err);

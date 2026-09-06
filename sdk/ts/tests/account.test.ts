@@ -5,6 +5,7 @@ import type { UnaryRequest, UnarySend } from "../client/index.ts";
 import {
   ExchangeNotPermitted,
   ManifestNotExchange,
+  ManifestUnusable,
   type RegistrationRequirements,
 } from "../resolvers/index.ts";
 import { compileRegistrationSchema } from "../src/regschema.ts";
@@ -227,6 +228,10 @@ describe("register", () => {
     for (const [thrown, kind] of [
       [new ExchangeNotPermitted("blocked"), "not_sent"],
       [new ManifestNotExchange("host=exchange.test"), "not_sent"],
+      // The SDK's own reader never throws this one: it reads an off-spec member as
+      // absent and treats an undecodable document as a transport failure. A stricter
+      // INJECTED reader throws it, and the document arrives unusable again next time.
+      [new ManifestUnusable('ver "2.0" has major 2, accept major 1'), "not_sent"],
       // Reachable only through an INJECTED reader with its own host rule — the verb's
       // own recipient check runs this one first. Retryable would be wrong: a value that
       // is not a host will not become one on a later attempt.

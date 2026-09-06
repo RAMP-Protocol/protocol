@@ -88,6 +88,23 @@ class ManifestNotExchangeError(ResolverError):
     """
 
 
+class ManifestUnusableError(ResolverError):
+    """The document arrived and this reader cannot use it.
+
+    A VERDICT and not a failed read: the bytes were served, and the next attempt gets
+    the same ones, so a caller told to retry retries forever.
+
+    The SDK's own :class:`~ramp_sdk.resolvers.WellKnownRequirementsReader` never raises
+    it. The two ways a manifest can disappoint that reader are both deliberate
+    non-errors: a member carrying a type the contract does not admit reads as ABSENT,
+    because the projection is shared with the endpoint and key faces, and a document
+    that does not decode at all is a transport failure. This class exists because the
+    reader seam is injectable and one stricter than the SDK's own — validating the whole
+    document, or refusing a version — has to be able to say its refusal is final. Peer
+    of Go ``ErrManifestUnusable`` / TS ``ManifestUnusable``.
+    """
+
+
 class ManifestVersionRefusedError(ResolverError):
     """A ``/.well-known/ramp.json`` was fetched and parsed but carries a
     ``WellKnownManifest.ver`` this resolver does not accept: an unrecognised major

@@ -192,6 +192,43 @@ func TestRequirements_refusesAManifestThatIsNotAnExchange(t *testing.T) {
 	}
 }
 
+// The sentinel this reader never raises, asserted rather than assumed.
+//
+// ErrManifestUnusable exists for a reader STRICTER than this one. The two ways a
+// manifest disappoints this one are both deliberate non-errors, and each is a
+// decision another test would not notice being reversed: an off-spec member reads
+// as absent so one of them cannot fail a document the endpoint and key faces would
+// have read, and a document that does not decode is a transport failure because the
+// next fetch may decode. Raising the verdict for either would make this reader
+// refuse finally where it currently tolerates or retries.
+func TestRequirements_neverRaisesTheUnusableVerdictItself(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		// Both optional members carrying a type the contract does not admit.
+		{"off-spec members", `{"role":"ROLE_EXCHANGE","terms_digest":7,` +
+			`"account_registration":"not an object"}`},
+		{"not JSON at all", `<html>502 Bad Gateway</html>`},
+		{"truncated mid-document", `{"role":"ROLE_EXCHANGE","terms_`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(
+				func(w http.ResponseWriter, _ *http.Request) {
+					_, _ = w.Write([]byte(tc.body))
+				}))
+			defer srv.Close()
+
+			_, err := loopbackReader(nil).ResolveRegistrationRequirements(
+				context.Background(), hostOf(t, srv))
+			if errors.Is(err, resolvers.ErrManifestUnusable) {
+				t.Fatalf("err = %v carries ErrManifestUnusable; this reader tolerates "+
+					"an off-spec member and retries an undecodable document", err)
+			}
+		})
+	}
+}
+
 // proto-JSON lets an enum travel as its number, so a manifest that spells the
 // role that way is the same manifest.
 func TestRequirements_acceptsTheRoleAsANumber(t *testing.T) {

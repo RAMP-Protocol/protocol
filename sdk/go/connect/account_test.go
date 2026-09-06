@@ -317,10 +317,11 @@ func (r refusingRequirements) ResolveRegistrationRequirements(
 // this deployment or the Exchange refused is FINAL, anything else is a transport
 // failure worth retrying. Without the split a caller retries a refusal forever.
 //
-// All three verdicts are reachable only through an INJECTED reader — the verb's own
-// recipient check runs the host rule first, and the SDK's reader applies the other
-// two itself — which is exactly why they need a test: nothing else exercises them,
-// and a consumer that injects a reader is the case this classification exists for.
+// All four verdicts are reachable only through an INJECTED reader — the verb's own
+// recipient check runs the host rule first, the SDK's reader applies the next two
+// itself, and it never returns the fourth at all — which is exactly why they need a
+// test: nothing else exercises them, and a consumer that injects a reader is the
+// case this classification exists for.
 func TestRegister_ClassifiesARefusedRequirementsRead(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -333,6 +334,8 @@ func TestRegister_ClassifiesARefusedRequirementsRead(t *testing.T) {
 			resolvers.ErrExchangeNotPermitted), rampconnect.CallNotSent},
 		{"the document is not an Exchange's", fmt.Errorf("%w: wrong role",
 			resolvers.ErrManifestNotExchange), rampconnect.CallNotSent},
+		{"a stricter reader cannot use the document", fmt.Errorf("%w: ver 2.0",
+			resolvers.ErrManifestUnusable), rampconnect.CallNotSent},
 		{"the read never completed", errors.New("connection reset"),
 			rampconnect.CallUnreachable},
 	} {
