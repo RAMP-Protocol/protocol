@@ -35,6 +35,7 @@ type clientConfig struct {
 	signWindow     core.Window
 	signatureAgent string
 	endpoints      EndpointResolver
+	requirements   RegistrationRequirementsReader
 	guardedBase    *http.Transport
 	connectOpts    []connectrpc.ClientOption
 	fetchTimeout   time.Duration
@@ -244,6 +245,22 @@ func WithEndpointResolver(r EndpointResolver) ClientOption {
 	return func(c *clientConfig) { c.endpoints = r }
 }
 
+// WithRegistrationRequirements injects the reader that reports what one Exchange
+// asks of a registration — the terms revision submitting one accepts, and the
+// schema its registration_data must match. It defaults to the SSRF-guarded
+// well-known reader.
+//
+// The reader it takes holds no document cache, and that is the point rather than
+// an implementation detail: the contract requires a registering client to read the
+// terms digest from a FRESHLY fetched manifest, so an implementation that serves
+// this from a cache breaks the rule the field exists to record. There is
+// deliberately no option to supply a digest or a schema directly — a caller that
+// wants to manage its own requirements sets RegisterRequest.terms_digest, which
+// suppresses the read and says so on the message the signature covers.
+func WithRegistrationRequirements(r RegistrationRequirementsReader) ClientOption {
+	return func(c *clientConfig) { c.requirements = r }
+}
+
 // WithGuardedBaseTransport carries the caller's own transport settings — a tuned
 // connection pool, client certificates via TLSClientConfig — UNDERNEATH the SSRF
 // guard on both legs that dial an address another party named: the content fetch,
@@ -321,4 +338,17 @@ func (c clientConfig) resolveEndpointResolver() EndpointResolver {
 		return c.endpoints
 	}
 	return resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{})
+}
+
+// resolveRequirementsReader returns the injected registration-requirements reader
+// or the guarded default, mirroring the endpoint resolver above.
+//
+// Defaulted rather than required because a registration that leaves terms_digest
+// unset needs one to be conformant at all, and a client that silently sent no
+// digest would earn a refusal the caller could not diagnose from this side.
+func (c clientConfig) resolveRequirementsReader() RegistrationRequirementsReader {
+	if c.requirements != nil {
+		return c.requirements
+	}
+	return resolvers.NewWellKnownRequirementsReader(resolvers.WellKnownOptions{})
 }

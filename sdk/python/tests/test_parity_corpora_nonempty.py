@@ -121,6 +121,16 @@ _CORPUS_SPECS: list[tuple[pathlib.Path, Callable[[Any], Any], str]] = [
         "client-request",
     ),
     (
+        GO_CONNECT_TESTDATA / "synthesized-detail-vectors.json",
+        lambda d: d["registration_precheck"],
+        "synthesized-detail-precheck",
+    ),
+    (
+        GO_CONNECT_TESTDATA / "synthesized-detail-vectors.json",
+        lambda d: d["edge_refusal"],
+        "synthesized-detail-edge",
+    ),
+    (
         GO_RESOLVERS_TESTDATA / "content-fetch-vectors.json",
         _vectors,
         "content-fetch",

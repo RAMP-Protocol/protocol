@@ -13,9 +13,10 @@ manifest and then checked, rather than taken on trust or, worse, read from confi
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from ramp_sdk._endpoint_rule import endpoint_refusal
+from ramp_sdk._hostref import _is_invalid_host_refusal
 from ramp_sdk._hostref import _redact_userinfo as redact_userinfo
 from ramp_sdk.hosts import is_bare_host
 from ramp_sdk.resolvers.errors import (
@@ -41,9 +42,10 @@ class EndpointResolver(Protocol):
     not accept, advertises no endpoint, or advertises one that must not be used — MUST
     raise :class:`~ramp_sdk.resolvers.errors.ManifestVersionRefusedError`,
     :class:`~ramp_sdk.resolvers.errors.NoEndpointError`,
-    :class:`~ramp_sdk.resolvers.errors.EndpointRefusedError`, or the ``ValueError``
-    ``is_bare_host`` raises; those surface as ``NOT_SENT``, which tells the caller not to
-    retry. Anything else is read as a transport failure and reported as ``UNREACHABLE``,
+    :class:`~ramp_sdk.resolvers.errors.EndpointRefusedError`, or the invalid-host
+    ``ValueError`` ``is_bare_host`` raises — recognised by its wording, so an unrelated
+    ``ValueError`` is NOT one; those surface as ``NOT_SENT``, which tells the caller not
+    to retry. Anything else is read as a transport failure and reported as ``UNREACHABLE``,
     i.e. worth retrying. An implementation that raises a bare exception for a refusal
     therefore has its final answer retried indefinitely.
     """
@@ -97,16 +99,19 @@ def vet_exchange_endpoint(
         # allowed, the manifest was read and advertises no endpoint at all, or it
         # advertises one the resolver will not hand back.
         #
-        # ValueError is in the set because the resolver checks the host itself too, and a
-        # value that is not a host will not become one on a later attempt. This module
-        # checks it before resolving, so the SDK's own resolver never reaches here that
-        # way — an injected one can.
+        # The invalid-host refusal is in the set because the resolver checks the host
+        # itself too, and a value that is not a host will not become one on a later
+        # attempt. This module checks it before resolving, so the SDK's own resolver
+        # never reaches here that way — an injected one can. It is recognised through
+        # the one predicate the account leg also uses: catching the bare ValueError it
+        # is raised as would call every other ValueError final too, and a document a
+        # reader could not parse is a transport failure in the oracle and in TypeScript.
         kind = (
             CallErrorKind.NOT_SENT
             if isinstance(
-                exc,
-                ManifestVersionRefusedError | NoEndpointError | EndpointRefusedError | ValueError,
+                exc, ManifestVersionRefusedError | NoEndpointError | EndpointRefusedError
             )
+            or _is_invalid_host_refusal(exc)
             else CallErrorKind.UNREACHABLE
         )
         raise CallError(
@@ -130,3 +135,39 @@ def vet_exchange_endpoint(
             f"{redact_userinfo(exchange_domain)!r} advertises: {refusal}",
         )
     return endpoint
+
+
+class RegistrationRequirementsReader(Protocol):
+    """Reports what one Exchange asks of a registration.
+
+    A Protocol for the same two reasons the endpoint seam is one: a test can drive a
+    registration without standing up a manifest server, and this module has no way to
+    accept a terms digest or a schema from configuration — the only way to skip the read
+    is to set ``terms_digest`` on the request, where the signature covers it.
+
+    An implementation MUST NOT serve the answer from a cache. The contract requires a
+    registering client to read the digest from a freshly fetched manifest, so a cached
+    one breaks the rule the field exists to record.
+
+    An implementation's FAILURE decides how a caller is told to react, so it is part of
+    the contract rather than an implementation detail. A failure that is a VERDICT — the
+    domain is unusable, the deployment excludes it, the document served is not an
+    Exchange's, or it is one this reader cannot use — MUST raise
+    :class:`~ramp_sdk.resolvers.errors.ExchangeNotPermittedError`,
+    :class:`~ramp_sdk.resolvers.errors.ManifestNotExchangeError`,
+    :class:`~ramp_sdk.resolvers.errors.ManifestUnusableError`, or the invalid-host
+    ``ValueError`` raised for a value that is not a bare domain — recognised by its
+    wording, so an unrelated ``ValueError`` is NOT one; those surface as ``NOT_SENT``,
+    which tells the caller not to retry. Anything else is read as a transport failure
+    and reported as ``UNREACHABLE``, i.e. worth retrying. An implementation that raises
+    a bare exception for a refusal therefore has its final answer retried indefinitely.
+
+    ``ManifestUnusableError`` is the one an implementation stricter than the SDK's own
+    reaches for. That reader refuses three things and treats every other disappointment
+    as absence or as a transport failure; one that validates the whole document, or
+    refuses a version, is holding a final answer this seam would otherwise report as
+    transient.
+    """
+
+    def resolve_registration_requirements(self, exchange: str) -> Any:  # pragma: no cover
+        ...

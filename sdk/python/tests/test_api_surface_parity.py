@@ -89,8 +89,11 @@ _GO_PACKAGES = ("helpers", "resolvers", "core", "connect", "connectserver")
 # in the same change — 19 undocumented divergences became 10 documented ones and 9
 # exported Python symbols; that trade is the one sanctioned growth shape — every entry
 # must arrive with its reason, never bare), then shrunk 16 -> 14 by resolving the two
-# ErrUnknownKey gaps, then grew 14 -> 16 under the sanctioned shape above.
-BASELINE_ALLOWLIST = 16
+# ErrUnknownKey gaps, then grew 14 -> 16 under the sanctioned shape above, then 16 -> 17
+# under it again: the registration-requirements reader's Go factory folds into the Python
+# class constructor exactly as every other NewX does, and its reason is that same
+# recorded one. One entry, one already-recorded class, and the bump is the review tell.
+BASELINE_ALLOWLIST = 17
 
 # HARD ZERO (was a shrink-only ratchet at 19) — undocumented TS-present / Python-null
 # gaps. The PRESENCE check skips nulls, so absent this ceiling a NEW Python-null gap

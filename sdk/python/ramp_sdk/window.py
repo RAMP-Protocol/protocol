@@ -42,6 +42,11 @@ def monotonic_window(now: Callable[[], float], ttl_sec: int) -> Window:
     relay requests from colliding in the server's replay store. ``created``
     tracks ``int(now())``, so the pair stays clock-consistent. Thread-safe: the
     running maximum is guarded by a lock.
+
+    ONE INSTANCE PER CLIENT, never one per call. The running maximum is the whole
+    mechanism: a window built per request starts from zero, cannot see the
+    previous signature, and provides exactly none of the uniqueness it was chosen
+    for — while still looking correct at the call site.
     """
     lock = threading.Lock()
     last_expires = 0

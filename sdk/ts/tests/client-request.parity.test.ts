@@ -97,6 +97,17 @@ async function call(name: string): Promise<UnaryRequest> {
 	const keys = await agentKeys();
 	const options = {
 		requester: REQUESTER,
+		// Register reads an Exchange's published requirements before it signs. What
+		// this corpus records is the path and the envelope, so the read is stubbed to
+		// an Exchange that publishes neither a digest nor a schema — the ordinary
+		// pass-through case. Inert for every other verb.
+		registrationRequirements: {
+			resolveRegistrationRequirements: async () => ({
+				termsDigest: undefined,
+				schema: null,
+				verdict: "not_published" as const,
+			}),
+		},
 		signer: { privKey: keys.privateKey, keyid: "agent.v1" },
 		agentPublicKey: keys.publicKey,
 		endpointResolver,
@@ -125,6 +136,12 @@ async function call(name: string): Promise<UnaryRequest> {
 		);
 	} else if (name.startsWith("execute")) {
 		await client.execute(await verifiedOffer(), { idempotencyKey: PINNED });
+	} else if (name.startsWith("register")) {
+		const req: Record<string, unknown> = { exchange: ISSUER };
+		if (name === "register_caller_ver_wins") req["ver"] = "9.9";
+		await client.register(req);
+	} else if (name === "get_account_status") {
+		await client.getAccountStatus({ exchange: ISSUER });
 	} else if (name === "resolve") {
 		await createBrokerClient("https://broker.test", options).resolve({});
 	} else if (name.startsWith("push_resources")) {

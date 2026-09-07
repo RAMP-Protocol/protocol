@@ -265,12 +265,21 @@ export function guardedFetchFromEnv(): FetchLike {
 	return (url) => requestBounded(url, dispatcher, schemeGuardAllows);
 }
 
-/** Default transport for a resolver whose URL is caller-configured (well-known
- * JWKS / ramp.json): a plain fetch. It is NOT SSRF-guarded — the operator, not an
- * attacker, chooses that URL, and an on-prem JWKS may legitimately be private.
- * Only the WBA resolver (whose host comes from the request-supplied
- * Signature-Agent, fetched pre-auth) defaults to `guardedFetch`, matching the Go
- * oracle, which guards only its WBA client. */
+/** Default transport for a resolver whose URL is a FIXED, operator-chosen address
+ * (the well-known JWKS): a plain fetch, NOT SSRF-guarded. An on-prem JWKS may
+ * legitimately be private, and the operator rather than an attacker chose it.
+ *
+ * Which default a resolver takes follows its URL's PROVENANCE, and that is the
+ * whole rule — the Go oracle states it in the options struct these ports mirror.
+ * A fixed operator-chosen URL takes this transport. A REQUEST-DERIVED host — the
+ * WBA directory named by a Signature-Agent header, an Exchange domain read off an
+ * offer or a registration — takes `guardedFetchFromEnv`, because the party
+ * choosing the address is not the party running the process.
+ *
+ * The endpoint resolver in this package is request-derived and still defaults
+ * here, which is a known gap being closed separately; it is not the rule. Do not
+ * reach for this transport for a new resolver without first asking where its URL
+ * comes from. */
 export const defaultFetch: FetchLike = async (url) => {
 	const r = await fetch(url);
 	// Bound the body read even on the unguarded path: a misconfigured / hostile

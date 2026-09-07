@@ -297,11 +297,20 @@ def guarded_async_client(**httpx_kwargs: Any) -> httpx.AsyncClient:
 
 
 def default_client() -> httpx.Client:
-    """The wellknown resolvers' default: a plain (UNGUARDED) client.
+    """The default for a resolver whose URL is FIXED and operator-chosen: a plain
+    (UNGUARDED) client.
 
-    Their URL is a static caller-configured value (not request-derived), so an
-    SSRF guard is not warranted — matching the Go oracle, which guards only the
-    WBA client.
+    Which default a resolver takes follows its URL's PROVENANCE, and that is the whole
+    rule — the Go oracle states it in the options struct these ports mirror. A fixed
+    operator-chosen address (the well-known JWKS) takes this client; an on-prem JWKS
+    may legitimately be private, and the operator rather than an attacker chose it. A
+    REQUEST-DERIVED host — the WBA directory named by a Signature-Agent header, an
+    Exchange domain read off an offer or a registration — takes ``guarded_client``,
+    because the party choosing the address is not the party running the process.
+
+    The endpoint resolver in this package is request-derived and still defaults here,
+    which is a known gap being closed separately; it is not the rule. Do not reach for
+    this client for a new resolver without first asking where its URL comes from.
     """
     return httpx.Client(
         follow_redirects=True, max_redirects=_ssrf.MAX_REDIRECTS, timeout=_TIMEOUT_S

@@ -168,6 +168,28 @@ def _invalid_host(ref: str, why: str) -> ValueError:
     return ValueError(f"hosts: reference is not a usable host: {why}: {_redact_userinfo(ref)!r}")
 
 
+_INVALID_HOST_PREFIX = "hosts: reference is not a usable host"
+
+
+def _is_invalid_host_refusal(exc: BaseException) -> bool:
+    """Whether an exception is the invalid-host refusal :func:`_invalid_host` mints.
+
+    Recognised by its wording rather than its type. The host helpers are L1 and
+    deliberately raise a bare ``ValueError``; a typed class would cross the
+    helpers-versus-resolvers sentinel split the SDK documents, so the shared prefix is
+    what there is to match. The wording is this port's own — the oracle's sentinel
+    reads ``helpers:`` — which is fine, because what the three languages owe each other
+    is the verdict and never the sentence.
+
+    It exists because TWO injectable seams can raise it, the endpoint resolver and the
+    registration-requirements reader, and both have to call it final for the same
+    reason. Catching the bare type instead would call every other ``ValueError`` final
+    too — ``json.JSONDecodeError`` is one — and a document a reader could not parse is
+    a transport failure in the oracle and in the other port.
+    """
+    return isinstance(exc, ValueError) and str(exc).startswith(_INVALID_HOST_PREFIX)
+
+
 def _split_components(rest: str) -> tuple[str, str, str]:
     """Split what follows ``://`` into its authority, its path and its fragment.
 

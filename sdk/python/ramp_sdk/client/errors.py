@@ -67,6 +67,7 @@ class CallError(Exception):
         status: int | None = None,
         reason: str | None = None,
         detail: ErrorDetail | None = None,
+        peer_message: str = "",
         cause: BaseException | str | None = None,
     ) -> None:
         self.kind = kind
@@ -78,6 +79,30 @@ class CallError(Exception):
         self.reason = reason
         #: The typed protocol reason when there is one.
         self.detail = detail
+        #: The developer message the peer put on its TYPED reason, when it sent one;
+        #: ``""`` otherwise.
+        #:
+        #: A field rather than something to recover from the rendered string, because a
+        #: reason rendered into prose cannot be read back out without parsing it. It sits
+        #: BESIDE ``reason`` rather than in it: ``reason`` is the peer's machine token.
+        #:
+        #: Deliberately NOT filled from the transport envelope when there is no typed
+        #: detail. An answer that did not come from a RAMP service carries no message of
+        #: its own, and the text a transport synthesizes for one is that transport's —
+        #: connect-go writes a status line where this client writes nothing — so carrying
+        #: it would make the value a property of the language rather than of the answer.
+        #: That text stays reachable through ``cause``.
+        #:
+        #: NON-AUTHORITATIVE and UNBOUNDED — the contract says both of the field it comes
+        #: from. Branch on ``kind`` or on the typed reason, never on this text, and bound
+        #: it before rendering it to a log line or an agent.
+        #:
+        #: Taken ONLY from what the decode site passed, never derived from ``detail``
+        #: here. A detail is not always the peer's: the content leg SYNTHESIZES one from
+        #: the edge's refusal token, and its message is this SDK's own sentence with the
+        #: token quoted into it. Deriving from the field would put the SDK's words in the
+        #: field that claims to hold a remote party's.
+        self.peer_message = peer_message
         self.cause = cause
         super().__init__(_render(kind, op, status, reason, cause))
 

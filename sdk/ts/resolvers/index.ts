@@ -9,8 +9,11 @@
 export {
 	DirectoryUnavailable,
 	EndpointRefused,
+	ExchangeNotPermitted,
 	KeyExpired,
 	KeyRevoked,
+	ManifestNotExchange,
+	ManifestUnusable,
 	ManifestVersionRefused,
 	NoEndpoint,
 	ResolverError,
@@ -27,6 +30,12 @@ export {
 	createWBAOfferDirectoryFetch,
 	type OfferDirectoryFetch,
 } from "./offer-key-cache.ts";
+export {
+	createWellKnownRequirementsReader,
+	type RegistrationRequirements,
+	type WellKnownRequirementsOptions,
+	type WellKnownRequirementsReader,
+} from "./registration-requirements.ts";
 export { allowedScheme, blockedAddress } from "./ssrf.ts";
 export { createStaticKeyResolver, type StaticKeyResolver } from "./static.ts";
 export {

@@ -13,6 +13,7 @@ import (
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	rampconnect "github.com/RAMP-Protocol/protocol/sdk/go/connect"
+	rampserver "github.com/RAMP-Protocol/protocol/sdk/go/connectserver"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
@@ -211,5 +212,116 @@ func TestSendError_CallerCancellationIsNotARefusal(t *testing.T) {
 	}
 	if cerr.Kind != rampconnect.CallUnreachable {
 		t.Errorf("kind = %v, want CallUnreachable — the caller gave up; the peer did not refuse", cerr.Kind)
+	}
+}
+
+// The peer's own sentence reaches a caller as a VALUE, not as something to parse
+// back out of a rendered error.
+//
+// It is filled from a typed detail the PEER emitted, and from nothing else. Two
+// other things look like candidates and are not: the transport envelope's prose,
+// which a transport synthesizes and so is a property of the language rather than
+// of the answer, and a detail this SDK built ITSELF on the content leg, whose
+// message is our sentence with the edge's token quoted into it. The field exists
+// so a consumer can attribute words to a remote party; a field that sometimes
+// holds our own words cannot do that job at all.
+func TestCallError_CarriesThePeersSentence(t *testing.T) {
+	t.Run("a typed detail's message wins", func(t *testing.T) {
+		sig := newSigningFixture(t)
+		detail := rampserver.NewErrorDetail(
+			"ramp.v1.ExchangeService", "the account is not active", nil)
+		refusal := rampserver.AttachDetail(connectrpc.NewError(
+			connectrpc.CodeFailedPrecondition, errors.New("envelope prose")), detail)
+		domain, _ := selfAdvertisingExchange(t, sig, &recordingAccount{refuse: refusal})
+
+		client := rampconnect.NewClient("http://home.invalid",
+			append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
+		_, err := client.GetAccountStatus(context.Background(),
+			&rampv1.GetAccountStatusRequest{Exchange: domain})
+
+		assertPeerMessage(t, err, "the account is not active")
+	})
+
+	// An answer that did not come from a RAMP service carries no message of its
+	// own. The text a transport synthesizes for one is that transport's — connect-go
+	// writes a status line where a fetch-based client writes nothing — so carrying
+	// it would make the field's value a property of the language. It stays
+	// reachable through the cause, where it reads as what it is.
+	t.Run("no typed detail leaves it empty", func(t *testing.T) {
+		sig := newSigningFixture(t)
+		domain, _ := loopbackManifestServer(t, http.HandlerFunc(
+			func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`{"code":"unavailable","message":"draining"}`))
+			}))
+
+		client := rampconnect.NewClient("http://home.invalid",
+			append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
+		_, err := client.GetAccountStatus(context.Background(),
+			&rampv1.GetAccountStatusRequest{Exchange: domain})
+
+		assertPeerMessage(t, err, "")
+		// The transport's own account is not lost, only kept out of the field that
+		// claims to hold the peer's words.
+		if !strings.Contains(err.Error(), "draining") {
+			t.Fatalf("the transport's text is gone entirely: %v", err)
+		}
+	})
+
+	// The content leg builds a typed detail LOCALLY, out of the edge's refusal
+	// token: the token is the edge's, the sentence around it is this SDK's. So a
+	// detail is present and the peer's message is still empty — which is the case
+	// that separates "fill it from the detail" from "fill it where the peer's own
+	// answer was decoded", and the only one where the two differ.
+	t.Run("a detail this SDK synthesized leaves it empty", func(t *testing.T) {
+		sig := newSigningFixture(t)
+		edge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"reason":"pop_expired"}`))
+		}))
+		defer edge.Close()
+
+		client := rampconnect.NewClient("http://home.invalid",
+			append(allowLoopback(t),
+				rampconnect.WithSigner(sig.signer),
+				rampconnect.WithAgentKey(sig.pub),
+			)...)
+		_, err := client.Fetch(context.Background(), edge.URL+"/doc?agent_id=tp")
+
+		// The typed reason still reaches the caller — this is not about losing it.
+		if _, ok := rampconnect.ErrorDetailFrom(err); !ok {
+			t.Fatalf("no typed detail on a refused fetch: %v", err)
+		}
+		assertPeerMessage(t, err, "")
+	})
+
+	// The registration pre-check is the same rule with no peer involved at all: the
+	// request never left the process, so there is no remote party whose words this
+	// field could hold. A detail is present because the schema failures are worth
+	// carrying; the sentence around them is ours.
+	t.Run("a detail the registration pre-check synthesized leaves it empty", func(t *testing.T) {
+		cerr, _ := refusedByTheSchema(t, legalEntitySchema, map[string]any{"trading_name": "Acme"})
+
+		if _, ok := rampconnect.ErrorDetailFrom(cerr); !ok {
+			t.Fatalf("no typed detail on a refused registration: %v", cerr)
+		}
+		assertPeerMessage(t, cerr, "")
+	})
+}
+
+func assertPeerMessage(t *testing.T, err error, want string) {
+	t.Helper()
+	var cerr *rampconnect.CallError
+	if !errors.As(err, &cerr) {
+		t.Fatalf("not a typed failure: %v", err)
+	}
+	if cerr.PeerMessage != want {
+		t.Fatalf("peer message = %q, want %q", cerr.PeerMessage, want)
+	}
+	// The token stays a token: prose never leaks into the field a caller branches
+	// on, which is the mistake this SDK has already made once and reverted.
+	if strings.Contains(cerr.Reason, " ") {
+		t.Fatalf("reason %q is prose, not a machine token", cerr.Reason)
 	}
 }

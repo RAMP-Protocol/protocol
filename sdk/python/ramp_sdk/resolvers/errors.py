@@ -66,6 +66,45 @@ class EndpointRefusedError(ResolverError):
     """
 
 
+class ExchangeNotPermittedError(ResolverError):
+    """The deployment's allow overlay excluded this Exchange domain, before anything
+    was dialled.
+
+    It says nothing about whether the Exchange exists or answers, only that this
+    deployment declined to ask, so the remedy is a configuration change rather than a
+    retry. Peer of Go ``ErrExchangeNotPermitted`` / TS ``ExchangeNotPermitted``.
+    """
+
+
+class ManifestNotExchangeError(ResolverError):
+    """The document served at the domain's well-known path describes some other role.
+
+    Registration requirements are an Exchange's to publish, so a manifest claiming to
+    be an agent, a broker or a publisher is refused rather than read for members it
+    has no business carrying. A manifest naming no role at all is refused the same
+    way: the field is required by the contract, and reading silence as assent would
+    make the check advisory. Peer of Go ``ErrManifestNotExchange`` / TS
+    ``ManifestNotExchange``.
+    """
+
+
+class ManifestUnusableError(ResolverError):
+    """The document arrived and this reader cannot use it.
+
+    A VERDICT and not a failed read: the bytes were served, and the next attempt gets
+    the same ones, so a caller told to retry retries forever.
+
+    The SDK's own :class:`~ramp_sdk.resolvers.WellKnownRequirementsReader` never raises
+    it. The two ways a manifest can disappoint that reader are both deliberate
+    non-errors: a member carrying a type the contract does not admit reads as ABSENT,
+    because the projection is shared with the endpoint and key faces, and a document
+    that does not decode at all is a transport failure. This class exists because the
+    reader seam is injectable and one stricter than the SDK's own — validating the whole
+    document, or refusing a version — has to be able to say its refusal is final. Peer
+    of Go ``ErrManifestUnusable`` / TS ``ManifestUnusable``.
+    """
+
+
 class ManifestVersionRefusedError(ResolverError):
     """A ``/.well-known/ramp.json`` was fetched and parsed but carries a
     ``WellKnownManifest.ver`` this resolver does not accept: an unrecognised major

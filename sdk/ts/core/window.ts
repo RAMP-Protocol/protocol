@@ -30,6 +30,11 @@ export function clockWindow(now: () => number, ttlSec: number): Window {
  * no two back-to-back signatures share an (keyid, expires) pair — keeping
  * identical relay requests from colliding in the server's replay store. created
  * tracks floor(now()), so the pair stays clock-consistent.
+ *
+ * ONE INSTANCE PER CLIENT, never one per call. The running maximum is the whole
+ * mechanism: a window created per request starts from zero, cannot see the
+ * previous signature, and provides exactly none of the uniqueness it was chosen
+ * for — while still looking correct at the call site.
  */
 export function monotonicWindow(now: () => number, ttlSec: number): Window {
 	let lastExpires = 0;

@@ -26,7 +26,7 @@ from ramp_sdk.client._read import (
     require_dialable_scheme,
     rpc_headers,
 )
-from ramp_sdk.client._verbs import ClientConfig
+from ramp_sdk.client._verbs import ClientConfig, _with_requirements_reader
 from ramp_sdk.client.content import (
     MAX_ERROR_BODY_BYTES,
     Content,
@@ -41,8 +41,10 @@ from ramp_sdk.resolvers import _ssrf, guarded_client
 if TYPE_CHECKING:
     from wire.models import (
         DisputeResponse,
+        GetAccountStatusResponse,
         PushResourcesResponse,
         RefreshCatalogResponse,
+        RegisterResponse,
         RemoveResourcesResponse,
         TransactionResponse,
         UsageReportResponse,
@@ -67,7 +69,6 @@ class _Face:
         http: httpx.Client | None,
         guarded: httpx.Client | None = None,
     ) -> None:
-        self._config = config
         self._owns = http is None
         self._http = http if http is not None else httpx.Client(
             follow_redirects=False, trust_env=False
@@ -78,9 +79,15 @@ class _Face:
         self._guarded = guarded if guarded is not None else (
             self._http if not self._owns else guarded_client(follow_redirects=False)
         )
+        self._config, self._requirements_http = _with_requirements_reader(config)
 
     def close(self) -> None:
         """Close the transports this client built. An injected one is left alone."""
+        # Independent of the RPC legs above: this client is built here whenever the
+        # caller injected no reader, whether or not it injected an RPC transport, so it
+        # is closed on its own terms rather than behind that ownership question.
+        if self._requirements_http is not None:
+            self._requirements_http.close()
         if not self._owns:
             return
         self._http.close()
@@ -170,6 +177,16 @@ class Client(_Face):
         plan = _verbs.plan_dispute(self._config, request, idempotency_key)
         status, body = self._send(plan)
         return _verbs.finish_dispute(plan, status, body)
+
+    def register(self, request: dict[str, Any]) -> RegisterResponse:
+        plan = _verbs.plan_register(self._config, request)
+        status, body = self._send(plan)
+        return _verbs.finish_register(plan, status, body)
+
+    def get_account_status(self, request: dict[str, Any]) -> GetAccountStatusResponse:
+        plan = _verbs.plan_get_account_status(self._config, request)
+        status, body = self._send(plan)
+        return _verbs.finish_get_account_status(plan, status, body)
 
     def fetch(self, signed_url: str) -> Content:
         headers, timeout, max_bytes = _fetch_inputs(self._config, signed_url)

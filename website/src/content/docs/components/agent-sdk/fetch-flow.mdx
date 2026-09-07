@@ -258,7 +258,7 @@ type NoOfferError struct {
 // TransactionDeniedError -- Exchange denied the transaction.
 type TransactionDeniedError struct {
     Reason      DenialReason // ACCOUNT_NOT_REGISTERED, ACCOUNT_INACTIVE, DELEGATION_INVALID, etc.
-    Exchange string       // from TransactionDenial.exchange -- where to call Register
+    Exchange string       // from TransactionDenial.exchange -- the domain to pass to the SDK's Register verb
     OfferID     string
 }
 

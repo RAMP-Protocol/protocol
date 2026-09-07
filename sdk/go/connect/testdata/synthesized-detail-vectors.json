@@ -1,0 +1,132 @@
+{
+  "edge_refusal": [
+    {
+      "name": "edge_expired",
+      "reason_token": "expired",
+      "domain": "ramp.v1.Edge",
+      "message": "delivery refused: expired",
+      "reason_field": "retrieval_auth_failure",
+      "reason_enum": "RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRED"
+    },
+    {
+      "name": "edge_missing_exp",
+      "reason_token": "missing_exp",
+      "domain": "ramp.v1.Edge",
+      "message": "delivery refused: missing_exp",
+      "reason_field": "retrieval_auth_failure",
+      "reason_enum": "RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRY_MISSING"
+    },
+    {
+      "name": "edge_signature_mismatch",
+      "reason_token": "signature_mismatch",
+      "domain": "ramp.v1.Edge",
+      "message": "delivery refused: signature_mismatch",
+      "reason_field": "retrieval_auth_failure",
+      "reason_enum": "RETRIEVAL_AUTH_FAILURE_REASON_URL_SIGNATURE_MISMATCH"
+    },
+    {
+      "name": "edge_missing_agent_key",
+      "reason_token": "missing_agent_key",
+      "domain": "ramp.v1.Edge",
+      "message": "delivery refused: missing_agent_key",
+      "reason_field": "retrieval_auth_failure",
+      "reason_enum": "RETRIEVAL_AUTH_FAILURE_REASON_AGENT_KEY_MISSING"
+    },
+    {
+      "name": "edge_keyid_mismatch",
+      "reason_token": "keyid_mismatch",
+      "domain": "ramp.v1.Edge",
+      "message": "delivery refused: keyid_mismatch",
+      "reason_field": "retrieval_auth_failure",
+      "reason_enum": "RETRIEVAL_AUTH_FAILURE_REASON_KEYID_MISMATCH"
+    },
+    {
+      "name": "edge_thumbprint_mismatch",
+      "reason_token": "thumbprint_mismatch",
+      "domain": "ramp.v1.Edge",
+      "message": "delivery refused: thumbprint_mismatch",
+      "reason_field": "retrieval_auth_failure",
+      "reason_enum": "RETRIEVAL_AUTH_FAILURE_REASON_THUMBPRINT_MISMATCH"
+    },
+    {
+      "name": "edge_pop_missing_created",
+      "reason_token": "pop_missing_created",
+      "domain": "ramp.v1.Edge",
+      "message": "delivery refused: pop_missing_created",
+      "reason_field": "retrieval_auth_failure",
+      "reason_enum": "RETRIEVAL_AUTH_FAILURE_REASON_PROOF_CREATED_MISSING"
+    },
+    {
+      "name": "edge_pop_missing_exp",
+      "reason_token": "pop_missing_exp",
+      "domain": "ramp.v1.Edge",
+      "message": "delivery refused: pop_missing_exp",
+      "reason_field": "retrieval_auth_failure",
+      "reason_enum": "RETRIEVAL_AUTH_FAILURE_REASON_PROOF_EXPIRY_MISSING"
+    },
+    {
+      "name": "edge_pop_expired",
+      "reason_token": "pop_expired",
+      "domain": "ramp.v1.Edge",
+      "message": "delivery refused: pop_expired",
+      "reason_field": "retrieval_auth_failure",
+      "reason_enum": "RETRIEVAL_AUTH_FAILURE_REASON_PROOF_EXPIRED"
+    },
+    {
+      "name": "edge_pop_sig_invalid",
+      "reason_token": "pop_sig_invalid",
+      "domain": "ramp.v1.Edge",
+      "message": "delivery refused: pop_sig_invalid",
+      "reason_field": "retrieval_auth_failure",
+      "reason_enum": "RETRIEVAL_AUTH_FAILURE_REASON_PROOF_SIGNATURE_INVALID"
+    },
+    {
+      "name": "edge_missing_sig",
+      "reason_token": "missing_sig",
+      "domain": "",
+      "message": "",
+      "reason_field": "",
+      "reason_enum": ""
+    },
+    {
+      "name": "edge_url_expired",
+      "reason_token": "url_expired",
+      "domain": "",
+      "message": "",
+      "reason_field": "",
+      "reason_enum": ""
+    }
+  ],
+  "note": "Typed error details this SDK builds itself rather than receiving, captured from the real Go client. Each row records what the three languages must author identically: the failing surface, the sentence and the typed reason. Field errors are recorded as PATHS and never as text — the text comes from a different validator library in each language and the contract calls it non-authoritative.",
+  "registration_precheck": [
+    {
+      "name": "both_member_shapes",
+      "schema": "{\"type\":\"object\",\"required\":[\"legal_entity\"],\"properties\":{\"vat_id\":{\"type\":\"string\",\"pattern\":\"^[A-Z]{2}[0-9]+$\"}}}",
+      "data": {
+        "vat_id": "de1"
+      },
+      "domain": "ramp.v1.Client",
+      "message": "registration_data does not match the published data_schema",
+      "reason_field": "registration_failure",
+      "reason_enum": "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA",
+      "field_error_paths": [
+        "",
+        "/vat_id"
+      ]
+    },
+    {
+      "name": "whole_object_only",
+      "schema": "{\"type\":\"object\",\"required\":[\"legal_entity\"],\"properties\":{\"legal_entity\":{\"type\":\"string\"}}}",
+      "data": {
+        "trading_name": "Acme"
+      },
+      "domain": "ramp.v1.Client",
+      "message": "registration_data does not match the published data_schema",
+      "reason_field": "registration_failure",
+      "reason_enum": "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA",
+      "field_error_paths": [
+        ""
+      ]
+    }
+  ]
+}

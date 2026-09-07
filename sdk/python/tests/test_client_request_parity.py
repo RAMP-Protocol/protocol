@@ -28,6 +28,7 @@ import pytest
 
 from conftest import GO_CONNECT_TESTDATA, load_json
 from ramp_sdk.client import BrokerClient, CatalogClient, Client, ClientConfig
+from ramp_sdk.resolvers import RegistrationRequirements
 from ramp_sdk.core import Mode, StaticOfferKeyResolver, Verifier, sign_offer_jcs
 from ramp_sdk.idempotency import validate_idempotency_key
 from ramp_sdk.signing_transport import SigningTransport
@@ -64,7 +65,19 @@ def _config() -> ClientConfig:
         requester=_REQUESTER,
         signer=SigningTransport(signer_seed=_AGENT_SEED, keyid="agent.v1"),
         endpoint_resolver=_Resolver(),
+        # Register reads an Exchange's published requirements before it signs. What this
+        # corpus records is the path and the envelope, so the read is stubbed to an
+        # Exchange that publishes neither a digest nor a schema — the ordinary
+        # pass-through case. Inert for every other verb.
+        registration_requirements=_PublishesNothing(),
     )
+
+
+class _PublishesNothing:
+    """An Exchange that publishes neither a terms digest nor a registration schema."""
+
+    def resolve_registration_requirements(self, _exchange: str) -> RegistrationRequirements:
+        return RegistrationRequirements()
 
 
 def _verified_offer() -> Any:
@@ -118,6 +131,13 @@ def _call(name: str) -> httpx.Request:
         asyncio.run(
             Client(config, http=http).execute(_verified_offer(), idempotency_key=_PINNED)
         )
+    elif name.startswith("register"):
+        register: dict[str, Any] = {"exchange": _ISSUER}
+        if name == "register_caller_ver_wins":
+            register["ver"] = "9.9"
+        asyncio.run(Client(config, http=http).register(register))
+    elif name == "get_account_status":
+        asyncio.run(Client(config, http=http).get_account_status({"exchange": _ISSUER}))
     elif name == "resolve":
         asyncio.run(BrokerClient(config, http=http).resolve({}))
     elif name.startswith("push_resources"):

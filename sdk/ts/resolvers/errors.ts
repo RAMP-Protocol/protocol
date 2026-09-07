@@ -87,6 +87,51 @@ export class EndpointRefused extends ResolverError {
   }
 }
 
+/** The deployment's allow overlay excluded this Exchange domain, before anything
+ * was dialled — the class face of Go `ErrExchangeNotPermitted` / Python
+ * `ExchangeNotPermittedError`. It says nothing about whether the Exchange exists
+ * or answers, only that this deployment declined to ask, so the remedy is a
+ * configuration change rather than a retry. */
+export class ExchangeNotPermitted extends ResolverError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "ExchangeNotPermitted";
+  }
+}
+
+/** The document served at the domain's well-known path describes some other role
+ * — the class face of Go `ErrManifestNotExchange` / Python
+ * `ManifestNotExchangeError`. Registration requirements are an Exchange's to
+ * publish, so a manifest claiming to be an agent, a broker or a publisher is
+ * refused rather than read for members it has no business carrying. A manifest
+ * naming no role at all is refused the same way: the field is required by the
+ * contract, and reading silence as assent would make the check advisory. */
+export class ManifestNotExchange extends ResolverError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "ManifestNotExchange";
+  }
+}
+
+/** The document arrived and this reader cannot use it — the class face of Go
+ * `ErrManifestUnusable` / Python `ManifestUnusableError`. A VERDICT and not a
+ * failed read: the bytes were served, and the next attempt gets the same ones, so
+ * a caller told to retry retries forever.
+ *
+ * The SDK's own requirements reader never throws it. The two ways a manifest can
+ * disappoint that reader are both deliberate non-errors: a member carrying a type
+ * the contract does not admit reads as ABSENT, because the projection is shared
+ * with the endpoint and key faces, and a document that does not parse at all is a
+ * transport failure. This class exists because the reader seam is injectable and
+ * one stricter than the SDK's own — validating the whole document, or refusing a
+ * version — has to be able to say its refusal is final. */
+export class ManifestUnusable extends ResolverError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "ManifestUnusable";
+  }
+}
+
 /** A /.well-known/ramp.json was fetched and parsed but carries a
  * WellKnownManifest.ver this resolver does not accept: an unrecognised major
  * version, a value that is not MAJOR.MINOR, or no version at all. The rule is
