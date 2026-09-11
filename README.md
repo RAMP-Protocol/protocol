@@ -1,10 +1,14 @@
 # RAMP
 
+> **RAMP is now FORA.** Same protocol, new name. The spec and docs moved to
+> [fora-protocol.org](https://fora-protocol.org), and development continues in
+> [FORA-Protocol/protocol](https://github.com/FORA-Protocol/protocol). This repository is no longer updated.
+
 Open transaction protocol for licensed AI content access.
 
 Built on [IAB Tech Lab CoMP v1.0](https://github.com/IABTechLab/CoMP) and [RSL 1.0](https://www.journalismai.info/programmes/responsible-ai/rsl); extends both with discovery, transaction execution, and settlement infrastructure so an autonomous agent can negotiate access to a publisher's content under that publisher's licensing terms, pay through an exchange, and produce a cryptographically auditable record of the transaction.
 
-📖 **Spec & docs:** [ramp-protocol.org](https://ramp-protocol.org) — start with the [proto reference](https://ramp-protocol.org/reference/proto-ramp/) · 🧩 **Reference implementation:** [RAMP-Protocol/reference-implementation](https://github.com/RAMP-Protocol/reference-implementation)
+📖 **Spec & docs:** [fora-protocol.org](https://fora-protocol.org) — start with the [proto reference](https://fora-protocol.org/reference/proto-ramp/) · 🧩 **Reference implementation:** [RAMP-Protocol/reference-implementation](https://github.com/RAMP-Protocol/reference-implementation)
 
 > **v1.0.0 — pre-1.0 clean-cut.** This is the initial public release. The wire
 > format was finalized in a single clean pass with **no backward-compatibility

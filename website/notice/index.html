@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RAMP is now FORA</title>
+  <meta name="description" content="The RAMP Protocol is renamed to FORA. The protocol and its documentation now live at fora-protocol.org." />
+  <link rel="icon" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --accent: #4f6df5;
+      --accent-glow: #4f6df533;
+      --accent-dark: #3d58d6;
+      --black: #0a0a0f;
+      --near-black: #12121a;
+      --gray: #8888a0;
+      --off-white: #e8e8f0;
+      --white: #f5f5fa;
+      --mono: 'DM Mono', monospace;
+      --sans: 'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      color: var(--off-white);
+      background: var(--black);
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 0%, var(--accent-glow) 0%, transparent 70%),
+        linear-gradient(180deg, var(--near-black) 0%, var(--black) 100%);
+      pointer-events: none;
+    }
+
+    main {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      padding: 3rem 2rem;
+      max-width: 56rem;
+    }
+
+    .badge {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 1.5rem;
+      padding: 0.4rem 1rem;
+      border: 1px solid var(--accent);
+      border-radius: 2px;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.25rem);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      color: var(--white);
+      margin-bottom: 1.25rem;
+      text-wrap: balance;
+    }
+    h1 a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      transition: border-color 0.2s;
+    }
+    h1 a:hover { border-bottom-color: var(--accent); }
+
+    p {
+      font-size: 1.125rem;
+      color: var(--gray);
+      line-height: 1.6;
+      margin-bottom: 2.5rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.75rem;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 3px;
+      background: var(--accent);
+      color: #fff;
+      border: 1px solid var(--accent);
+      transition: all 0.2s;
+    }
+    .btn:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="badge">Formerly RAMP</div>
+    <h1>Same protocol. New name: <a href="https://fora-protocol.org">FORA</a></h1>
+    <p>The protocol and its documentation now live at fora-protocol.org.</p>
+    <a class="btn" href="https://fora-protocol.org">Go to fora-protocol.org →</a>
+  </main>
+</body>
+</html>
